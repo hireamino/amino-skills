@@ -20,4 +20,11 @@ where you stand and what to fix first.
 
 Read-only: it inspects public DNS and drafts the exact changes, but never touches anything.
 
+## Learn
+
+New to deliverability, or want the questions answered before you run anything? See the
+**[Email deliverability FAQ](./FAQ.md)** — SPF/DKIM/DMARC explained, what DMARC
+enforcement actually means, the Gmail/Yahoo sender rules, MTA-STS/TLS-RPT/DANE, BIMI,
+DMARCbis, and what "post-quantum ready" means for email.
+
 _From Amino — hireamino.com_
