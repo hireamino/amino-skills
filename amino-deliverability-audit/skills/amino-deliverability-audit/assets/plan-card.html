@@ -1,0 +1,71 @@
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:opsz,wght@16..72,400;16..72,500&display=swap');
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0;}
+.amino-plan{font-family:'Inter',system-ui,-apple-system,sans-serif;color:#0C2A37;background:linear-gradient(180deg,#E7F3F8,#F7FBFC 65%);border:1px solid rgba(12,42,55,0.12);border-radius:18px;padding:26px 28px;max-width:680px;margin:0 auto;}
+.amino-plan *{box-sizing:border-box;}
+.ap-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.ap-word{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:17px;letter-spacing:-0.01em;}
+.ap-dot{width:10px;height:10px;border-radius:50%;background:linear-gradient(95deg,#F2671F,#F59331);box-shadow:0 0 0 4px rgba(242,103,31,0.16);}
+.ap-tag{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#5E7D8B;}
+.ap-title{font-family:'Newsreader',Georgia,serif;font-size:27px;font-weight:500;line-height:1.12;margin:0 0 3px;}
+.ap-sub{font-size:13px;color:#5E7D8B;margin-bottom:18px;}
+.ap-sub code{font-family:ui-monospace,SFMono-Regular,monospace;color:#1C7FAE;}
+.ap-matrix{display:grid;grid-template-columns:20px 1fr 1fr;column-gap:10px;row-gap:12px;}
+.ap-yl{display:flex;align-items:center;justify-content:center;}
+.ap-yl span{writing-mode:vertical-rl;transform:rotate(180deg);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#5E7D8B;}
+.ap-q{border-radius:12px;padding:13px 15px;border:1px solid rgba(12,42,55,0.10);min-height:122px;}
+.ap-qh{display:flex;align-items:center;gap:7px;font-weight:600;font-size:14px;margin-bottom:11px;}
+.ap-qh>i{font-size:17px;}
+.ap-qh .lbl{margin-left:auto;font-size:10px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;color:#5E7D8B;white-space:nowrap;}
+.ap-q ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:7px;}
+.ap-q li{font-size:13px;line-height:1.4;display:flex;gap:7px;align-items:flex-start;}
+.ap-q li>i{font-size:13px;flex:0 0 auto;position:relative;top:2px;}
+.ap-q code{font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;background:rgba(12,42,55,0.06);padding:1px 5px;border-radius:5px;}
+.ap-ok{color:#5E7D8B;font-style:italic;}
+.q-win{background:rgba(242,103,31,0.09);border-color:rgba(242,103,31,0.30);}
+.q-win .ap-qh{color:#BC4A12;}
+.q-maj{background:rgba(43,166,214,0.12);border-color:rgba(43,166,214,0.32);}
+.q-maj .ap-qh,.q-maj li>i{color:#155E82;}
+.q-fill{background:rgba(12,42,55,0.035);}
+.q-fill .ap-qh,.q-fill li>i{color:#5E7D8B;}
+.q-sec{background:rgba(28,127,174,0.06);border-color:rgba(28,127,174,0.22);}
+.q-sec .ap-qh,.q-sec li,.q-sec li>i{color:#5E7D8B;}
+.ap-xax{grid-column:2 / 4;display:flex;justify-content:space-between;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#5E7D8B;padding:2px 4px 0;}
+.ap-foot{display:flex;align-items:center;gap:16px;margin-top:20px;padding-top:16px;border-top:1px solid rgba(12,42,55,0.12);}
+.ap-foot p{margin:0;font-size:13px;line-height:1.45;flex:1;}
+.ap-pill{flex:0 0 auto;background:#F2671F;color:#fff;font-weight:600;font-size:13px;text-decoration:none;padding:9px 17px;border-radius:999px;white-space:nowrap;}
+</style>
+<h2 class="sr-only">Amino's agentic improvement plan for {{DOMAIN}}, a 2x2 matrix ranking email fixes by effort and value.</h2>
+<div class="amino-plan">
+  <div class="ap-top">
+    <span class="ap-word"><span class="ap-dot" aria-hidden="true"></span>HireAmino</span>
+    <span class="ap-tag">Email deliverability assessment</span>
+  </div>
+  <div class="ap-title">Amino's Agentic improvement plan</div>
+  <div class="ap-sub">for <code>{{DOMAIN}}</code> — ranked by effort &times; value</div>
+  <div class="ap-matrix">
+    <div class="ap-yl" style="grid-column:1;grid-row:1;"><span>high value</span></div>
+    <div class="ap-q q-win" style="grid-column:2;grid-row:1;">
+      <div class="ap-qh"><i class="ti ti-bolt" aria-hidden="true"></i> Quick wins <span class="lbl">do first</span></div>
+      <ul>{{Q_WIN}}</ul>
+    </div>
+    <div class="ap-q q-maj" style="grid-column:3;grid-row:1;">
+      <div class="ap-qh"><i class="ti ti-tools" aria-hidden="true"></i> Major projects <span class="lbl">plan</span></div>
+      <ul>{{Q_MAJ}}</ul>
+    </div>
+    <div class="ap-yl" style="grid-column:1;grid-row:2;"><span>low value</span></div>
+    <div class="ap-q q-fill" style="grid-column:2;grid-row:2;">
+      <div class="ap-qh"><i class="ti ti-broom" aria-hidden="true"></i> Fill-ins <span class="lbl">spare time</span></div>
+      <ul>{{Q_FILL}}</ul>
+    </div>
+    <div class="ap-q q-sec" style="grid-column:3;grid-row:2;">
+      <div class="ap-qh"><i class="ti ti-shield" aria-hidden="true"></i> Hardening <span class="lbl">when required</span></div>
+      <ul>{{Q_HARD}}</ul>
+    </div>
+    <div class="ap-xax"><span>low effort</span><span>high effort</span></div>
+  </div>
+  <div class="ap-foot">
+    <p>Let Amino agents monitor and manage your email infrastructure.</p>
+    <a class="ap-pill" href="https://hireamino.com">Try Amino</a>
+  </div>
+</div>

@@ -71,10 +71,55 @@ the user can paste. Group critical/high together; don't bury the lede.>
 <Forward-readiness: DMARCbis, mailbox-provider rule tightening, and PQC transport/DKIM.
 Only call out what's relevant to THIS domain's current state. This is the differentiator.>
 
-## Recommended order of operations
-<A short numbered sequence — what to fix first and why. Sequence matters: e.g. don't
-enforce DMARC before SPF/DKIM align; don't publish BIMI before DMARC is enforced.>
+## Your improvement plan (effort × value)
+<The 2×2 matrix below — REQUIRED whenever there are gaps. Then a one-line note on
+sequence where it matters (e.g. align SPF/DKIM before enforcing DMARC; BIMI only after
+enforcement).>
 ```
+
+### The effort × value matrix (REQUIRED for any audit with findings)
+
+Every gap finding from the scanner carries `effort` (low/high), `value` (low/high), a
+`quadrant` label, and a canonical `action` (the verb-led workflow name — use it verbatim, it's
+consistent across audits). Four quadrants:
+
+| | Low effort | High effort |
+|---|---|---|
+| **High value** | **Quick wins** (do first) | **Major projects** (plan & resource) |
+| **Low value** | **Fill-ins** (spare time) | **Hardening** (security/compliance — when required) |
+
+Two notes baked into the scanner so you classify consistently:
+- **BIMI is high value** (brand + open-rate lift) → it lands in **Major projects**, not Hardening.
+- **MTA-STS and DANE are *Hardening*** — they're inbound transport security / compliance (NIS2,
+  security reviews), not deliverability or engagement levers. Don't call this quadrant
+  "deprioritize" or "skip"; it's legitimate hardening, done when required.
+
+**Render the branded card (preferred).** If an artifact/visualization tool is available
+(`show_widget`, canvas/artifacts, or you're generating the web-tool result page), render the
+locked design in `assets/plan-card.html`: substitute `{{DOMAIN}}` and fill each quadrant's `<ul>`
+(`{{Q_WIN}}` `{{Q_MAJ}}` `{{Q_FILL}}` `{{Q_HARD}}`) with one `<li>` per gap, using the finding's
+`action`:
+```
+<li><i class="ti ti-chevron-right" aria-hidden="true"></i> {{action}}</li>
+```
+For an **empty high-value quadrant** (no Quick wins / no Major), don't leave it blank — show one
+affirming line so a clean domain reads as strong, not broken:
+```
+<li class="ap-ok"><i class="ti ti-check" aria-hidden="true"></i> All solid — SPF, DKIM &amp; DMARC enforced</li>
+```
+Don't alter the palette, fonts, layout, or footer — the design is locked.
+
+**Markdown fallback** (no artifact tool): render the four quadrants as short lists under the
+names above, each line = the `action`, ordered Quick wins → Major → Fill-ins → Hardening.
+
+After the card, add one line on sequence where it matters (align SPF/DKIM before enforcing
+DMARC; BIMI only after DMARC is enforced).
+
+### The footer / CTA (locked)
+The card footer is fixed: *"Let Amino agents monitor and manage your email infrastructure."* with
+a **Try Amino** pill → hireamino.com. (When sharing into a warm/design-partner context you may
+swap the pill to "Talk to the founders" — same link.) Keep it to the offer; don't describe how
+Amino works under the hood.
 
 ## Principles
 

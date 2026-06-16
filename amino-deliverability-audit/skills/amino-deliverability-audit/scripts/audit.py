@@ -385,6 +385,77 @@ def check_mx_hygiene(domain, F):
                   fix="Confirm every MX provider is intentional and enforces TLS; remove stale/registrar-default backup MX so all inbound flows to your primary provider."))
 
 
+def priority(f):
+    """(effort, value) in {low, high} for a gap finding — drives the effort×value
+    improvement matrix. 'pass' findings return (None, None). Defaults are sensible
+    starting points; the skill may nudge value up for regulated/compliance contexts."""
+    if f.get("severity") == "pass":
+        return None, None
+    a, t = f["area"], f["title"].lower()
+    if a == "SPF":
+        return ("high", "high") if "exceeds 10" in t else ("low", "high")
+    if a == "DKIM":
+        return ("low", "low")           # rotate RSA-1024 / confirm selector — hygiene
+    if a == "DMARC":
+        return ("high", "high") if "p=none" in t else ("low", "high")
+    if a == "MTA-STS":
+        return ("high", "low")
+    if a == "TLS-RPT":
+        return ("low", "low")
+    if a == "BIMI":
+        return ("high", "high")   # logo-in-inbox: brand trust + open-rate lift = high value for engagement-led senders
+    if a == "MX":
+        return ("low", "high")          # remove stale/duplicate MX — quick + protective
+    if a == "Transport":
+        return ("high", "low") if "dane" in t else ("low", "low")  # DANE vs STARTTLS-verify
+    return ("low", "low")
+
+
+QUADRANT = {
+    ("low", "high"): "Quick wins — low effort, high value (do first)",
+    ("high", "high"): "Major projects — high effort, high value (plan & resource)",
+    ("low", "low"): "Fill-ins — low effort, low value (spare time)",
+    ("high", "low"): "Hardening — high effort, security/compliance value (when required, e.g. NIS2 / security reviews); not a deliverability or engagement lever",
+}
+
+
+def action(f):
+    """Canonical verb-led workflow label for a gap finding — one fix-type = one
+    Amino workflow. Kept consistent across quadrants. None for 'pass' findings."""
+    if f.get("severity") == "pass":
+        return None
+    a, t = f["area"], f["title"].lower()
+    if a == "SPF":
+        if "no spf" in t:
+            return "Publish an SPF record"
+        if "exceeds 10" in t:
+            return "Flatten SPF to under 10 lookups"
+        if "no `all`" in t or "no 'all'" in t:
+            return "Add a terminating -all to SPF"
+        return "Tighten SPF to a hard -all policy"
+    if a == "DKIM":
+        return "Rotate DKIM to a 2048-bit key" if "rsa-1024" in t else "Confirm or enable DKIM signing"
+    if a == "DMARC":
+        if "no dmarc" in t:
+            return "Publish a DMARC policy"
+        if "p=none" in t:
+            return "Ramp DMARC up to p=reject"
+        if "rua" in t:
+            return "Turn on DMARC reporting (rua)"
+        return "Strengthen the DMARC policy"
+    if a == "MTA-STS":
+        return "Publish + host an MTA-STS policy"
+    if a == "TLS-RPT":
+        return "Add a TLS-RPT reporting record"
+    if a == "BIMI":
+        return "Get a VMC, then publish BIMI"
+    if a == "MX":
+        return "Consolidate to one MX provider"
+    if a == "Transport":
+        return "Enable DNSSEC, then publish DANE/TLSA" if "dane" in t else "Confirm STARTTLS on the mail server"
+    return f["title"]
+
+
 def main():
     if len(sys.argv) < 2:
         print(json.dumps({"error": "usage: audit.py <domain>"}))
@@ -401,6 +472,11 @@ def main():
 
     order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "pass": 4}
     F.sort(key=lambda x: order.get(x["severity"], 5))
+    for f in F:
+        f["effort"], f["value"] = priority(f)
+        if f["effort"]:
+            f["quadrant"] = QUADRANT[(f["effort"], f["value"])]
+            f["action"] = action(f)
     summary = {s: sum(1 for f in F if f["severity"] == s)
                for s in ["critical", "high", "medium", "low", "pass"]}
     print(json.dumps({
