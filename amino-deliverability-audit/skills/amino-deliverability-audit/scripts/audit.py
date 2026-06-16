@@ -646,7 +646,7 @@ def action(f):
         if "partially enforced" in t:
             return "Raise DMARC pct to 100"
         if "removed in rfc 9989" in t:
-            return "Drop deprecated DMARC tags; add np="
+            return "Drop the pct/rf/ri tags; add np=reject"
         if "report destination" in t:
             return "Authorize the external DMARC report destination"
         if "rua" in t:
