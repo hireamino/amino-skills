@@ -1,6 +1,6 @@
 # Amino Skills
 
-Agentic email-infrastructure skills from [Amino](https://hireamino.com).
+Free tools to assess email sending domains, from [Amino](https://hireamino.com).
 
 ## Install (Claude Code)
 
@@ -11,10 +11,13 @@ Agentic email-infrastructure skills from [Amino](https://hireamino.com).
 
 ## Plugins
 
-### amino-deliverability-audit
-Point it at a domain and it audits the whole email-trust posture — SPF, DKIM (three-state),
-DMARC, MTA-STS, TLS-RPT, DANE, BIMI, MX hygiene — plus forward-looking DMARCbis and
-post-quantum (PQC) readiness, then hands back a prioritized, paste-ready remediation plan.
-Read-only: inspects public DNS, never changes anything.
+### amino-deliverability-audit — benchmark your sending domain
 
-_Built by Amino. Make whatever you send actually arrive._
+Emails landing in spam? Not sure a domain is set up to send? Point this at any domain and
+it benchmarks the signals mailbox providers actually judge you on — SPF, DKIM, DMARC,
+alignment, MTA-STS, TLS-RPT, DANE, BIMI, and MX hygiene — then tells you, in plain terms,
+where you stand and what to fix first.
+
+Read-only: it inspects public DNS and drafts the exact changes, but never touches anything.
+
+_From Amino — hireamino.com_

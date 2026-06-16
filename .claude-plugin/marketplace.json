@@ -1,12 +1,12 @@
 {
   "name": "amino-skills",
   "owner": { "name": "Amino — Whiteboard Venture Partners", "url": "https://hireamino.com" },
-  "metadata": { "description": "Agentic email-infrastructure skills from Amino (hireamino.com)." },
+  "metadata": { "description": "Free tools to assess and benchmark email sending domains, from Amino (hireamino.com)." },
   "plugins": [
     {
       "name": "amino-deliverability-audit",
       "source": "./amino-deliverability-audit",
-      "description": "Audit a domain's email deliverability, authentication & trust posture (SPF/DKIM/DMARC/MTA-STS/DANE/BIMI + DMARCbis & post-quantum readiness) and get a prioritized, paste-ready remediation plan. Read-only DNS.",
+      "description": "Emails landing in spam, or not sure your domain is set up to send? Benchmark your sending domain in seconds. Checks the signals mailbox providers judge you on — SPF, DKIM, DMARC, alignment, MTA-STS, TLS-RPT, DANE, BIMI, MX hygiene — and tells you in plain terms where you stand and what to fix first. Read-only; nothing changes.",
       "version": "0.1.0",
       "author": { "name": "Amino", "url": "https://hireamino.com" },
       "keywords": ["email","deliverability","dmarc","spf","dkim","mta-sts","dane","dns","security"]
