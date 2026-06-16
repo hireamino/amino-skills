@@ -5,7 +5,7 @@ Free tools to assess email sending domains, from [Amino](https://hireamino.com).
 ## Install (Claude Code)
 
 ```
-/plugin marketplace add cisoventures/amino-skills
+/plugin marketplace add hireamino/amino-skills
 /plugin install amino-deliverability-audit
 ```
 
