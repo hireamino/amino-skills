@@ -1,0 +1,9 @@
+{
+  "name": "amino-deliverability-audit",
+  "version": "0.1.0",
+  "description": "Audit a domain's email deliverability/auth/trust posture and produce a prioritized remediation plan. Read-only DNS. By Amino (hireamino.com).",
+  "author": { "name": "Amino", "url": "https://hireamino.com" },
+  "homepage": "https://hireamino.com",
+  "license": "MIT",
+  "keywords": ["email","deliverability","dmarc","spf","dkim","mta-sts","dane","dns"]
+}
