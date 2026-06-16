@@ -1,0 +1,38 @@
+name: New check, DKIM selector, or standards update
+description: Propose a signal we don't inspect, a missing DKIM selector, or a spec/rule change.
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Type of contribution
+      options:
+        - New or sharper check (a signal we don't inspect well)
+        - Missing DKIM selector(s)
+        - Standards update (DMARCbis / provider rules / PQC)
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What should change
+      description: Describe the check/selector/standard and what the audit should report.
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: Source / citation
+      description: >-
+        Required for any standards claim — link the primary source (IETF datatracker,
+        NIST, the provider's own docs). For a selector, where is it documented or used?
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: A domain that demonstrates it
+      description: A real domain where this check/selector would change or improve the result.
+    validations:
+      required: false

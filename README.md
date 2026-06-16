@@ -27,4 +27,14 @@ New to deliverability, or want the questions answered before you run anything? S
 enforcement actually means, the Gmail/Yahoo sender rules, MTA-STS/TLS-RPT/DANE, BIMI,
 DMARCbis, and what "post-quantum ready" means for email.
 
+## Contributing
+
+Contributions welcome — new checks, missing DKIM selectors, standards updates, and
+bug reports (with the offending domain) all help. See
+**[CONTRIBUTING.md](./CONTRIBUTING.md)**. The one rule: the skill stays read-only.
+
+## License
+
+[Apache-2.0](./LICENSE).
+
 _From Amino — hireamino.com_

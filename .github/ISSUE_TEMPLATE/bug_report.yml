@@ -1,0 +1,46 @@
+name: Bug — wrong or unexpected audit result
+description: A domain scored wrong, a check is misreported, or the skill errored.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. DNS bugs are only fixable if we can reproduce them — the
+        domain is the most important field below. Please don't omit it.
+  - type: input
+    id: domain
+    attributes:
+      label: Domain
+      description: The exact domain you scanned (this is required to reproduce).
+      placeholder: example.com
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: What should the audit have reported for this domain, and why?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What it actually reported
+      description: Paste the relevant part of the output (the bucket/score that's wrong).
+    validations:
+      required: true
+  - type: input
+    id: bucket
+    attributes:
+      label: Which signal
+      description: SPF, DKIM, DMARC, alignment, MTA-STS, TLS-RPT, DANE, BIMI, MX, or "whole score".
+      placeholder: DKIM
+    validations:
+      required: false
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Resolver used, error text, or relevant `dig` output if you have it.
+    validations:
+      required: false
