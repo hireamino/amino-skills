@@ -1,6 +1,6 @@
 {
   "name": "amino-deliverability-audit",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Benchmark an email sending domain — find why mail lands in spam or whether a domain is set up to send, and what to fix first. Read-only DNS. By Amino (hireamino.com).",
   "author": { "name": "Amino", "url": "https://hireamino.com" },
   "homepage": "https://hireamino.com",

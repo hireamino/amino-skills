@@ -25,10 +25,11 @@ trusted"), framed in business terms, not a pile of green/red dots.
 1. **Get the domain.** If the user gave a URL or email, extract the registrable domain.
 
 2. **Set the expectation, then run the scanner.** First tell the user one line so they're
-   not left waiting in silence — e.g. *"Running a read-only scan of <domain> — about 10–20
-   seconds."* The scan makes a couple of socket probes (STARTTLS to the MX, MTA-STS over
-   HTTPS) that can briefly pause on networks that block those ports; that's expected and
-   fails fast. Then run (it does the deterministic DNS/transport work; you do the judgment):
+   not left waiting in silence — e.g. *"Running a read-only scan of <domain> — just a few
+   seconds."* The checks run concurrently, so a scan is typically ~3–5 seconds; it makes a
+   couple of socket probes (STARTTLS to the MX, MTA-STS over HTTPS) that can briefly pause on
+   networks that block those ports, but those now overlap and fail fast. Then run (it does the
+   deterministic DNS/transport work; you do the judgment):
    ```
    python3 scripts/audit.py <domain>
    ```

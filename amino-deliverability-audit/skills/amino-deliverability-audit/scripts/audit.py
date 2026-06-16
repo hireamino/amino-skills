@@ -13,12 +13,13 @@ Deps:   `dig` (ships with macOS / most Linux). Pure stdlib otherwise.
 
 import json
 import re
-import subprocess
 import sys
 import socket
 import ssl
 import ipaddress
-from functools import lru_cache
+from concurrent.futures import ThreadPoolExecutor
+
+from resolver import query as dig  # pluggable DNS (dig backend locally; DoH at the edge)
 
 # Input is untrusted (any domain, incl. from the future public web tool). Validate it as
 # a real DNS hostname before it flows into dig args / socket connects / name construction.
@@ -48,9 +49,9 @@ def host_public_ips(host):
             out.append(ip.strip())
     return out
 
-TIMEOUT = 6        # DNS (dig) — fast, rarely blocked
 SOCK_TIMEOUT = 3   # raw socket probes (STARTTLS:25, MTA-STS HTTPS) — these hit
                    # blocked ports on many networks, so fail fast rather than hang
+MAX_WORKERS = 10   # bounded concurrency for the parallel DKIM sweep / check fan-out
 
 # DKIM has no discovery mechanism (you must know the selector), so we probe.
 # Efficiency: probe PROVIDER-SPECIFIC selectors first (inferred from MX/SPF), then
@@ -114,48 +115,38 @@ def dkim_candidates(domain):
     return out
 
 
+def _dkim_probe(domain, sel):
+    """One selector's key record (or None)."""
+    rec = first_txt(f"{sel}._domainkey.{domain}", "v=dkim1")
+    if not rec:
+        rec = next((r for r in dig(f"{sel}._domainkey.{domain}", "TXT") if "p=" in r), None)
+    return rec
+
+
 def dkim_lookup(domain):
     """Three-state DKIM result: ('good'|'weak'|'unknown', note, testing).
     good = key found (Ed25519 / RSA>=2048); weak = RSA-1024 (real gap);
     unknown = no key at any probed selector (a discovery blind spot, NOT a
     confirmed gap). testing = the surfaced key carries t=y (testing mode).
-    Early-exits on a good key."""
+    Probes candidates CONCURRENTLY then evaluates them in priority order — same result
+    as the old sequential early-exit (first good key in candidate order wins), but the
+    DNS round-trips overlap instead of summing (the big win on no-provider-match domains)."""
+    cands = dkim_candidates(domain)
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
+        recs = list(ex.map(lambda s: _dkim_probe(domain, s), cands))
     weak = None
     weak_testing = False
-    for sel in dkim_candidates(domain):
-        rec = first_txt(f"{sel}._domainkey.{domain}", "v=dkim1")
+    for sel, rec in zip(cands, recs):
         if not rec:
-            rec = next((r for r in dig(f"{sel}._domainkey.{domain}", "TXT") if "p=" in r), None)
-        if rec:
-            ktype, pub, bits, testing = parse_dkim(rec)
-            if ktype == "rsa" and bits == 1024:
-                weak = weak or f"DKIM {sel}=RSA-1024"
-                weak_testing = weak_testing or testing
-                continue  # keep looking for a stronger key before concluding
-            label = ktype.upper() + (f"-{bits}" if bits else "")
-            return ("good", f"DKIM {sel} ({label})", testing)
+            continue
+        ktype, pub, bits, testing = parse_dkim(rec)
+        if ktype == "rsa" and bits == 1024:
+            weak = weak or f"DKIM {sel}=RSA-1024"
+            weak_testing = weak_testing or testing
+            continue  # a stronger key later in priority order still wins
+        label = ktype.upper() + (f"-{bits}" if bits else "")
+        return ("good", f"DKIM {sel} ({label})", testing)
     return ("weak", weak, weak_testing) if weak else ("unknown", "no DKIM key at common/provider selectors", False)
-
-
-@lru_cache(maxsize=8192)
-def dig(name, rrtype):
-    """Return list of answer strings for name/rrtype, or [] on failure."""
-    try:
-        out = subprocess.run(
-            ["dig", "+short", "+time=4", "+tries=1", rrtype, name],
-            capture_output=True, text=True, timeout=TIMEOUT,
-        ).stdout.strip()
-    except Exception:
-        return []
-    rows = [r.strip() for r in out.splitlines() if r.strip()]
-    # TXT answers come back quoted and may be split into 255-byte chunks.
-    if rrtype == "TXT":
-        joined = []
-        for r in rows:
-            parts = re.findall(r'"([^"]*)"', r)
-            joined.append("".join(parts) if parts else r)
-        return joined
-    return rows
 
 
 def resolves(domain):
@@ -408,13 +399,15 @@ def _mx_pattern_matches(pattern, host):
 def check_mta_sts(domain, F):
     txt = first_txt(f"_mta-sts.{domain}", "v=stsv1")
     policy = None
+    mhost = f"mta-sts.{domain}"
     try:
-        if not host_public_ips(f"mta-sts.{domain}"):
+        ips = host_public_ips(mhost)
+        if not ips:
             raise OSError("mta-sts host does not resolve to a public IP")  # SSRF guard
         ctx = ssl.create_default_context()
-        conn = socket.create_connection((f"mta-sts.{domain}", 443), SOCK_TIMEOUT)
-        s = ctx.wrap_socket(conn, server_hostname=f"mta-sts.{domain}")
-        req = f"GET /.well-known/mta-sts.txt HTTP/1.0\r\nHost: mta-sts.{domain}\r\n\r\n"
+        conn = socket.create_connection((ips[0], 443), SOCK_TIMEOUT)  # connect to the vetted IP
+        s = ctx.wrap_socket(conn, server_hostname=mhost)  # SNI/cert validated against the hostname
+        req = f"GET /.well-known/mta-sts.txt HTTP/1.0\r\nHost: {mhost}\r\n\r\n"
         s.sendall(req.encode())
         data = b""
         while len(data) < 8192:
@@ -502,9 +495,10 @@ def check_transport(domain, F):
     host = sorted(mx, key=lambda r: int(r.split()[0]) if r.split()[0].isdigit() else 99)[0].split()[-1].rstrip(".")
     tls_ver = None
     try:
-        if not host_public_ips(host):
-            raise OSError("MX does not resolve to a public IP")  # SSRF guard: skip the probe
-        conn = socket.create_connection((host, 25), SOCK_TIMEOUT)
+        ips = host_public_ips(host)
+        if not ips:
+            raise OSError("MX does not resolve to a public IP")  # SSRF guard
+        conn = socket.create_connection((ips[0], 25), SOCK_TIMEOUT)  # connect to the vetted IP
         conn.recv(512)
         conn.sendall(b"EHLO amino-audit\r\n")
         ehlo = conn.recv(1024).decode(errors="ignore")
@@ -712,14 +706,31 @@ def main():
     if not domain:
         print(json.dumps({"error": "invalid domain — provide a hostname like example.com"}))
         sys.exit(1)
+    # Run the independent checks concurrently — the DNS lookups and the two socket probes
+    # (STARTTLS:25 + MTA-STS:443) overlap instead of summing. Each check writes to its own
+    # list; results are reassembled in a fixed order so the output stays deterministic.
+    checks = [
+        ("spf", check_spf), ("dkim", check_dkim), ("dmarc", check_dmarc),
+        ("mta_sts", check_mta_sts), ("simple", check_simple),
+        ("transport", check_transport), ("mx", check_mx_hygiene),
+    ]
+
+    def _run(item):
+        _key, fn = item
+        local = []
+        ret = fn(domain, local)
+        return _key, local, ret
+
+    buckets, mx_host = {}, None
+    with ThreadPoolExecutor(max_workers=len(checks)) as ex:
+        for key, local, ret in ex.map(_run, checks):
+            buckets[key] = local
+            if key == "transport":
+                mx_host = ret
+
     F = []
-    check_spf(domain, F)
-    check_dkim(domain, F)
-    check_dmarc(domain, F)
-    check_mta_sts(domain, F)
-    check_simple(domain, F)
-    mx_host = check_transport(domain, F)
-    check_mx_hygiene(domain, F)
+    for key, _ in checks:
+        F.extend(buckets[key])
 
     order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "pass": 4}
     F.sort(key=lambda x: order.get(x["severity"], 5))
