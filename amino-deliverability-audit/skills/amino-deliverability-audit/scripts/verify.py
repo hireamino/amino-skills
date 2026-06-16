@@ -91,7 +91,7 @@ def dkim_state_indep(domain, resolver):
         if not rec:
             rec = next((r for r in doh(f"{sel}._domainkey.{domain}", "TXT", resolver) if "p=" in r), None)
         if rec:
-            ktype, pub, bits = parse_dkim(rec)
+            ktype, pub, bits, _ = parse_dkim(rec)
             if ktype == "rsa" and bits == 1024:
                 weak = True
                 continue

@@ -37,8 +37,8 @@ def score(domain):
     spf = first_txt(domain, "v=spf1")
     if spf:
         q = effective_terminator(domain)
-        lookups = count_spf_lookups(domain)
-        r["SPF"] = q in ("-", "~") and lookups <= 10
+        lookups, voids = count_spf_lookups(domain)
+        r["SPF"] = q in ("-", "~") and lookups <= 10 and voids <= 2
         if q in ("+", "?"):
             note.append(f"SPF {q}all (permissive)")
         elif q is None:
@@ -48,7 +48,7 @@ def score(domain):
     else:
         note.append("no SPF")
 
-    dkim_state, dkim_note = dkim_lookup(domain)
+    dkim_state, dkim_note, _ = dkim_lookup(domain)
     r["DKIM"] = dkim_state
     if dkim_state != "good":
         note.append(dkim_note)

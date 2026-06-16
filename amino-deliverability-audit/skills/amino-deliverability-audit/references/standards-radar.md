@@ -5,21 +5,27 @@ domain's *current* state (e.g. don't lecture about PQC-DKIM if they don't even h
 Verify specifics against IETF datatracker before asserting RFC numbers — these standards
 move, and stating a draft as a published RFC is a credibility-killer.
 
-## 1. DMARCbis (near-term — affects everyone with DMARC)
+## 1. DMARCbis = RFC 9989 (PUBLISHED — affects everyone with DMARC)
 
-The DMARC spec is being modernized. As of mid-2026 it is an **Internet-Draft in IETF Last
-Call** (`draft-ietf-dmarc-dmarcbis`), on track to become a **Proposed Standard** (the
-original DMARC, RFC 7489, was only Informational). It **obsoletes RFC 7489 and RFC 9091**.
-> Do NOT call it a published RFC — it isn't yet. Check datatracker for current status.
+The DMARC spec has been modernized. **DMARCbis is now published as RFC 9989** (Proposed
+Standard, May 2026; `draft-ietf-dmarc-dmarcbis`), and it **obsoletes RFC 7489 and RFC 9091**
+— the original DMARC (RFC 7489) was only Informational, so this is the first Standards-Track
+DMARC. (Verified against rfc-editor.org/info/rfc9989 + IETF datatracker. Still re-verify any
+*other* RFC number before asserting it — don't pattern-match adjacent numbers.)
 
 What changes that matters to a sender:
 - **DNS Tree Walk replaces the Public Suffix List** for organizational-domain discovery.
   Policy now resolves by walking up the DNS tree. Domains relying on PSL quirks should
   re-verify their policy still applies the way they expect.
-- Tightened semantics around `pct`, reporting, and policy discovery.
+- **`np=` (non-existent-subdomain policy) is new** — set `np=reject` to cover subdomains
+  that don't exist (a common cousin-domain spoofing vector). `sp=` still covers existing
+  subdomains.
+- **`pct`, `rf`, and `ri` are removed.** A record still using them isn't broken today, but
+  it's no longer spec-conformant — flag them as cleanup, and note `pct<100` was always
+  probabilistic enforcement.
 - **Readiness check:** an enforced policy (`p=quarantine`/`reject`) with working aggregate
-  reporting (`rua`) is the right posture going in. A domain stuck at `p=none` is *less*
-  ready, not more.
+  reporting (`rua`) and `sp`/`np` set is the right posture. A domain stuck at `p=none`, or
+  enforced at the apex but `sp=none`, is *less* ready, not more.
 
 ## 2. Mailbox-provider sender requirements (live and tightening)
 

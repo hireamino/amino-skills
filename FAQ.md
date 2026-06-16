@@ -126,13 +126,19 @@ correctly" has permanently risen.
 
 ### What is DMARCbis?
 
-DMARCbis is the in-progress revision of the DMARC standard (currently an IETF draft in
-Last Call, on track to become a Proposed Standard — it will obsolete the original DMARC
-RFCs). The headline change for operators: it replaces the Public Suffix List with a DNS
-**"Tree Walk"** for determining organizational domains, which changes how alignment and
-policy discovery work for subdomains. If you run DMARC across subdomains, it's worth
-tracking. *(We don't cite RFC numbers until they're actually published — the draft is
-still moving.)*
+DMARCbis is the modernized DMARC standard, **published as RFC 9989** (May 2026), which
+obsoletes the original DMARC (RFC 7489) and RFC 9091. The original was only Informational;
+this is the first Standards-Track DMARC. The changes that matter to operators:
+
+- **A DNS "Tree Walk" replaces the Public Suffix List** for determining organizational
+  domains — this changes how alignment and policy discovery work, especially for subdomains.
+- **`np=` is new** — a policy for *non-existent* subdomains (set `np=reject` to shut down a
+  common cousin-domain spoofing trick). `sp=` still governs existing subdomains.
+- **`pct`, `rf`, and `ri` are removed.** Records still using them aren't broken yet, but
+  they're no longer spec-conformant — worth cleaning up.
+
+If you run DMARC across subdomains, this is worth acting on now. The audit flags records
+that still use removed tags and checks whether your subdomain policy is actually enforced.
 
 ### Does email need to be "post-quantum ready"?
 
