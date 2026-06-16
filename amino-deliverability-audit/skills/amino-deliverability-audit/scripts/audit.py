@@ -646,7 +646,7 @@ def action(f):
         if "partially enforced" in t:
             return "Raise DMARC pct to 100"
         if "removed in rfc 9989" in t:
-            return "Drop the pct/rf/ri tags; add np=reject"
+            return "Modernize DMARC tags for RFC 9989"
         if "report destination" in t:
             return "Authorize the external DMARC report destination"
         if "rua" in t:
@@ -657,9 +657,9 @@ def action(f):
             return "Fix MTA-STS mx: entries to match your MX"
         if "max_age" in t:
             return "Set a valid MTA-STS max_age"
-        return "Publish + host an MTA-STS policy"
+        return "Publish an MTA-STS policy"
     if a == "TLS-RPT":
-        return "Add a rua endpoint to TLS-RPT" if "no rua" in t else "Add a TLS-RPT reporting record"
+        return "Add a rua endpoint to TLS-RPT" if "no rua" in t else "Add a TLS-RPT record"
     if a == "BIMI":
         return "Add a VMC to your BIMI record" if "without a vmc" in t else "Get a VMC, then publish BIMI"
     if a == "MX":
