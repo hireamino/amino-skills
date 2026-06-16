@@ -17,7 +17,36 @@ import subprocess
 import sys
 import socket
 import ssl
+import ipaddress
 from functools import lru_cache
+
+# Input is untrusted (any domain, incl. from the future public web tool). Validate it as
+# a real DNS hostname before it flows into dig args / socket connects / name construction.
+# Rejects whitespace, control chars, and leading '-' (dig flag/argument injection).
+DOMAIN_RE = re.compile(r"^(?=.{1,253}$)(?!-)[a-z0-9-]{1,63}(?<!-)(?:\.(?!-)[a-z0-9-]{1,63}(?<!-))+$")
+
+
+def safe_domain(raw):
+    """Normalize + validate the input domain; return a clean hostname or None."""
+    d = (raw or "").strip().strip(".").lower().lstrip("@")
+    return d if d and len(d) <= 253 and DOMAIN_RE.match(d) else None
+
+
+def host_public_ips(host):
+    """Public IPs a host resolves to, excluding private/loopback/link-local/reserved/
+    multicast ranges. SSRF guard for the socket probes: a malicious domain can point its
+    MX or mta-sts host at an internal IP (e.g. 169.254.169.254, 127.0.0.1, 10.x) — we must
+    never open a connection to those, especially from a server/edge context."""
+    out = []
+    for ip in dig(host, "A") + dig(host, "AAAA"):
+        try:
+            a = ipaddress.ip_address(ip.strip())
+        except ValueError:
+            continue
+        if not (a.is_private or a.is_loopback or a.is_link_local or a.is_reserved
+                or a.is_multicast or a.is_unspecified):
+            out.append(ip.strip())
+    return out
 
 TIMEOUT = 6        # DNS (dig) — fast, rarely blocked
 SOCK_TIMEOUT = 3   # raw socket probes (STARTTLS:25, MTA-STS HTTPS) — these hit
@@ -380,6 +409,8 @@ def check_mta_sts(domain, F):
     txt = first_txt(f"_mta-sts.{domain}", "v=stsv1")
     policy = None
     try:
+        if not host_public_ips(f"mta-sts.{domain}"):
+            raise OSError("mta-sts host does not resolve to a public IP")  # SSRF guard
         ctx = ssl.create_default_context()
         conn = socket.create_connection((f"mta-sts.{domain}", 443), SOCK_TIMEOUT)
         s = ctx.wrap_socket(conn, server_hostname=f"mta-sts.{domain}")
@@ -471,6 +502,8 @@ def check_transport(domain, F):
     host = sorted(mx, key=lambda r: int(r.split()[0]) if r.split()[0].isdigit() else 99)[0].split()[-1].rstrip(".")
     tls_ver = None
     try:
+        if not host_public_ips(host):
+            raise OSError("MX does not resolve to a public IP")  # SSRF guard: skip the probe
         conn = socket.create_connection((host, 25), SOCK_TIMEOUT)
         conn.recv(512)
         conn.sendall(b"EHLO amino-audit\r\n")
@@ -675,7 +708,10 @@ def main():
     if len(sys.argv) < 2:
         print(json.dumps({"error": "usage: audit.py <domain>"}))
         sys.exit(1)
-    domain = sys.argv[1].strip().lower().lstrip("@")
+    domain = safe_domain(sys.argv[1])
+    if not domain:
+        print(json.dumps({"error": "invalid domain — provide a hostname like example.com"}))
+        sys.exit(1)
     F = []
     check_spf(domain, F)
     check_dkim(domain, F)
