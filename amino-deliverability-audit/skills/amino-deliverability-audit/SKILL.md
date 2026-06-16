@@ -102,6 +102,13 @@ locked design in `assets/plan-card.html`: substitute `{{DOMAIN}}` and fill each 
 ```
 <li><i class="ti ti-chevron-right" aria-hidden="true"></i> {{action}}</li>
 ```
+**Locked — one bullet, one canonical action.** Each `<li>` carries the finding's `action`
+*verbatim* and nothing more. Do NOT append the domain-specific symptom (the offending record,
+host, or value, e.g. "drop the stray udag.de backup") to the bullet — that detail belongs in the
+per-finding "so what" narrative below the card. Card bullets stay one tight line; the specific
+symptom and its treatment live in the prose. This summarized-label / detailed-prose split is the
+locked treatment for both the skill and the web tool.
+
 For an **empty high-value quadrant** (no Quick wins / no Major), don't leave it blank — show one
 affirming line so a clean domain reads as strong, not broken:
 ```
