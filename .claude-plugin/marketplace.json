@@ -1,6 +1,6 @@
 {
   "name": "amino-skills",
-  "owner": { "name": "Amino — Whiteboard Venture Partners", "url": "https://hireamino.com" },
+  "owner": { "name": "Amino — WBVP Enterprises Inc.", "url": "https://hireamino.com" },
   "metadata": { "description": "Free tools to assess and benchmark email sending domains, from Amino (hireamino.com)." },
   "plugins": [
     {
