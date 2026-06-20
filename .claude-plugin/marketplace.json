@@ -7,7 +7,7 @@
       "name": "amino-deliverability-audit",
       "source": "./amino-deliverability-audit",
       "description": "Emails landing in spam, or not sure your domain is set up to send? Benchmark your sending domain in seconds. Checks the signals mailbox providers judge you on — SPF, DKIM, DMARC, alignment, MTA-STS, TLS-RPT, DANE, BIMI, MX hygiene — and tells you in plain terms where you stand and what to fix first. Read-only; nothing changes.",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "author": { "name": "Amino", "url": "https://hireamino.com" },
       "keywords": ["email","deliverability","dmarc","spf","dkim","mta-sts","dane","dns","security"]
     }

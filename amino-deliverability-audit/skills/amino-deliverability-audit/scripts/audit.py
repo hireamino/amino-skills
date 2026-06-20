@@ -14,12 +14,15 @@ Deps:   `dig` (ships with macOS / most Linux). Pure stdlib otherwise.
 import json
 import re
 import sys
+import time
 import socket
 import ssl
 import ipaddress
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 
 from resolver import query as dig  # pluggable DNS (dig backend locally; DoH at the edge)
+from resolver import query_fresh   # uncached re-query, for confirming critical absences
 
 # Input is untrusted (any domain, incl. from the future public web tool). Validate it as
 # a real DNS hostname before it flows into dig args / socket connects / name construction.
@@ -128,24 +131,30 @@ def dkim_lookup(domain):
     good = key found (Ed25519 / RSA>=2048); weak = RSA-1024 (real gap);
     unknown = no key at any probed selector (a discovery blind spot, NOT a
     confirmed gap). testing = the surfaced key carries t=y (testing mode).
-    Probes candidates CONCURRENTLY then evaluates them in priority order — same result
-    as the old sequential early-exit (first good key in candidate order wins), but the
-    DNS round-trips overlap instead of summing (the big win on no-provider-match domains)."""
+    Probes candidates in small concurrent BATCHES with early-exit: a provider-matched
+    domain (its real selector sits first) resolves in one batch instead of firing all
+    ~50 selector probes at once. That burst is what makes a loaded resolver rate-limit /
+    load-shed and return false-empty answers on co-occurring lookups (a heavy domain would
+    intermittently mis-report "no MTA-STS / no SPF"). Result is identical to the old
+    sequential early-exit (first good key in priority order wins)."""
     cands = dkim_candidates(domain)
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
-        recs = list(ex.map(lambda s: _dkim_probe(domain, s), cands))
     weak = None
     weak_testing = False
-    for sel, rec in zip(cands, recs):
-        if not rec:
-            continue
-        ktype, pub, bits, testing = parse_dkim(rec)
-        if ktype == "rsa" and bits == 1024:
-            weak = weak or f"DKIM {sel}=RSA-1024"
-            weak_testing = weak_testing or testing
-            continue  # a stronger key later in priority order still wins
-        label = ktype.upper() + (f"-{bits}" if bits else "")
-        return ("good", f"DKIM {sel} ({label})", testing)
+    BATCH = 6
+    for i in range(0, len(cands), BATCH):
+        batch = cands[i:i + BATCH]
+        with ThreadPoolExecutor(max_workers=min(MAX_WORKERS, len(batch))) as ex:
+            recs = list(ex.map(lambda s: _dkim_probe(domain, s), batch))
+        for sel, rec in zip(batch, recs):
+            if not rec:
+                continue
+            ktype, pub, bits, testing = parse_dkim(rec)
+            if ktype == "rsa" and bits == 1024:
+                weak = weak or f"DKIM {sel}=RSA-1024"
+                weak_testing = weak_testing or testing
+                continue  # a stronger key later in priority order still wins
+            label = ktype.upper() + (f"-{bits}" if bits else "")
+            return ("good", f"DKIM {sel} ({label})", testing)
     return ("weak", weak, weak_testing) if weak else ("unknown", "no DKIM key at common/provider selectors", False)
 
 
@@ -174,6 +183,25 @@ def first_txt(name, prefix):
     for rec in dig(name, "TXT"):
         if rec.lower().startswith(prefix.lower()):
             return rec
+    return None
+
+
+def confirm_txt(name, prefix):
+    """Like first_txt, but for TRUST-CRITICAL records (SPF/DMARC/MTA-STS) where a false
+    'missing' is a serious wrong answer. If the cached lookup comes back empty, re-confirm
+    with a couple of cache-bypassed retries before trusting the absence — under a heavy
+    concurrent fan-out a loaded/flaky resolver can return a transient empty answer that
+    would otherwise surface as a phantom 'no SPF / no MTA-STS'. Adds queries ONLY when the
+    record looks absent (live domains hit the fast path and add nothing)."""
+    p = prefix.lower()
+    hit = first_txt(name, prefix)
+    if hit is not None:
+        return hit
+    for delay in (0.3, 0.7):
+        time.sleep(delay)
+        for rec in query_fresh(name, "TXT"):
+            if rec.lower().startswith(p):
+                return rec
     return None
 
 
@@ -245,7 +273,12 @@ def effective_terminator(domain, seen=None, depth=0):
 
 
 def check_spf(domain, F):
-    spf = first_txt(domain, "v=spf1")
+    spf_records = [r for r in dig(domain, "TXT") if r.lower().startswith("v=spf1")]
+    if len(spf_records) > 1:
+        F.append(dict(area="SPF", severity="high", title="Multiple SPF records (invalid)",
+                      detail=f"{len(spf_records)} v=spf1 records are published at the apex. RFC 7208 allows only one — receivers treat multiple as a PermError, so SPF fails entirely.",
+                      fix="Merge them into a single v=spf1 record."))
+    spf = confirm_txt(domain, "v=spf1")
     if not spf:
         F.append(dict(area="SPF", severity="high", title="No SPF record",
                       detail="No v=spf1 TXT record at the apex. Receivers can't verify which hosts may send for this domain; alignment-based DMARC pass via SPF is impossible.",
@@ -321,12 +354,17 @@ def check_dkim(domain, F):
 
 
 def check_dmarc(domain, F):
-    rec = first_txt(f"_dmarc.{domain}", "v=dmarc1")
+    rec = confirm_txt(f"_dmarc.{domain}", "v=dmarc1")
     if not rec:
         F.append(dict(area="DMARC", severity="critical", title="No DMARC record",
                       detail="No policy at _dmarc. Receivers have no instruction on how to handle unauthenticated mail in your name — and as of 2024-25, Gmail/Yahoo/Microsoft require DMARC for bulk senders. This is both a spoofing exposure and a hard deliverability blocker.",
                       fix='Publish TXT at _dmarc: start with "v=DMARC1; p=none; rua=mailto:dmarc@<domain>" to collect reports, then ramp to p=quarantine and p=reject.'))
         return
+    dmarc_records = [r for r in dig(f"_dmarc.{domain}", "TXT") if r.lower().startswith("v=dmarc1")]
+    if len(dmarc_records) > 1:
+        F.append(dict(area="DMARC", severity="high", title="Multiple DMARC records (invalid)",
+                      detail=f"{len(dmarc_records)} DMARC records exist at _dmarc. Exactly one is allowed — receivers ignore the policy entirely when there are several, so you effectively have no DMARC.",
+                      fix="Keep one DMARC record and remove the rest."))
     kv = dict(re.findall(r"(\w+)=\s*([^;]+)", rec))
     p = kv.get("p", "none").strip().lower()
     sp = kv.get("sp", "").strip().lower()
@@ -397,7 +435,7 @@ def _mx_pattern_matches(pattern, host):
 
 
 def check_mta_sts(domain, F):
-    txt = first_txt(f"_mta-sts.{domain}", "v=stsv1")
+    txt = confirm_txt(f"_mta-sts.{domain}", "v=stsv1")
     policy = None
     mhost = f"mta-sts.{domain}"
     try:
@@ -591,6 +629,215 @@ def check_mx_hygiene(domain, F):
                   fix="Confirm every MX provider is intentional and enforces TLS; remove stale/registrar-default backup MX so all inbound flows to your primary provider."))
 
 
+# ── SSRF-guarded HTTPS GET (for RDAP + robots.txt) ───────────────────────────
+# The skill runs on the operator's OWN machine, which (unlike the CF edge) CAN reach
+# localhost / RFC1918 — so every fetch resolves its host to a vetted PUBLIC IP first
+# (host_public_ips) and connects to that IP with the cert validated against the
+# hostname. Redirects are NOT followed by default (follow=0) because the host can be
+# attacker-controlled (e.g. robots.txt on a hostile domain); when followed (RDAP's
+# rdap.org bootstrap), each hop is re-validated through the same guard.
+
+def _http_get(host, path, follow=0, cap=65536):
+    """Return (status:int|None, body:str). Read-only, body-capped, short timeout,
+    fail-closed (returns (None, None)) on any error or a non-public host."""
+    host_header = host
+    hops = 0
+    while True:
+        ips = host_public_ips(host)
+        if not ips:
+            return None, None  # SSRF guard: refuse private/loopback/link-local/reserved
+        try:
+            ctx = ssl.create_default_context()
+            conn = socket.create_connection((ips[0], 443), SOCK_TIMEOUT)
+            s = ctx.wrap_socket(conn, server_hostname=host)  # cert validated vs hostname
+            s.sendall((f"GET {path} HTTP/1.0\r\nHost: {host_header}\r\n"
+                       "User-Agent: amino-audit\r\nAccept: */*\r\nConnection: close\r\n\r\n").encode())
+            raw = b""
+            while len(raw) < cap:
+                chunk = s.recv(4096)
+                if not chunk:
+                    break
+                raw += chunk
+            s.close()
+        except Exception:
+            return None, None
+        head, _, body = raw.decode("utf-8", errors="ignore").partition("\r\n\r\n")
+        m = re.match(r"HTTP/\d\.\d\s+(\d{3})", head)
+        status = int(m.group(1)) if m else None
+        if status in (301, 302, 303, 307, 308) and hops < follow:
+            loc = re.search(r"\n[Ll]ocation:\s*(\S+)", head)
+            mu = re.match(r"https://([^/:]+)(?::\d+)?(/\S*)?$", loc.group(1)) if loc else None
+            if not mu:
+                return status, body
+            host = host_header = mu.group(1).lower()
+            path = mu.group(2) or "/"
+            hops += 1
+            continue
+        return status, body
+
+
+def _parse_iso8601(s):
+    s = re.sub(r"\.(\d{6})\d+", r".\1", s.strip())  # trim sub-microsecond precision
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    dt = datetime.fromisoformat(s)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.timestamp()
+
+
+# ── DNSSEC ───────────────────────────────────────────────────────────────────
+
+def check_dnssec(domain, F):
+    if dig(domain, "DNSKEY"):
+        F.append(dict(area="DNSSEC", severity="pass", title="DNSSEC enabled",
+                      detail="The zone is DNSSEC-signed.", fix=None))
+    else:
+        F.append(dict(area="DNSSEC", severity="low", title="DNSSEC not enabled",
+                      detail="The zone publishes no DNSKEY, so DNS answers for this domain aren't cryptographically signed — and DANE can't be used without it. A trust/security gap more than a deliverability one.",
+                      fix="Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."))
+
+
+# ── Domain age / expiry via RDAP (modern WHOIS over HTTPS/JSON) ──────────────
+
+def check_domain_age(domain, F):
+    """rdap.org is the IANA bootstrap redirector → it 30x's to the authoritative RDAP
+    server for the TLD, so we follow (each hop re-validated through the SSRF guard).
+    Fail-open: no RDAP for the TLD / any error → no finding."""
+    status, body = _http_get("rdap.org", "/domain/" + domain, follow=3, cap=131072)
+    if status != 200 or not body:
+        return
+    try:
+        data = json.loads(body)
+    except Exception:
+        return
+    events = data.get("events") if isinstance(data, dict) else None
+    if not isinstance(events, list):
+        return
+    now = time.time()
+    for ev in events:
+        if not isinstance(ev, dict) or not ev.get("eventDate"):
+            continue
+        try:
+            ts = _parse_iso8601(ev["eventDate"])
+        except Exception:
+            continue
+        if ev.get("eventAction") == "registration":
+            age = int((now - ts) // 86400)
+            if 0 <= age < 90:
+                F.append(dict(area="Reputation", severity="medium", title=f"Domain is newly registered ({age} days)",
+                              detail="Brand-new domains have no sending reputation, so mailbox providers throttle them. Sending cold or at volume now risks the spam folder.",
+                              fix="Warm up gradually — start low-volume to engaged recipients and ramp over weeks before scaling."))
+        elif ev.get("eventAction") == "expiration":
+            left = int((ts - now) // 86400)
+            if 0 <= left < 30:
+                F.append(dict(area="Reputation", severity="high", title=f"Domain expires in {left} days",
+                              detail="If the registration lapses, mail and the website stop entirely — a full outage, and a reputation reset once recovered.",
+                              fix="Renew the domain now and turn on auto-renew."))
+
+
+# ── AI-bot readiness — light (one robots.txt fetch, no redirect-follow) ──────
+
+AI_BOTS = ["GPTBot", "ChatGPT-User", "OAI-SearchBot", "ClaudeBot", "Claude-Web",
+           "PerplexityBot", "Google-Extended", "CCBot", "Applebot-Extended"]
+
+
+def _robots_blocks_ai_bots(txt):
+    lines = [re.sub(r"#.*", "", ln).strip() for ln in txt.splitlines()]
+    lines = [ln for ln in lines if ln]
+    groups, cur, expect_agent = [], None, False
+    for ln in lines:
+        ua = re.match(r"user-agent:\s*(.+)$", ln, re.I)
+        if ua:
+            if not expect_agent:
+                cur = {"agents": [], "rules": []}
+                groups.append(cur)
+            cur["agents"].append(ua.group(1).strip().lower())
+            expect_agent = True
+            continue
+        rule = re.match(r"(dis)?allow:\s*(.*)$", ln, re.I)
+        if rule and cur is not None:
+            cur["rules"].append({"allow": not rule.group(1), "path": rule.group(2).strip()})
+            expect_agent = False
+
+    def root_blocked(gs):
+        dis = allow_root = False
+        for g in gs:
+            for r in g["rules"]:
+                if r["path"] == "/":
+                    if r["allow"]:
+                        allow_root = True
+                    else:
+                        dis = True
+        return dis and not allow_root
+
+    blocked = []
+    for bot in AI_BOTS:
+        ua = bot.lower()
+        exact = [g for g in groups if ua in g["agents"]]
+        gs = exact if exact else [g for g in groups if "*" in g["agents"]]
+        if root_blocked(gs):
+            blocked.append(bot)
+    return blocked
+
+
+def check_ai_bots(domain, F):
+    status, body = _http_get(domain, "/robots.txt", follow=0, cap=20000)
+    if status != 200 or not body:
+        return  # no robots / unreadable / redirect → nothing is blocked → no finding
+    blocked = _robots_blocks_ai_bots(body)
+    if blocked:
+        more = ", and others" if len(blocked) > 4 else ""
+        F.append(dict(area="AI visibility", severity="low", title="robots.txt blocks AI crawlers",
+                      detail=f"robots.txt disallows {', '.join(blocked[:4])}{more}. As people increasingly ask AI engines (ChatGPT, Perplexity, Google AI) about vendors, blocking these crawlers makes your site invisible to those answers.",
+                      fix="Allow the AI crawlers you want in robots.txt (or drop the blanket Disallow)."))
+
+
+# ── Reverse DNS / FCrDNS on the primary MX ───────────────────────────────────
+
+def _primary_mx(domain):
+    mx = dig(domain, "MX")
+    if not mx:
+        return None
+    if any(r.split()[-1].rstrip(".") == "" for r in mx if r.split()):
+        return None  # null MX
+    return sorted(mx, key=lambda r: int(r.split()[0]) if r.split()[0].isdigit() else 99)[0].split()[-1].rstrip(".")
+
+
+def _reverse_name(ip):
+    return ".".join(reversed(ip.split("."))) + ".in-addr.arpa"
+
+
+def check_reverse_dns(domain, F):
+    host = _primary_mx(domain)
+    if not host:
+        return
+    ips = [ip.strip() for ip in dig(host, "A") if re.match(r"^\d+\.\d+\.\d+\.\d+$", ip.strip())]
+    if not ips:
+        return
+    ip = ips[0]
+    ptr = dig(_reverse_name(ip), "PTR")
+    if not ptr:
+        F.append(dict(area="Transport", severity="low", title="Mail server has no reverse DNS (PTR)",
+                      detail=f"The primary MX ({host}, {ip}) has no PTR record. Receivers check reverse DNS on connecting mail servers, so a missing PTR hurts deliverability for self-hosted / own-IP senders (managed providers like Google and Microsoft set this for you).",
+                      fix="Have your host set a PTR (reverse DNS) record for the mail server's IP that matches its hostname."))
+        return
+    ptr_name = ptr[0].rstrip(".")
+    if ip not in dig(ptr_name, "A"):
+        F.append(dict(area="Transport", severity="low", title="Mail server reverse DNS isn't forward-confirmed",
+                      detail=f"The MX IP {ip} has a PTR ({ptr_name}) but that name doesn't resolve back to the same IP — no forward-confirmed reverse DNS (FCrDNS). Some receivers read this as a spam signal.",
+                      fix="Align the PTR hostname and its A record so reverse and forward DNS agree."))
+
+
+# ── CAA — which CAs may issue TLS certs (protects the MTA-STS/DANE cert chain) ─
+
+def check_caa(domain, F):
+    if not dig(domain, "CAA"):
+        F.append(dict(area="CAA", severity="low", title="No CAA records",
+                      detail="No CAA record restricts which certificate authorities can issue TLS certificates for your domain. CAA narrows cert mis-issuance — and the certs your MTA-STS and DANE rely on are part of your email trust chain.",
+                      fix='Publish a CAA record naming your CA(s), e.g. 0 issue "letsencrypt.org".'))
+
+
 def priority(f):
     """(effort, value) in {low, high} for a gap finding — drives the effort×value
     improvement matrix. 'pass' findings return (None, None). Defaults are sensible
@@ -625,7 +872,15 @@ def priority(f):
     if a == "MX":
         return ("low", "high")          # remove stale/duplicate MX — quick + protective
     if a == "Transport":
-        return ("high", "low") if "dane" in t else ("low", "low")  # DANE vs STARTTLS-verify
+        return ("high", "low") if "dane" in t else ("low", "low")  # DANE vs STARTTLS / reverse-DNS
+    if a == "DNSSEC":
+        return ("high", "low")          # security/trust, not a deliverability lever -> Hardening
+    if a == "Reputation":
+        return ("low", "high")          # warm-up / renew -> Quick win
+    if a == "AI visibility":
+        return ("low", "high")          # unblock AI crawlers -> Quick win
+    if a == "CAA":
+        return ("low", "low")           # cert-issuance hygiene -> Fill-in
     return ("low", "low")
 
 
@@ -644,6 +899,8 @@ def action(f):
         return None
     a, t = f["area"], f["title"].lower()
     if a == "SPF":
+        if "multiple spf" in t:
+            return "Merge to a single SPF record"
         if "no spf" in t:
             return "Publish an SPF record"
         if "exceeds 10" in t:
@@ -666,6 +923,8 @@ def action(f):
     if a == "DMARC":
         if "no dmarc" in t:
             return "Publish a DMARC policy"
+        if "multiple dmarc" in t:
+            return "Merge to a single DMARC record"
         if "p=none (monitor" in t:
             return "Ramp DMARC up to p=reject"
         if "subdomain policy" in t:
@@ -694,7 +953,19 @@ def action(f):
     if a == "Transport":
         if "misconfigured" in t:
             return "Correct the DANE/TLSA record"
-        return "Enable DNSSEC, then publish DANE/TLSA" if "dane" in t else "Confirm STARTTLS on the mail server"
+        if "no reverse dns" in t or "has no reverse" in t:
+            return "Set reverse DNS (PTR) for your mail server"
+        if "forward-confirmed" in t:
+            return "Fix forward-confirmed reverse DNS (FCrDNS)"
+        return "Publish DANE/TLSA records" if "dane" in t else "Confirm STARTTLS on the mail server"
+    if a == "CAA":
+        return "Add a CAA record"
+    if a == "DNSSEC":
+        return "Enable DNSSEC"
+    if a == "Reputation":
+        return "Renew the domain before it lapses" if "expires" in t else "Warm up the domain before scaling sends"
+    if a == "AI visibility":
+        return "Unblock AI crawlers in robots.txt"
     return f["title"]
 
 
@@ -706,13 +977,22 @@ def main():
     if not domain:
         print(json.dumps({"error": "invalid domain — provide a hostname like example.com"}))
         sys.exit(1)
-    # Run the independent checks concurrently — the DNS lookups and the two socket probes
-    # (STARTTLS:25 + MTA-STS:443) overlap instead of summing. Each check writes to its own
-    # list; results are reassembled in a fixed order so the output stays deterministic.
-    checks = [
+    # Two phases. PHASE 1 = the pure-DNS checks (incl. the parallel DKIM selector sweep)
+    # run concurrently and fully drain. PHASE 2 = the checks that open sockets (STARTTLS:25,
+    # the MTA-STS/RDAP/robots HTTPS fetches). Why split: concurrent socket connects interfere
+    # with the `dig` SUBPROCESSES under a heavy DNS burst and make some lookups return a
+    # transient false-empty (a phantom "no MTA-STS / no SPF"). Keeping the socket I/O from
+    # overlapping the DNS fan-out removes that whole class of flake; within each phase the
+    # checks still run in parallel. (confirm_txt is the second line of defense for the
+    # trust-critical records.) Each check writes its own list → deterministic reassembly.
+    dns_checks = [
         ("spf", check_spf), ("dkim", check_dkim), ("dmarc", check_dmarc),
-        ("mta_sts", check_mta_sts), ("simple", check_simple),
-        ("transport", check_transport), ("mx", check_mx_hygiene),
+        ("simple", check_simple), ("mx", check_mx_hygiene),
+        ("dnssec", check_dnssec), ("rdns", check_reverse_dns), ("caa", check_caa),
+    ]
+    socket_checks = [
+        ("mta_sts", check_mta_sts), ("transport", check_transport),
+        ("reputation", check_domain_age), ("aibots", check_ai_bots),
     ]
 
     def _run(item):
@@ -722,14 +1002,21 @@ def main():
         return _key, local, ret
 
     buckets, mx_host = {}, None
-    with ThreadPoolExecutor(max_workers=len(checks)) as ex:
-        for key, local, ret in ex.map(_run, checks):
+    # Phase 1: pure-DNS checks in parallel (no sockets → digs don't corrupt each other).
+    with ThreadPoolExecutor(max_workers=len(dns_checks)) as ex:
+        for key, local, ret in ex.map(_run, dns_checks):
             buckets[key] = local
-            if key == "transport":
-                mx_host = ret
+    # Phase 2: socket-probing checks run ONE AT A TIME. Each does its own DNS then its
+    # socket; running them serially means no check's socket connect overlaps another check's
+    # `dig`, which is the interference that produced phantom false-empties. Costs a little
+    # latency (the probes no longer overlap) in exchange for correct results.
+    for key, local, ret in map(_run, socket_checks):
+        buckets[key] = local
+        if key == "transport":
+            mx_host = ret
 
     F = []
-    for key, _ in checks:
+    for key, _ in dns_checks + socket_checks:
         F.extend(buckets[key])
 
     order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "pass": 4}

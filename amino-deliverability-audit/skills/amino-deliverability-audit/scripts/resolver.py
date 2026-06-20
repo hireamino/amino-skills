@@ -15,22 +15,69 @@ free. TXT answers are de-chunked (255-byte segments) and unquoted here, in one p
 """
 
 import re
+import time
+import threading
 import subprocess
 from functools import lru_cache
 
-DNS_TIMEOUT = 6  # seconds, per dig invocation
+DNS_TIMEOUT = 8  # seconds, per dig invocation
+
+# Bound concurrent `dig` subprocesses. audit.py fans out ~12 checks, several of which
+# spawn their own lookups (plus the ~50-selector DKIM sweep). Under that burst a local
+# stub resolver starts returning SERVFAIL/REFUSED — a FAST empty answer that +tries won't
+# retry (it's not a timeout), which `lru_cache` then memoizes, surfacing as a false
+# "no SPF / no MTA-STS". So: a semaphore caps the in-flight queries, AND the backend reads
+# dig's rcode and retries the transient failures (SERVFAIL/REFUSED/timeout) while trusting
+# a real NOERROR/NXDOMAIN empty. (No effect on the DoH edge backend, which bypasses this.)
+_DIG_SEM = threading.BoundedSemaphore(4)
+_TRANSIENT = {"SERVFAIL", "REFUSED", None}  # rcodes worth a retry (None = no status seen)
+
+
+def _parse_answer(out, rrtype):
+    """Pull the rdata for `rrtype` from a full (non-+short) dig ANSWER section."""
+    rows, in_answer = [], False
+    for line in out.splitlines():
+        if line.startswith(";; ANSWER SECTION:"):
+            in_answer = True
+            continue
+        if in_answer:
+            if not line.strip() or line.startswith(";"):
+                break
+            parts = line.split(None, 4)
+            if len(parts) >= 5 and parts[3] == rrtype:
+                rows.append(parts[4].strip())
+    return rows
+
+
+_NAME_RE = re.compile(r"[A-Za-z0-9_.-]{1,253}")  # DNS charset (incl. leading '_', reverse-arpa)
 
 
 def _dig_backend(name, rrtype):
-    """Raw backend: `dig +short`. Returns the answer lines verbatim (TXT still quoted)."""
-    try:
-        out = subprocess.run(
-            ["dig", "+short", "+time=4", "+tries=1", rrtype, name],
-            capture_output=True, text=True, timeout=DNS_TIMEOUT,
-        ).stdout.strip()
-    except Exception:
+    """Raw backend over `dig`. Returns answer rdata (TXT still quoted), [] on real-empty.
+    Retries transient resolver failures so a SERVFAIL under load can't poison the cache."""
+    # Argument-injection guard: names reach here from DNS DATA too (MX targets, PTR names,
+    # redirect hosts), not just the validated input domain. A name starting with '-' would be
+    # parsed by the dig CLI as a flag (e.g. `-f<path>` reads a file and leaks it over DNS).
+    # Reject anything that isn't a clean DNS name before it becomes an argv element.
+    if not name or name[0] == "-" or not _NAME_RE.fullmatch(name):
         return []
-    return [r.strip() for r in out.splitlines() if r.strip()]
+    for attempt in range(3):
+        try:
+            with _DIG_SEM:
+                out = subprocess.run(
+                    ["dig", "+tries=2", "+time=2", rrtype, name],
+                    capture_output=True, text=True, timeout=DNS_TIMEOUT,
+                ).stdout
+        except Exception:
+            time.sleep(0.15 * (attempt + 1))
+            continue  # spawn/timeout error → transient, retry
+        m = re.search(r"status:\s*(\w+)", out)
+        status = m.group(1) if m else None
+        if status in _TRANSIENT:
+            time.sleep(0.15 * (attempt + 1))
+            continue  # SERVFAIL/REFUSED under load → retry (don't trust the empty)
+        return _parse_answer(out, rrtype)  # NOERROR/NXDOMAIN → authoritative
+    return []
 
 
 _BACKEND = _dig_backend
@@ -56,6 +103,17 @@ def query(name, rrtype):
             parts = re.findall(r'"([^"]*)"', r)
             joined.append("".join(parts) if parts else r)
         return joined
+    return rows
+
+
+def query_fresh(name, rrtype):
+    """Uncached single query (same de-chunking as query()). Used to re-confirm an empty
+    answer for trust-critical records, so a transient false-empty can't be served from
+    (or written to) the cache."""
+    rows = _BACKEND(name, rrtype)
+    if rrtype == "TXT":
+        return ["".join(re.findall(r'"([^"]*)"', r)) if re.findall(r'"([^"]*)"', r) else r
+                for r in rows]
     return rows
 
 
