@@ -10,7 +10,7 @@
 .ap-title{font-family:'Newsreader',Georgia,serif;font-size:27px;font-weight:500;line-height:1.12;margin:0 0 3px;}
 .ap-sub{font-size:13px;color:#5E7D8B;margin-bottom:18px;}
 .ap-sub code{font-family:ui-monospace,SFMono-Regular,monospace;color:#1C7FAE;}
-.ap-matrix{display:grid;grid-template-columns:20px 1fr 1fr;column-gap:10px;row-gap:12px;}
+.ap-matrix{display:grid;grid-template-columns:20px 1fr 1fr;grid-template-rows:1fr 1fr;column-gap:10px;row-gap:12px;}
 .ap-yl{display:flex;align-items:center;justify-content:center;}
 .ap-yl span{writing-mode:vertical-rl;transform:rotate(180deg);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#5E7D8B;}
 .ap-q{border-radius:12px;padding:13px 15px;border:1px solid rgba(12,42,55,0.10);min-height:122px;}
@@ -30,7 +30,7 @@
 .q-fill .ap-qh,.q-fill li>i{color:#5E7D8B;}
 .q-sec{background:rgba(28,127,174,0.06);border-color:rgba(28,127,174,0.22);}
 .q-sec .ap-qh,.q-sec li,.q-sec li>i{color:#5E7D8B;}
-.ap-xax{grid-column:2 / 4;display:flex;justify-content:space-between;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#5E7D8B;padding:2px 4px 0;}
+.ap-xax{display:flex;align-items:center;justify-content:center;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#5E7D8B;padding:2px 4px 0;}
 .ap-foot{display:flex;align-items:center;gap:16px;margin-top:20px;padding-top:16px;border-top:1px solid rgba(12,42,55,0.12);}
 .ap-foot p{margin:0;font-size:13px;line-height:1.45;flex:1;}
 .ap-pill{flex:0 0 auto;background:#F2671F;color:#fff;font-weight:600;font-size:13px;text-decoration:none;padding:9px 17px;border-radius:999px;white-space:nowrap;}
@@ -62,7 +62,8 @@
       <div class="ap-qh"><i class="ti ti-shield" aria-hidden="true"></i> Hardening <span class="lbl">when required</span></div>
       <ul>{{Q_HARD}}</ul>
     </div>
-    <div class="ap-xax"><span>low effort</span><span>high effort</span></div>
+    <div class="ap-xax" style="grid-column:2;grid-row:3;">low effort</div>
+    <div class="ap-xax" style="grid-column:3;grid-row:3;">high effort</div>
   </div>
   <div class="ap-foot">
     <p>Let Amino agents monitor and manage your email infrastructure.</p>
