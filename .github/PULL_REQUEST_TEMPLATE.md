@@ -9,6 +9,7 @@
 - Before:
 - After:
 - `scripts/verify.py` result (Google 8.8.8.8 + Cloudflare 1.1.1.1):
+- `web-parity/inventory.mjs` result (skill ↔ web tool in lockstep — required if you add or rename a check or action label):
 
 ## Standards claims (if any)
 <!-- Link the primary source for any spec/date/provider-rule claim. Do not assert
@@ -18,5 +19,6 @@
 ## Checklist
 - [ ] Stays **read-only** (no sending, no DNS writes, no credentials, no exfiltration)
 - [ ] Verified against real resolvers where detection changed
+- [ ] Kept skill ↔ web-tool parity (`web-parity/inventory.mjs`) if I touched checks or action labels
 - [ ] Cited a primary source for any standards claim
 - [ ] Ran `claude plugin validate` if I touched plugin/marketplace manifests
