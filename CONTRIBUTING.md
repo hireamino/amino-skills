@@ -11,7 +11,9 @@ contributions:
 
 - **New or sharper checks** — a deliverability/authentication/transport signal we
   don't yet inspect, or a more accurate reading of one we do (SPF, DKIM, DMARC,
-  alignment, MTA-STS, TLS-RPT, DANE, BIMI, MX hygiene).
+  alignment, MTA-STS, TLS-RPT, DANE, BIMI, MX hygiene, DNSSEC, CAA, reverse DNS/FCrDNS,
+  domain age, AI-bot readiness). New checks must keep skill↔web parity — see
+  `web-parity/` (`inventory.mjs` is the gate; CI fails on divergence).
 - **More DKIM selectors** — DKIM presence can't be confirmed without knowing the
   selector. We probe a list of common provider selectors; adding ones we miss
   directly improves coverage. See `scripts/audit.py`.
@@ -34,7 +36,7 @@ contributions:
   golden-set cross-check. Include before/after for any domain whose score changes.
 - **Cite sources for any standards claim.** No claim about a spec, a date, or a
   provider rule without a link to the primary source.
-- **Keep it fast.** The scan targets ~10–20s for a single domain. Don't add
+- **Keep it fast.** A single-domain scan targets ~3–5s (checks run concurrently). Don't add
   unbounded network work; respect the existing timeouts and `dig` memoization.
 - **No scope creep into the product.** This is a public posture *auditor*. Please
   don't propose features that belong in a hosted service.

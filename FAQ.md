@@ -165,11 +165,39 @@ RSA-1024 DKIM — are also your PQC head start. Regulated senders should plan fi
 ### What does the amino-deliverability-audit skill check?
 
 Point it at any domain and it inspects the public DNS signals mailbox providers judge
-you on: **SPF, DKIM** (modern vs legacy key strength), **DMARC** (presence, enforcement,
-alignment, reporting), **MTA-STS, TLS-RPT, DANE, BIMI**, and **MX hygiene** — plus
-forward-readiness against DMARCbis, the Gmail/Yahoo/Microsoft rules, and the PQC
-migration. It returns a prioritized, plain-language plan: what to fix first, and the
-exact records to publish.
+you on: **SPF** (incl. multiple-record, lookup/void limits, the deprecated `ptr`),
+**DKIM** (modern vs legacy key strength), **DMARC** (presence, enforcement, alignment,
+subdomain policy, reporting, and external-report authorization), **MTA-STS, TLS-RPT,
+DANE, BIMI**, and **MX hygiene** — plus the surrounding trust signals: **DNSSEC**, **CAA**,
+**reverse DNS / FCrDNS** on your mail server, **domain age / expiry** (newly registered or
+about-to-lapse), and **AI-bot readiness** (whether your robots.txt blocks the crawlers
+behind ChatGPT/Perplexity). On top of that, forward-readiness against DMARCbis, the
+Gmail/Yahoo/Microsoft rules, and the PQC migration. It returns a prioritized,
+plain-language plan: what to fix first, and the exact records to publish.
+
+### Do I need DNSSEC, and does it affect email?
+
+DNSSEC cryptographically signs your DNS so the answers — including your mail records —
+can't be forged in transit, and it's the prerequisite for DANE. It's more a
+security/trust measure than a direct deliverability lever: enable it when a security
+review or compliance requirement calls for it, or as part of a strong overall posture.
+The audit flags whether your zone is signed.
+
+### Does my domain's age affect deliverability?
+
+Yes. A brand-new domain has no sending reputation, so mailbox providers throttle it by
+default — send cold or at volume from a freshly registered domain and much of it lands in
+spam. Warm up gradually: start with low volume to engaged recipients and ramp over a few
+weeks before scaling. The audit flags a domain that's only days old (and one that's about
+to expire — a lapse takes mail *and* the website down).
+
+### Can AI search engines like ChatGPT and Perplexity see my site?
+
+Increasingly people ask AI answer engines about vendors instead of searching, and those
+engines use their own crawlers (GPTBot, ClaudeBot, PerplexityBot, OAI-SearchBot,
+Google-Extended and others). If your robots.txt blocks them, your site is invisible to
+those answers. The audit checks whether your robots.txt is shutting AI crawlers out, so
+you can decide which to allow.
 
 ### Is it really read-only? Does it change anything?
 

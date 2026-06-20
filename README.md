@@ -15,8 +15,9 @@ Free tools to assess email sending domains, from [Amino](https://hireamino.com).
 
 Emails landing in spam? Not sure a domain is set up to send? Point this at any domain and
 it benchmarks the signals mailbox providers actually judge you on — SPF, DKIM, DMARC,
-alignment, MTA-STS, TLS-RPT, DANE, BIMI, and MX hygiene — then tells you, in plain terms,
-where you stand and what to fix first.
+alignment, MTA-STS, TLS-RPT, DANE, BIMI, and MX hygiene, plus the surrounding trust
+signals (DNSSEC, CAA, reverse DNS/FCrDNS, domain age, and AI-crawler visibility) — then
+tells you, in plain terms, where you stand and what to fix first.
 
 Read-only: it inspects public DNS and drafts the exact changes, but never touches anything.
 
