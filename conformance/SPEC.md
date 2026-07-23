@@ -38,6 +38,13 @@ live-STARTTLS fixtures are web/Action-N/A). Any other diff fails CI.
 subdomain policy inheritance, and an eTLD+1-aware `orgBase`/`org_base` so `good.co.uk` and
 `evil.co.uk` are different orgs for report-authorization).
 
+**Batch 3 — Action only** (exit-code semantics live in `index.mjs`): **I19** (empty/invalid
+`domains` input now exits non-zero — a config error can't silently pass) and **I20 (partial)**
+— a domain the engine can't audit (it throws) is now *inconclusive*: `audit-complete=false`
++ `passed=false`, failing the build only when `continue-on-audit-error=false` ("strict input,
+lenient transient"). **Still pending for I20:** resolver-level SERVFAIL/timeout-vs-NXDOMAIN
+detection, which needs DoH `Status` plumbed through the `q` resolver (→ v1.3, with I17/I18).
+
 The matrix below is the **baseline at review time**; the ✓/✗ cells for the rows above are
 superseded. Corrections to the baseline found while fixing: **I11 was a violation in the
 skill too** (`spf_qualifier` was case-sensitive); **I6/I9 were correct only in the skill's
