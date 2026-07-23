@@ -77,8 +77,15 @@ lookup (SPF/DMARC/MX) → `auditDomain` returns `inconclusive`, distinct from NX
 the Action folds it into `audit-complete`). Corpus: 14 dns-engine cases pass on all three
 (incl. DANE/DNSSEC with mock AD bits); I20-resolver covered by the Action suite.
 
-**Still open — minor polish only:** I2 (real RSA modulus vs approx-length), I13 (SPF
-contradiction cleanup). Everything false-pass / reliability / parity is closed.
+**Polish — DONE:** **I2** now reads the real RSA modulus bit-length from the DKIM p= DER
+(`rsaModulusBits` / `_rsa_modulus_bits`; falls back to the base64-length estimate only if
+the DER can't be parsed), and weak = any RSA `< 2048`, not just `== 1024`. **I13** was
+resolved by the I11 case fix (`-ALL` → "SPF present" with no contradictory "no all
+mechanism" — asserted by the `spf-dash-all` fixture).
+
+**Nothing open.** All 21 invariants are addressed across the three surfaces (I17/I18 +
+I20-resolver shipped in v1.3). The corpus runs 15 dns-engine cases green on skill / web /
+Action; the rest are pure-function / HTTP-stub / wrapper cases covered by per-surface tests.
 
 ## The invariants (the contract)
 

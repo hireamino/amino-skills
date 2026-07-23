@@ -96,7 +96,7 @@ def dkim_state_indep(domain, resolver):
             if invalid_reason is not None:
                 invalid = True
                 continue
-            if ktype == "rsa" and bits == 1024:
+            if ktype == "rsa" and bits and bits < 2048:
                 weak = True
                 continue
             return "good"

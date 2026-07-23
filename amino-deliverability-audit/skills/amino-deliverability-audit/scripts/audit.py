@@ -158,8 +158,8 @@ def dkim_lookup(domain):
                 invalid = invalid or (f"DKIM {sel} revoked (empty p=)" if invalid_reason == "revoked"
                                       else f"DKIM {sel} malformed ({invalid_reason})")
                 continue
-            if ktype == "rsa" and bits == 1024:
-                weak = weak or f"DKIM {sel}=RSA-1024"
+            if ktype == "rsa" and bits and bits < 2048:
+                weak = weak or f"DKIM {sel}=RSA-{bits}"
                 weak_testing = weak_testing or testing
                 continue  # a stronger key later in priority order still wins
             label = ktype.upper() + (f"-{bits}" if bits else "")
@@ -353,6 +353,45 @@ def check_spf(domain, F):
                   fix=None, record=spf))
 
 
+def _rsa_modulus_bits(b64):
+    """Real RSA modulus bit-length from a DKIM p= (base64 SubjectPublicKeyInfo DER), or
+    None if it can't be parsed — more accurate than estimating from the base64 length.
+    The caller falls back to the length estimate when this returns None."""
+    try:
+        data = base64.b64decode(b64 + "===", validate=False)
+    except Exception:
+        return None
+    i = 0
+
+    def read_len():
+        nonlocal i
+        n = data[i]; i += 1
+        if n & 0x80:
+            k = n & 0x7f; n = 0
+            for _ in range(k):
+                n = (n << 8) | data[i]; i += 1
+        return n
+
+    def expect(tag):
+        nonlocal i
+        if data[i] != tag:
+            raise ValueError
+        i += 1
+        return read_len()
+
+    try:
+        expect(0x30)                       # SubjectPublicKeyInfo SEQUENCE
+        alg = expect(0x30); i += alg        # skip AlgorithmIdentifier
+        expect(0x03); i += 1                # BIT STRING, skip the unused-bits byte
+        expect(0x30)                        # RSAPublicKey SEQUENCE
+        n = expect(0x02)                    # modulus INTEGER
+        if data[i] == 0x00:
+            n -= 1                          # strip a leading sign byte
+        return n * 8 if n > 0 else None
+    except (IndexError, ValueError):
+        return None
+
+
 def parse_dkim(rec):
     """Returns (ktype, pub, bits, testing, invalid).
     invalid is None when the key is usable, else a reason string:
@@ -368,9 +407,10 @@ def parse_dkim(rec):
         return ktype, pub, None, testing, "revoked"
     bits, invalid = None, None
     if ktype == "rsa":
-        # crude DER length -> approx modulus size estimate from base64 length
-        approx_bytes = len(pub) * 3 // 4
-        bits = 1024 if approx_bytes < 200 else (2048 if approx_bytes < 400 else 4096)
+        bits = _rsa_modulus_bits(pub)  # real modulus …
+        if bits is None:               # … or estimate from base64 length if unparseable
+            approx_bytes = len(pub) * 3 // 4
+            bits = 1024 if approx_bytes < 200 else (2048 if approx_bytes < 400 else 4096)
     elif ktype == "ed25519":
         # Ed25519 public keys are exactly 32 bytes; anything else is malformed.
         try:
