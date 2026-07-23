@@ -24,6 +24,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from resolver import query as dig  # pluggable DNS (dig backend locally; DoH at the edge)
 from resolver import query_fresh   # uncached re-query, for confirming critical absences
+from resolver import meta as dns_meta  # DNSSEC/rcode side-channel (AD bit) for DANE/DNSSEC
 
 # Input is untrusted (any domain, incl. from the future public web tool). Validate it as
 # a real DNS hostname before it flows into dig args / socket connects / name construction.
@@ -681,7 +682,9 @@ def check_transport(domain, F):
     except Exception:
         pass
     # DANE
-    dane = dig(f"_25._tcp.{host}", "TLSA")
+    dane_name = f"_25._tcp.{host}"
+    dane = dig(dane_name, "TLSA")
+    dane_meta = dns_meta(dane_name, "TLSA")
     if tls_ver:
         sev = "pass" if tls_ver == "TLSv1.3" else "low"
         F.append(dict(area="Transport", severity=sev, title=f"Inbound SMTP STARTTLS: {tls_ver}",
@@ -697,8 +700,12 @@ def check_transport(domain, F):
             F.append(dict(area="Transport", severity="medium", title="DANE/TLSA present but misconfigured",
                           detail=f"TLSA records exist but {bad} For SMTP DANE only usage 3 (DANE-EE) or 2 (DANE-TA) are valid, and matching-type 1 (SHA-256) is recommended; an invalid record can break DANE-enforcing senders.",
                           fix="Correct the TLSA usage/selector/matching-type (typically '3 1 1' for the MX cert) and re-publish."))
+        elif dane_meta.get("ad") is False:
+            F.append(dict(area="Transport", severity="medium", title="DANE/TLSA present but not DNSSEC-validated",
+                          detail="TLSA records exist but the response isn't DNSSEC-authenticated (AD bit not set). DANE requires a validated DNSSEC chain — without it senders can't trust the TLSA, so DANE gives no protection and can't be enforced.",
+                          fix="Enable DNSSEC on the zone so the TLSA records are cryptographically validated."))
         else:
-            F.append(dict(area="Transport", severity="pass", title="DANE/TLSA present", detail="TLSA records bind the MX cert (requires DNSSEC).", fix=None))
+            F.append(dict(area="Transport", severity="pass", title="DANE/TLSA present", detail="TLSA records bind the MX cert" + (" (DNSSEC-validated)." if dane_meta.get("ad") else "."), fix=None))
     else:
         F.append(dict(area="Transport", severity="low", title="No DANE/TLSA",
                       detail="No TLSA records on the MX. DANE is an emerging transport-security ask (NIS2/BSI) and depends on DNSSEC.",
@@ -816,12 +823,18 @@ def _parse_iso8601(s):
 # ── DNSSEC ───────────────────────────────────────────────────────────────────
 
 def check_dnssec(domain, F):
-    if dig(domain, "DNSKEY"):
+    keys = dig(domain, "DNSKEY")
+    m = dns_meta(domain, "DNSKEY")
+    # AD bit from a validating resolver is authoritative and respects the zone cut (a
+    # validated NODATA in a signed parent still sets AD). Fall back to DNSKEY presence
+    # only when meta isn't available (a backend that doesn't record it / mock).
+    signed = m["ad"] if "ad" in m else bool(keys)
+    if signed:
         F.append(dict(area="DNSSEC", severity="pass", title="DNSSEC enabled",
-                      detail="The zone is DNSSEC-signed.", fix=None))
+                      detail="The zone is DNSSEC-signed and answers validate.", fix=None))
     else:
         F.append(dict(area="DNSSEC", severity="low", title="DNSSEC not enabled",
-                      detail="The zone publishes no DNSKEY, so DNS answers for this domain aren't cryptographically signed — and DANE can't be used without it. A trust/security gap more than a deliverability one.",
+                      detail="DNS answers for this domain aren't cryptographically signed/validated — and DANE can't be used without it. A trust/security gap more than a deliverability one.",
                       fix="Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."))
 
 

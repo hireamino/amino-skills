@@ -42,13 +42,19 @@ def install_resolver(dns):
                 return r
         return None
 
+    def dns_meta(name, rtype):
+        e = m.get(_norm(name), {})
+        return {"status": e.get("status", 0), "ad": bool(e.get("ad"))}
+
     audit.dig = recs
     audit.query_fresh = recs
     audit.first_txt = first_txt
     audit.confirm_txt = lambda name, prefix: first_txt(name, prefix)
+    audit.dns_meta = dns_meta
 
 
-CHECKS = {"DKIM": "check_dkim", "DMARC": "check_dmarc", "SPF": "check_spf"}
+CHECKS = {"DKIM": "check_dkim", "DMARC": "check_dmarc", "SPF": "check_spf",
+          "Transport": "check_transport", "DNSSEC": "check_dnssec"}
 
 
 def run():

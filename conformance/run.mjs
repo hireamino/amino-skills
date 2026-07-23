@@ -30,7 +30,7 @@ function mockQ(dns) {
   const norm = (n) => n.replace(/\.+$/, "").toLowerCase();
   const map = {};
   for (const [k, v] of Object.entries(dns || {})) map[norm(k)] = v;
-  return async (name, type) => {
+  const q = async (name, type) => {
     name = norm(name);
     if (map[name] && map[name][type]) return map[name][type];
     for (const k of Object.keys(map)) {
@@ -38,6 +38,12 @@ function mockQ(dns) {
     }
     return [];
   };
+  // DNSSEC/rcode meta from the fixture entry's `ad`/`status` keys (default: NOERROR, ad=false).
+  q.meta = async (name) => {
+    const e = map[norm(name)] || {};
+    return { status: e.status !== undefined ? e.status : 0, ad: !!e.ad, error: false };
+  };
+  return q;
 }
 
 let pass = 0, fail = 0, skip = 0;

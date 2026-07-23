@@ -66,8 +66,30 @@
     { "id": "mtasts-wildcard-one-label", "invariant": "I14", "mode": "pure", "skip_reason": "MTA-STS wildcard matcher covered by the per-surface pure-function check (mxPatternMatches / _mx_pattern_matches)." },
     { "id": "mtasts-enforce-missing-fields", "invariant": "I15", "mode": "pure", "skip_reason": "Covered by the pure-function check on mtaStsPolicyProblems / mta_sts_policy_problems." },
     { "id": "mtasts-wrong-content-type", "invariant": "I16", "mode": "http", "skip_reason": "Needs an HTTPS policy-fetch stub; the unfetchable-policy path is exercised in the per-surface conformance test." },
-    { "id": "dane-unvalidated-tlsa", "invariant": "I17", "mode": "dnssec", "skip_reason": "Not implemented yet — DANE/DNSSEC validation needs DoH AD-bit plumbing (v1.3)." },
-    { "id": "dnssec-zone-cut", "invariant": "I18", "mode": "dnssec", "skip_reason": "Not implemented yet — v1.3." },
+    {
+      "id": "dane-unvalidated-tlsa", "invariant": "I17", "mode": "dns-engine",
+      "desc": "TLSA present but the answer isn't DNSSEC-authenticated (ad=false) -> DANE not active.",
+      "input": { "domain": "ex.com", "dns": { "ex.com": { "MX": ["10 mx.ex.com"], "ad": true }, "_25._tcp.mx.ex.com": { "TLSA": ["3 1 1 abcdef"], "ad": false } } },
+      "expect": { "present": [{ "area": "Transport", "includes": "not DNSSEC-validated" }] }
+    },
+    {
+      "id": "dane-validated-tlsa", "invariant": "I17", "mode": "dns-engine",
+      "desc": "TLSA present + DNSSEC-authenticated (ad=true) + well-formed -> DANE present/pass.",
+      "input": { "domain": "ex.com", "dns": { "ex.com": { "MX": ["10 mx.ex.com"], "ad": true }, "_25._tcp.mx.ex.com": { "TLSA": ["3 1 1 abcdef"], "ad": true } } },
+      "expect": { "present": [{ "area": "Transport", "includes": "DANE/TLSA present" }], "absent": ["not DNSSEC-validated"] }
+    },
+    {
+      "id": "dnssec-signed-zonecut", "invariant": "I18", "mode": "dns-engine",
+      "desc": "Subdomain with no DNSKEY but AD=true (validated NODATA in a signed parent) -> DNSSEC enabled, not falsely unsigned.",
+      "input": { "domain": "sub.ex.com", "dns": { "sub.ex.com": { "DNSKEY": [], "ad": true } } },
+      "expect": { "present": [{ "area": "DNSSEC", "includes": "DNSSEC enabled" }], "absent": ["DNSSEC not enabled"] }
+    },
+    {
+      "id": "dnssec-unsigned", "invariant": "I18", "mode": "dns-engine",
+      "desc": "AD=false and no DNSKEY -> DNSSEC not enabled.",
+      "input": { "domain": "ex.com", "dns": { "ex.com": { "DNSKEY": [], "ad": false } } },
+      "expect": { "present": [{ "area": "DNSSEC", "includes": "DNSSEC not enabled" }], "absent": ["DNSSEC enabled"] }
+    },
     { "id": "input-empty", "invariant": "I19", "mode": "wrapper", "skip_reason": "Action-wrapper exit-code behavior; covered by amino-audit-action test/local.mjs (finalize + parseDomains)." },
     { "id": "reliability-servfail", "invariant": "I20", "mode": "wrapper", "skip_reason": "Resolver-level transient detection not implemented (v1.3); the engine-exception path is covered by finalize() tests." }
   ]
