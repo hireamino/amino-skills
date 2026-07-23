@@ -45,6 +45,13 @@ subdomain policy inheritance, and an eTLD+1-aware `orgBase`/`org_base` so `good.
 lenient transient"). **Still pending for I20:** resolver-level SERVFAIL/timeout-vs-NXDOMAIN
 detection, which needs DoH `Status` plumbed through the `q` resolver (→ v1.3, with I17/I18).
 
+**Batch 4 — fixed across all three surfaces:** **I15** (MTA-STS `enforce` now requires
+`version: STSv1` + valid mode + integer `max_age` in range + ≥1 `mx:` — a malformed policy is
+flagged, not read as a valid enforce) and **I16** (policy fetch now requires HTTP 200 +
+`Content-Type: text/plain`; a TXT that advertises an unfetchable/wrong-type policy is flagged
+"not retrievable", not silently trusted). New testable helper `mtaStsPolicyProblems` /
+`mta_sts_policy_problems`.
+
 The matrix below is the **baseline at review time**; the ✓/✗ cells for the rows above are
 superseded. Corrections to the baseline found while fixing: **I11 was a violation in the
 skill too** (`spf_qualifier` was case-sensitive); **I6/I9 were correct only in the skill's

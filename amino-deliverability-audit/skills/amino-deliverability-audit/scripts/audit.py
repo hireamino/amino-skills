@@ -531,6 +531,28 @@ def _mx_pattern_matches(pattern, host):
     return pattern == host
 
 
+def mta_sts_policy_problems(policy):
+    """RFC 8461 §3.2 validation. Returns (problems, mode, max_age, pol_mx). A well-formed
+    policy has version: STSv1, a valid mode, an integer max_age in range, and (unless
+    mode: none) at least one mx:."""
+    version = (re.search(r"^[ \t]*version:[ \t]*(\S+)", policy, re.I | re.M) or [None, ""])[1]
+    mm = re.search(r"^[ \t]*mode:[ \t]*(\w+)", policy, re.I | re.M)
+    mode = mm.group(1).lower() if mm else ""
+    ma = re.search(r"^[ \t]*max_age:[ \t]*(\d+)", policy, re.I | re.M)
+    max_age = int(ma.group(1)) if ma else None
+    pol_mx = re.findall(r"^[ \t]*mx:[ \t]*(\S+)", policy, re.I | re.M)
+    problems = []
+    if not version or version.lower() != "stsv1":
+        problems.append("missing/invalid version (must be STSv1)")
+    if mode not in ("enforce", "testing", "none"):
+        problems.append("missing/invalid mode")
+    if max_age is None or max_age <= 0 or max_age > 31557600:
+        problems.append("missing/invalid max_age")
+    if mode != "none" and not pol_mx:
+        problems.append("no mx entries")
+    return problems, mode, max_age, pol_mx
+
+
 def check_mta_sts(domain, F):
     txt = confirm_txt(f"_mta-sts.{domain}", "v=stsv1")
     policy = None
@@ -545,13 +567,19 @@ def check_mta_sts(domain, F):
         req = f"GET /.well-known/mta-sts.txt HTTP/1.0\r\nHost: {mhost}\r\n\r\n"
         s.sendall(req.encode())
         data = b""
-        while len(data) < 8192:
+        while len(data) < 16384:  # HTTP headers + capped body
             chunk = s.recv(1024)
             if not chunk:
                 break
             data += chunk
         s.close()
-        policy = data.decode(errors="ignore")
+        raw = data.decode(errors="ignore")
+        head, _, body = raw.partition("\r\n\r\n")
+        status_line = head.split("\r\n", 1)[0]
+        # RFC 8461 §3.3: the policy MUST be HTTP 200 with Content-Type text/plain.
+        status_ok = re.match(r"HTTP/\d\.\d\s+200\b", status_line) is not None
+        ctype_ok = re.search(r"^content-type:\s*text/plain", head, re.I | re.M) is not None
+        policy = body[:8192] if (status_ok and ctype_ok) else None
     except Exception:
         policy = None
     if not txt:
@@ -559,30 +587,32 @@ def check_mta_sts(domain, F):
                       detail="MTA-STS lets you require TLS for inbound SMTP and is part of a modern transport posture (and a growing compliance ask under NIS2/gov mandates). Absent it, downgrade attacks on mail-in-transit are possible.",
                       fix="Publish _mta-sts TXT (v=STSv1; id=...) and host https://mta-sts.<domain>/.well-known/mta-sts.txt with mode: enforce."))
         return
-    mode = re.search(r"mode:\s*(\w+)", policy or "")
-    mode = mode.group(1).lower() if mode else "unknown"
+    if not policy:
+        F.append(dict(area="MTA-STS", severity="medium", title="MTA-STS TXT present but policy file not retrievable",
+                      detail=f"The _mta-sts TXT record advertises a policy, but https://mta-sts.{domain}/.well-known/mta-sts.txt did not return a valid policy (RFC 8461 requires HTTP 200 with Content-Type text/plain). Senders can't fetch it, so MTA-STS isn't actually enforced.",
+                      fix="Serve the policy at that URL over HTTPS with status 200 and Content-Type: text/plain."))
+        return
+    problems, mode, _max_age, pol_mx = mta_sts_policy_problems(policy)
+    if problems:
+        F.append(dict(area="MTA-STS", severity=("high" if mode == "enforce" else "medium"), title="MTA-STS policy is malformed",
+                      detail="The hosted policy is invalid (" + "; ".join(problems) + "). RFC 8461 requires version: STSv1, a valid mode, an integer max_age, and at least one mx: (unless mode: none)."
+                             + (" Under mode: enforce a malformed policy can break inbound mail delivery." if mode == "enforce" else ""),
+                      fix="Fix the hosted mta-sts.txt to include version: STSv1, mode:, max_age:, and mx: lines per RFC 8461."))
+        return
     sev = "pass" if mode == "enforce" else "medium"
     F.append(dict(area="MTA-STS", severity=sev, title=f"MTA-STS present (mode: {mode})",
                   detail="Policy published." + ("" if mode == "enforce" else " mode is not 'enforce' — testing/none gives no real protection."),
                   fix=None if mode == "enforce" else "Move policy to mode: enforce once tested."))
-    if policy:
-        # max_age sanity (spec allows up to 31557600s; a missing/tiny value weakens the policy).
-        ma = re.search(r"max_age:\s*(\d+)", policy)
-        if not ma:
-            F.append(dict(area="MTA-STS", severity="low", title="MTA-STS policy missing max_age",
-                          detail="The hosted policy has no max_age, so caching behavior is undefined and the policy may not 'stick' at senders.",
-                          fix="Add a max_age (e.g. max_age: 604800) to the hosted mta-sts.txt."))
-        # Every real MX must be covered by an mx: line, or mail to it fails under enforce.
-        pol_mx = re.findall(r"mx:\s*(\S+)", policy)
-        real_mx = _mx_hosts(domain)
-        if pol_mx and real_mx:
-            unmatched = [h for h in real_mx if not any(_mx_pattern_matches(p, h) for p in pol_mx)]
-            if unmatched:
-                F.append(dict(area="MTA-STS", severity=("high" if mode == "enforce" else "medium"),
-                              title="MTA-STS policy does not cover all MX hosts",
-                              detail=f"These live MX hosts match no mx: line in the policy: {', '.join(unmatched)}."
-                                     + (" Under mode: enforce, senders will REFUSE to deliver to them — active mail loss." if mode == "enforce" else " Once you move to enforce, mail to them will fail."),
-                              fix="Add the missing MX hostnames (or a *.<domain> wildcard) to the mx: lines in the hosted policy."))
+    # Every real MX must be covered by an mx: line, or mail to it fails under enforce.
+    real_mx = _mx_hosts(domain)
+    if pol_mx and real_mx:
+        unmatched = [h for h in real_mx if not any(_mx_pattern_matches(p, h) for p in pol_mx)]
+        if unmatched:
+            F.append(dict(area="MTA-STS", severity=("high" if mode == "enforce" else "medium"),
+                          title="MTA-STS policy does not cover all MX hosts",
+                          detail=f"These live MX hosts match no mx: line in the policy: {', '.join(unmatched)}."
+                                 + (" Under mode: enforce, senders will REFUSE to deliver to them — active mail loss." if mode == "enforce" else " Once you move to enforce, mail to them will fail."),
+                          fix="Add the missing MX hostnames (or a *.<domain> wildcard) to the mx: lines in the hosted policy."))
 
 
 def check_simple(domain, F):
