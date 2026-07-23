@@ -1,0 +1,25 @@
+name: conformance
+
+# Guards the Python skill surface against the correctness spec (conformance/SPEC.md).
+# Deterministic, no network. See the epic: three-way correctness parity (Skill/Web/Action).
+
+on:
+  push:
+    paths:
+      - 'amino-deliverability-audit/skills/amino-deliverability-audit/scripts/**'
+      - 'conformance/**'
+  pull_request:
+    paths:
+      - 'amino-deliverability-audit/skills/amino-deliverability-audit/scripts/**'
+      - 'conformance/**'
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b  # v5
+        with:
+          python-version: '3.12'
+      - name: Run conformance checks
+        run: python3 conformance/check.py

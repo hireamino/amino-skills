@@ -92,7 +92,7 @@ def gap_of(r):
 
 def disp(r, k):
     if k == "DKIM":
-        return {"good": "Y", "weak": "N", "unknown": "—"}[r["DKIM"]]
+        return {"good": "Y", "weak": "N", "invalid": "N", "unknown": "—"}[r["DKIM"]]
     return "Y" if r[k] else "N"
 
 

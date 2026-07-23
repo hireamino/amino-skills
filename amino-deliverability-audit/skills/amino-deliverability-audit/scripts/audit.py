@@ -17,6 +17,7 @@ import sys
 import time
 import socket
 import ssl
+import base64
 import ipaddress
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
@@ -140,6 +141,7 @@ def dkim_lookup(domain):
     cands = dkim_candidates(domain)
     weak = None
     weak_testing = False
+    invalid = None
     BATCH = 6
     for i in range(0, len(cands), BATCH):
         batch = cands[i:i + BATCH]
@@ -148,14 +150,24 @@ def dkim_lookup(domain):
         for sel, rec in zip(batch, recs):
             if not rec:
                 continue
-            ktype, pub, bits, testing = parse_dkim(rec)
+            ktype, pub, bits, testing, invalid_reason = parse_dkim(rec)
+            if invalid_reason is not None:
+                # Revoked/malformed key here; a healthy sibling selector still wins, so
+                # record it and keep scanning; surface it only if nothing better turns up.
+                invalid = invalid or (f"DKIM {sel} revoked (empty p=)" if invalid_reason == "revoked"
+                                      else f"DKIM {sel} malformed ({invalid_reason})")
+                continue
             if ktype == "rsa" and bits == 1024:
                 weak = weak or f"DKIM {sel}=RSA-1024"
                 weak_testing = weak_testing or testing
                 continue  # a stronger key later in priority order still wins
             label = ktype.upper() + (f"-{bits}" if bits else "")
             return ("good", f"DKIM {sel} ({label})", testing)
-    return ("weak", weak, weak_testing) if weak else ("unknown", "no DKIM key at common/provider selectors", False)
+    if weak:
+        return ("weak", weak, weak_testing)
+    if invalid:
+        return ("invalid", invalid, False)
+    return ("unknown", "no DKIM key at common/provider selectors", False)
 
 
 def resolves(domain):
@@ -249,7 +261,7 @@ def count_spf_lookups(domain, seen=None, depth=0):
 def spf_qualifier(spf):
     """The qualifier on the `all` mechanism. Bare `all` defaults to `+` (RFC 7208).
     Returns one of -/~/?/+ , or None if there's no `all` mechanism at all."""
-    m = re.search(r"([-~?+]?)all\b", spf)
+    m = re.search(r"([-~?+]?)all\b", spf, re.I)  # qualifiers are case-insensitive: -ALL == -all
     return None if not m else (m.group(1) or "+")
 
 
@@ -320,18 +332,31 @@ def check_spf(domain, F):
 
 
 def parse_dkim(rec):
-    """Returns (ktype, pub, bits, testing). testing = t=y flag (key not enforced)."""
-    kv = dict(re.findall(r"(\w+)=([^;]+)", rec))
+    """Returns (ktype, pub, bits, testing, invalid).
+    invalid is None when the key is usable, else a reason string:
+      'revoked'           -> empty p= (RFC 6376 §3.6.1): a revoked selector, never healthy
+      'malformed-ed25519' -> Ed25519 p= that doesn't decode to exactly 32 bytes
+    testing = t=y flag (key not enforced)."""
+    kv = {k.lower(): v for k, v in re.findall(r"(\w+)=([^;]+)", rec)}
     ktype = kv.get("k", "rsa").strip().lower()
     pub = kv.get("p", "").strip()
     flags = kv.get("t", "").strip().lower()
     testing = "y" in [x.strip() for x in flags.split(":")] if flags else False
-    bits = None
-    if ktype == "rsa" and pub:
+    if pub == "":
+        return ktype, pub, None, testing, "revoked"
+    bits, invalid = None, None
+    if ktype == "rsa":
         # crude DER length -> approx modulus size estimate from base64 length
         approx_bytes = len(pub) * 3 // 4
         bits = 1024 if approx_bytes < 200 else (2048 if approx_bytes < 400 else 4096)
-    return ktype, pub, bits, testing
+    elif ktype == "ed25519":
+        # Ed25519 public keys are exactly 32 bytes; anything else is malformed.
+        try:
+            if len(base64.b64decode(pub + "===", validate=False)) != 32:
+                invalid = "malformed-ed25519"
+        except Exception:
+            invalid = "malformed-ed25519"
+    return ktype, pub, bits, testing, invalid
 
 
 def check_dkim(domain, F):
@@ -343,6 +368,10 @@ def check_dkim(domain, F):
         F.append(dict(area="DKIM", severity="high", title="DKIM key is RSA-1024 (legacy)",
                       detail="RSA-1024 is below current strength guidance and is being phased out; some receivers discount it, and it's the first thing a PQC/crypto-hygiene review flags.",
                       fix="Rotate the selector to RSA-2048 (or Ed25519): publish the new key, let it propagate, then switch signing over.", record=note))
+    elif state == "invalid":
+        F.append(dict(area="DKIM", severity="high", title="DKIM key is revoked or malformed",
+                      detail=f"A DKIM record is published but the key is unusable ({note}). A revoked (empty p=) or malformed key can't verify signatures — receivers treat the mail as unsigned, so DKIM gives no protection.",
+                      fix="Publish a valid key at this selector (RSA >=2048 or Ed25519), or remove the dead record and sign from a live selector.", record=note))
     else:  # unknown — a blind spot, NOT a confirmed gap
         F.append(dict(area="DKIM", severity="low", title="DKIM not found at common/provider selectors",
                       detail="No DKIM key at the selectors probed. DKIM has no discovery mechanism, so this is a blind spot — the domain may well sign with a custom selector. Verify against actual message headers before concluding DKIM is absent; don't treat this as a confirmed gap.",
@@ -365,12 +394,16 @@ def check_dmarc(domain, F):
         F.append(dict(area="DMARC", severity="high", title="Multiple DMARC records (invalid)",
                       detail=f"{len(dmarc_records)} DMARC records exist at _dmarc. Exactly one is allowed — receivers ignore the policy entirely when there are several, so you effectively have no DMARC.",
                       fix="Keep one DMARC record and remove the rest."))
-    kv = dict(re.findall(r"(\w+)=\s*([^;]+)", rec))
-    p = kv.get("p", "none").strip().lower()
+    kv = {k.lower(): v for k, v in re.findall(r"(\w+)=\s*([^;]+)", rec)}
+    p = kv.get("p", "").strip().lower()
     sp = kv.get("sp", "").strip().lower()
     np_ = kv.get("np", "").strip().lower()
     rua = "rua" in kv
-    if p == "none":
+    if p not in ("none", "quarantine", "reject"):
+        F.append(dict(area="DMARC", severity="high", title=f"DMARC policy value is invalid (p={p or '<missing>'})",
+                      detail="The p= tag must be exactly none, quarantine, or reject (RFC 9989). An unrecognized or missing value means receivers apply no enforcement — you have a DMARC record but no effective policy.",
+                      fix="Set p= to none (monitor), quarantine, or reject."))
+    elif p == "none":
         F.append(dict(area="DMARC", severity="high", title="DMARC policy is p=none (monitor only)",
                       detail="p=none means spoofed mail is still delivered. It's a valid starting point but offers no protection at rest; mailbox providers increasingly treat enforced policies as a trust signal.",
                       fix="After reviewing aggregate reports, ramp to p=quarantine then p=reject (optionally with pct= staging)."))
@@ -430,7 +463,13 @@ def _mx_pattern_matches(pattern, host):
     pattern = pattern.strip().rstrip(".").lower()
     host = host.rstrip(".").lower()
     if pattern.startswith("*."):
-        return host.endswith(pattern[1:]) and host.count(".") >= pattern.count(".")
+        # RFC 8461 §4.1: a wildcard matches exactly ONE leftmost label — *.example.com
+        # matches mx.example.com but NOT a.b.example.com or example.com itself.
+        suffix = pattern[1:]  # ".example.com"
+        if not host.endswith(suffix):
+            return False
+        left = host[:-len(suffix)]
+        return bool(left) and "." not in left
     return pattern == host
 
 

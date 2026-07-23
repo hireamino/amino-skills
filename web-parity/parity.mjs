@@ -44,7 +44,7 @@ const DOMAINS = process.argv.slice(2).length ? process.argv.slice(2) : [
 ];
 
 const COLS = ["SPF", "DKIM", "DMARC", "DMARC_enforced", "DMARC_rua", "MTA_STS", "TLS_RPT", "DANE", "BIMI"];
-const disp = (r, k) => k === "DKIM" ? ({ good: "Y", weak: "N", unknown: "—" }[r.DKIM]) : (r[k] ? "Y" : "N");
+const disp = (r, k) => k === "DKIM" ? ({ good: "Y", weak: "N", invalid: "N", unknown: "—" }[r.DKIM]) : (r[k] ? "Y" : "N");
 
 const tsv = execFileSync("python3", ["batch_score.py", ...DOMAINS.map((d) => `${d}=${d}`)],
   { cwd: SCRIPTS, encoding: "utf8" });
