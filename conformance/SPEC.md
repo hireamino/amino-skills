@@ -28,19 +28,24 @@ The runner diffs each surface's output against the fixture's `expect`. A surface
 declare a fixture **N/A** only for a documented reason (e.g. the edge can't open `:25`, so
 live-STARTTLS fixtures are web/Action-N/A). Any other diff fails CI.
 
-## v1.2 batch 1 — status
+## v1.2 status
 
-**Fixed across all three surfaces** (verified via the conformance checks in each repo):
-**I1** (DKIM revoked empty `p=`), **I4** (Ed25519 length), **I6/I9** (DMARC policy must be
-`{none,quarantine,reject}`), **I7** (case-insensitive tags), **I11** (SPF `-ALL`), **I14**
-(MTA-STS single-label wildcard). The matrix below is the **baseline at review time**; the
-✓/✗ cells for those rows are superseded by this batch. Correction to the baseline: **I11 was
-a violation in the skill too** (`spf_qualifier` was case-sensitive), and **I6/I9 were correct
-only in the skill's *bucket scorer* (`batch_score.py`), not its *findings* (`check_dmarc`)** —
-both now fixed.
+**Batch 1 — fixed across all three surfaces:** **I1** (DKIM revoked empty `p=`), **I4**
+(Ed25519 length), **I6/I9** (DMARC policy must be `{none,quarantine,reject}`), **I7**
+(case-insensitive tags), **I11** (SPF `-ALL`), **I14** (MTA-STS single-label wildcard).
 
-**Still open (v1.2 remainder / v1.3):** I2, I10 (RFC 9989 tree walk), I12, I13, I15, I16,
-I17, I18, I19, I20.
+**Batch 2 — fixed across all three surfaces:** **I10** (RFC 9989 DMARC tree walk +
+subdomain policy inheritance, and an eTLD+1-aware `orgBase`/`org_base` so `good.co.uk` and
+`evil.co.uk` are different orgs for report-authorization).
+
+The matrix below is the **baseline at review time**; the ✓/✗ cells for the rows above are
+superseded. Corrections to the baseline found while fixing: **I11 was a violation in the
+skill too** (`spf_qualifier` was case-sensitive); **I6/I9 were correct only in the skill's
+*bucket scorer*, not its *findings***; and **I10 was absent in all three** (no surface did
+the tree walk — the skill only parsed `sp`/`np` on the record it already had).
+
+**Still open (v1.2 remainder / v1.3):** I2, I12, I13, I15, I16, I17, I18, I19, I20, plus
+WS1/WS5 (unified `fixtures.json`-driven runner across all three in CI).
 
 ## The invariants (the contract)
 

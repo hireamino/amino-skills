@@ -40,6 +40,16 @@ chk("I14 *.ex.com !~ ex.com", audit._mx_pattern_matches("*.example.com", "exampl
 # I11 — SPF qualifier is case-insensitive
 chk("I11 spf -ALL -> '-'", audit.spf_qualifier("v=spf1 -ALL"), "-")
 chk("I11 spf ~All -> '~'", audit.spf_qualifier("v=spf1 ~All"), "~")
+# I10 — org base (eTLD+1) distinguishes multi-label public suffixes
+chk("I10 good.co.uk org", audit.org_base("good.co.uk"), "good.co.uk")
+chk("I10 evil.co.uk org", audit.org_base("evil.co.uk"), "evil.co.uk")
+chk("I10 aspmx.l.google.com org", audit.org_base("aspmx.l.google.com"), "google.com")
+# I10 — tree walk: subdomain inherits nearest ancestor policy (mock resolver, no network)
+_MOCK = {"_dmarc.example.co.uk": "v=DMARC1; p=reject"}
+audit.confirm_txt = lambda name, prefix: _MOCK.get(name.rstrip(".").lower())
+_rec, _source, _inherited = audit.discover_dmarc("send.example.co.uk")
+chk("I10 treewalk finds ancestor", (_source, _inherited), ("example.co.uk", True))
+chk("I10 treewalk returns record", _rec, "v=DMARC1; p=reject")
 
 print("\nALL PASS" if ok else "\nSOME FAILED")
 sys.exit(0 if ok else 1)

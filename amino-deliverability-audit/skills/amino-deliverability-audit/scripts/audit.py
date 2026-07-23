@@ -217,11 +217,32 @@ def confirm_txt(name, prefix):
     return None
 
 
+# A pragmatic subset of the Public Suffix List: registry suffixes where the registrable
+# domain is the last THREE labels, not two. Not exhaustive (the full PSL is a ~200 KB data
+# dependency); it fixes the cases that matter for same-org checks — e.g. good.co.uk and
+# evil.co.uk must read as DIFFERENT orgs, not both "co.uk".
+PUBLIC_SUFFIX_2 = {
+    "co.uk", "org.uk", "gov.uk", "ac.uk", "me.uk", "net.uk", "ltd.uk", "plc.uk", "sch.uk",
+    "com.au", "net.au", "org.au", "edu.au", "gov.au", "id.au",
+    "co.nz", "net.nz", "org.nz", "govt.nz", "ac.nz",
+    "co.jp", "or.jp", "ne.jp", "ac.jp", "go.jp", "ad.jp",
+    "co.za", "org.za", "gov.za", "ac.za",
+    "co.in", "net.in", "org.in", "gen.in", "firm.in", "ind.in",
+    "com.br", "net.br", "org.br", "gov.br",
+    "com.cn", "net.cn", "org.cn", "gov.cn", "ac.cn",
+    "co.kr", "or.kr", "com.mx", "com.sg", "com.hk", "com.tw",
+    "co.il", "com.tr", "co.id", "com.my", "co.th", "or.th",
+}
+
+
 def org_base(host):
-    """Crude registrable base = last two labels (aspmx.l.google.com -> google.com).
-    Good enough to tell 'same org' from 'external' for report-destination checks."""
-    labels = host.rstrip(".").lower().split(".")
-    return ".".join(labels[-2:]) if len(labels) >= 2 else host.rstrip(".").lower()
+    """Registrable base (eTLD+1): last two labels, or last three when the last two are a
+    known multi-label public suffix — so good.co.uk and evil.co.uk read as different orgs."""
+    labels = [x for x in host.rstrip(".").lower().split(".") if x]
+    if len(labels) <= 2:
+        return ".".join(labels)
+    last_two = ".".join(labels[-2:])
+    return ".".join(labels[-3:] if last_two in PUBLIC_SUFFIX_2 else labels[-2:])
 
 
 def count_spf_lookups(domain, seen=None, depth=0):
@@ -382,22 +403,59 @@ def check_dkim(domain, F):
                       fix="Remove the t=y flag from the DKIM TXT record once you've confirmed signing works."))
 
 
+def discover_dmarc(domain):
+    """RFC 9989 (DMARCbis) tree walk: the applicable DMARC record is the domain's own
+    _dmarc if present, otherwise the nearest ancestor's, walking up to the organizational
+    domain (bounded to 5 lookups). Returns (rec, source, inherited)."""
+    domain = domain.rstrip(".").lower()
+    own = confirm_txt(f"_dmarc.{domain}", "v=dmarc1")
+    if own:
+        return own, domain, False
+    base = org_base(domain)
+    labels = domain.split(".")
+    for i in range(1, min(len(labels) - 1, 6)):
+        parent = ".".join(labels[i:])
+        rec = confirm_txt(f"_dmarc.{parent}", "v=dmarc1")
+        if rec:
+            return rec, parent, True
+        if parent == base:
+            break
+    return None, None, False
+
+
 def check_dmarc(domain, F):
-    rec = confirm_txt(f"_dmarc.{domain}", "v=dmarc1")
+    rec, source, inherited = discover_dmarc(domain)
     if not rec:
         F.append(dict(area="DMARC", severity="critical", title="No DMARC record",
                       detail="No policy at _dmarc. Receivers have no instruction on how to handle unauthenticated mail in your name — and as of 2024-25, Gmail/Yahoo/Microsoft require DMARC for bulk senders. This is both a spoofing exposure and a hard deliverability blocker.",
                       fix='Publish TXT at _dmarc: start with "v=DMARC1; p=none; rua=mailto:dmarc@<domain>" to collect reports, then ramp to p=quarantine and p=reject.'))
         return
-    dmarc_records = [r for r in dig(f"_dmarc.{domain}", "TXT") if r.lower().startswith("v=dmarc1")]
-    if len(dmarc_records) > 1:
-        F.append(dict(area="DMARC", severity="high", title="Multiple DMARC records (invalid)",
-                      detail=f"{len(dmarc_records)} DMARC records exist at _dmarc. Exactly one is allowed — receivers ignore the policy entirely when there are several, so you effectively have no DMARC.",
-                      fix="Keep one DMARC record and remove the rest."))
     kv = {k.lower(): v for k, v in re.findall(r"(\w+)=\s*([^;]+)", rec)}
     p = kv.get("p", "").strip().lower()
     sp = kv.get("sp", "").strip().lower()
     np_ = kv.get("np", "").strip().lower()
+
+    if inherited:
+        # No _dmarc at this subdomain: it inherits the org domain's policy — the sp
+        # (subdomain policy) tag if set, otherwise p (RFC 9989 tree walk).
+        eff = sp or p
+        tag = "sp" if sp else "p"
+        if eff not in ("quarantine", "reject"):
+            F.append(dict(area="DMARC", severity="high",
+                          title=f"DMARC subdomain not enforced (inherited {tag}={eff or '<missing>'} from {source})",
+                          detail=f"This subdomain has no _dmarc record; it inherits {source}'s policy, which resolves to {eff or '<missing>'} — spoofed mail from this subdomain isn't stopped.",
+                          fix=f"Publish _dmarc.{domain} with p=reject, or set sp=reject on {source}."))
+        else:
+            F.append(dict(area="DMARC", severity="pass",
+                          title=f"DMARC enforced (inherited {tag}={eff} from {source})",
+                          detail=f"This subdomain has no record of its own and is covered by {source}'s enforced policy.", fix=None, record=rec))
+        return
+
+    dmarc_records = [r for r in dig(f"_dmarc.{source}", "TXT") if r.lower().startswith("v=dmarc1")]
+    if len(dmarc_records) > 1:
+        F.append(dict(area="DMARC", severity="high", title="Multiple DMARC records (invalid)",
+                      detail=f"{len(dmarc_records)} DMARC records exist at _dmarc. Exactly one is allowed — receivers ignore the policy entirely when there are several, so you effectively have no DMARC.",
+                      fix="Keep one DMARC record and remove the rest."))
     rua = "rua" in kv
     if p not in ("none", "quarantine", "reject"):
         F.append(dict(area="DMARC", severity="high", title=f"DMARC policy value is invalid (p={p or '<missing>'})",
