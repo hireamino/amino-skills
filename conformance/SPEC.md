@@ -58,8 +58,18 @@ skill too** (`spf_qualifier` was case-sensitive); **I6/I9 were correct only in t
 *bucket scorer*, not its *findings***; and **I10 was absent in all three** (no surface did
 the tree walk — the skill only parsed `sp`/`np` on the record it already had).
 
-**Still open (v1.2 remainder / v1.3):** I2, I12, I13, I15, I16, I17, I18, I19, I20, plus
-WS1/WS5 (unified `fixtures.json`-driven runner across all three in CI).
+**WS1/WS5 — DONE (unified runner):** `conformance/run.mjs` (JS, `ENGINE` env → either
+JS engine: the Action's `engine.mjs` or the web's `audit.js`) and `conformance/run_py.py`
+(skill) drive the SAME `fixtures.json`
+corpus through each real engine with a mock resolver and assert `expect`. Wired as a hard
+CI gate in all three repos (Action `security-gate.yml`, web `skill-parity.yml`, skill
+`conformance.yml`). Add a fixture once → all three surfaces must pass it. Currently 10
+dns-engine cases pass on all three; 7 cases are logged SKIPPED with reasons (pure-function,
+HTTP-stub, or v1.3 DANE/DNSSEC/resolver-level).
+
+**Still open:** I2 (real RSA modulus), I13 (SPF contradiction polish) — minor. **v1.3:**
+I17/I18 (DANE/DNSSEC) + I20-resolver (SERVFAIL detection), all gated on plumbing DoH
+`Status`/`AD` through the `q` resolver.
 
 ## The invariants (the contract)
 

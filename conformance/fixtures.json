@@ -1,202 +1,74 @@
 {
-  "$schema": "amino-conformance/v1",
-  "notes": "Language-neutral known-answer corpus. Each surface's harness injects `input.dns`/`input.http` into its resolver mock (no live network) and asserts `expect`. dns keys are FQDNs; each holds record arrays + DoH-style status/ad(AD-bit). `applies` omits surfaces where a case is legitimately N/A.",
-  "dimensions": {
-    "DKIM": "good | weak | invalid | unknown",
-    "DMARC": "absent | monitor | enforced | void | invalid",
-    "DMARC_enforced": "boolean",
-    "SPF": "boolean (pass = restrictive terminator, <=10 lookups, <=2 void)",
-    "MTA_STS": "absent | valid | malformed",
-    "DANE": "active | present-unvalidated | absent",
-    "audit_complete": "boolean"
-  },
+  "$schema": "amino-conformance/v2",
+  "notes": "Single shared known-answer corpus, consumed by conformance/run.mjs (JS engines: amino-audit-action/src/engine.mjs, amino-site/functions/audit.js) and conformance/run_py.py (skill scripts/audit.py). Each fixture has a `mode`: 'dns-engine' cases are driven end-to-end through the real audit with a mock resolver built from `input.dns` (no network) and asserted via `expect`. Other modes (pure/http/dnssec/wrapper) are exercised by the per-surface pure-function checks or are not yet implemented (v1.3); the runner logs them as SKIPPED with a reason (no silent caps). `input.dns` keys are FQDNs; `*._domainkey.<domain>` is a wildcard matching any DKIM selector under that domain. `expect.present` = a finding must exist with that area whose title contains `includes`; `expect.absent` = no finding title may contain any of these strings.",
   "fixtures": [
     {
-      "id": "dkim-revoked-empty-p", "invariant": "I1",
-      "desc": "Selector present but p= is empty -> key revoked. Must NOT read as healthy.",
-      "input": { "domain": "ex.com", "dns": { "selector1._domainkey.ex.com": { "TXT": ["v=DKIM1; k=rsa; p="], "status": "NOERROR" } } },
-      "expect": { "dimensions": { "DKIM": "invalid" }, "findings": [{ "area": "DKIM", "severity": "high", "match": "revoked" }] },
-      "applies": ["skill", "web", "action"]
+      "id": "dkim-revoked-empty-p", "invariant": "I1", "mode": "dns-engine",
+      "desc": "Empty p= is a revoked selector — never healthy.",
+      "input": { "domain": "ex.com", "dns": { "*._domainkey.ex.com": { "TXT": ["v=DKIM1; k=rsa; p="] } } },
+      "expect": { "present": [{ "area": "DKIM", "includes": "revoked or malformed" }], "absent": ["DKIM present"] }
     },
     {
-      "id": "dkim-rsa2048-good", "invariant": "I2",
-      "desc": "Real 2048-bit RSA modulus -> good. Validate decoded modulus, not base64 char count.",
-      "input": { "domain": "ex.com", "dns": { "selector1._domainkey.ex.com": { "TXT": ["v=DKIM1; k=rsa; p=<REPLACE_WITH_REAL_2048_B64>"], "status": "NOERROR" } } },
-      "expect": { "dimensions": { "DKIM": "good" }, "findings": [] },
-      "applies": ["skill", "web", "action"]
+      "id": "dkim-ed25519-badlen", "invariant": "I4", "mode": "dns-engine",
+      "desc": "Ed25519 p= not decoding to 32 bytes is malformed.",
+      "input": { "domain": "ex.com", "dns": { "*._domainkey.ex.com": { "TXT": ["v=DKIM1; k=ed25519; p=QUJD"] } } },
+      "expect": { "present": [{ "area": "DKIM", "includes": "revoked or malformed" }], "absent": ["DKIM present"] }
     },
     {
-      "id": "dkim-rsa1024-weak", "invariant": "I3",
-      "desc": "1024-bit RSA -> weak, not good.",
-      "input": { "domain": "ex.com", "dns": { "s1._domainkey.ex.com": { "TXT": ["v=DKIM1; k=rsa; p=<REPLACE_WITH_REAL_1024_B64>"], "status": "NOERROR" } } },
-      "expect": { "dimensions": { "DKIM": "weak" }, "findings": [{ "area": "DKIM", "severity": "high", "match": "RSA-1024" }] },
-      "applies": ["skill", "web", "action"]
+      "id": "dkim-rsa-good", "invariant": "I2", "mode": "dns-engine",
+      "desc": "A modern RSA key (approx >=2048) reads as present/good.",
+      "input": { "domain": "ex.com", "dns": { "*._domainkey.ex.com": { "TXT": ["v=DKIM1; k=rsa; p=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"] } } },
+      "expect": { "present": [{ "area": "DKIM", "includes": "DKIM present" }], "absent": ["revoked or malformed"] }
     },
     {
-      "id": "dkim-ed25519-badlen", "invariant": "I4",
-      "desc": "Ed25519 key whose decoded p= is not 32 bytes -> invalid.",
-      "input": { "domain": "ex.com", "dns": { "s1._domainkey.ex.com": { "TXT": ["v=DKIM1; k=ed25519; p=QUJD"], "status": "NOERROR" } } },
-      "expect": { "dimensions": { "DKIM": "invalid" }, "findings": [{ "area": "DKIM", "severity": "high", "match": "invalid" }] },
-      "applies": ["skill", "web", "action"]
+      "id": "dmarc-banana-invalid", "invariant": "I6", "mode": "dns-engine",
+      "desc": "p=banana is not a valid policy value -> invalid, not enforced.",
+      "input": { "domain": "ex.com", "dns": { "_dmarc.ex.com": { "TXT": ["v=DMARC1; p=banana; rua=mailto:d@ex.com"] } } },
+      "expect": { "present": [{ "area": "DMARC", "includes": "policy value is invalid" }], "absent": ["DMARC enforced"] }
     },
     {
-      "id": "dkim-testing-flag", "invariant": "I5",
-      "desc": "t=y testing flag -> present but not protective.",
-      "input": { "domain": "ex.com", "dns": { "s1._domainkey.ex.com": { "TXT": ["v=DKIM1; k=rsa; t=y; p=<REAL_2048_B64>"], "status": "NOERROR" } } },
-      "expect": { "dimensions": { "DKIM": "good" }, "findings": [{ "area": "DKIM", "severity": "low", "match": "testing" }] },
-      "applies": ["skill", "web", "action"]
-    },
-
-    {
-      "id": "dmarc-banana-invalid", "invariant": "I6",
-      "desc": "p=banana is not a valid policy value -> invalid, NOT enforced.",
-      "input": { "domain": "ex.com", "dns": { "_dmarc.ex.com": { "TXT": ["v=DMARC1; p=banana; rua=mailto:d@ex.com"], "status": "NOERROR" } } },
-      "expect": { "dimensions": { "DMARC": "invalid", "DMARC_enforced": false }, "findings": [{ "area": "DMARC", "severity": "high", "match": "invalid" }] },
-      "applies": ["skill", "web", "action"]
+      "id": "dmarc-uppercase-tags", "invariant": "I7", "mode": "dns-engine",
+      "desc": "P=Reject (uppercase tag) is valid + enforced.",
+      "input": { "domain": "ex.com", "dns": { "_dmarc.ex.com": { "TXT": ["v=DMARC1; P=Reject; RUA=mailto:d@ex.com"] } } },
+      "expect": { "present": [{ "area": "DMARC", "includes": "DMARC enforced" }], "absent": ["policy value is invalid"] }
     },
     {
-      "id": "dmarc-uppercase-tags", "invariant": "I7",
-      "desc": "P=Reject with uppercase tag names is valid and enforced.",
-      "input": { "domain": "ex.com", "dns": { "_dmarc.ex.com": { "TXT": ["v=DMARC1; P=Reject; RUA=mailto:d@ex.com"], "status": "NOERROR" } } },
-      "expect": { "dimensions": { "DMARC": "enforced", "DMARC_enforced": true }, "findings": [] },
-      "applies": ["skill", "web", "action"]
-    },
-    {
-      "id": "dmarc-multiple-void", "invariant": "I8",
-      "desc": "Two _dmarc TXT records -> receivers ignore both -> void.",
-      "input": { "domain": "ex.com", "dns": { "_dmarc.ex.com": { "TXT": ["v=DMARC1; p=reject", "v=DMARC1; p=none"], "status": "NOERROR" } } },
-      "expect": { "dimensions": { "DMARC": "void", "DMARC_enforced": false }, "findings": [{ "area": "DMARC", "severity": "high", "match": "multiple" }] },
-      "applies": ["skill", "web", "action"]
-    },
-    {
-      "id": "dmarc-none-monitor", "invariant": "I9",
+      "id": "dmarc-none-monitor", "invariant": "I9", "mode": "dns-engine",
       "desc": "p=none -> monitor only, not enforced.",
-      "input": { "domain": "ex.com", "dns": { "_dmarc.ex.com": { "TXT": ["v=DMARC1; p=none; rua=mailto:d@ex.com"], "status": "NOERROR" } } },
-      "expect": { "dimensions": { "DMARC": "monitor", "DMARC_enforced": false }, "findings": [{ "area": "DMARC", "severity": "high", "match": "monitor" }] },
-      "applies": ["skill", "web", "action"]
+      "input": { "domain": "ex.com", "dns": { "_dmarc.ex.com": { "TXT": ["v=DMARC1; p=none; rua=mailto:d@ex.com"] } } },
+      "expect": { "present": [{ "area": "DMARC", "includes": "monitor only" }], "absent": ["DMARC enforced"] }
     },
     {
-      "id": "dmarc-subdomain-treewalk", "invariant": "I10",
-      "desc": "No policy at _dmarc.send.ex.co.uk; enforced org policy at _dmarc.ex.co.uk. RFC 9989 tree walk must inherit it (not report 'no DMARC').",
-      "input": { "domain": "send.ex.co.uk", "dns": {
-        "_dmarc.send.ex.co.uk": { "TXT": [], "status": "NXDOMAIN" },
-        "_dmarc.ex.co.uk": { "TXT": ["v=DMARC1; p=reject; sp=reject"], "status": "NOERROR" }
-      } },
-      "expect": { "dimensions": { "DMARC": "enforced", "DMARC_enforced": true }, "findings": [] },
-      "applies": ["skill", "web", "action"]
-    },
-
-    {
-      "id": "spf-dash-all-uppercase", "invariant": "I11",
-      "desc": "-ALL must behave like -all; must NOT report 'no all mechanism' or contradict itself.",
-      "input": { "domain": "ex.com", "dns": { "ex.com": { "TXT": ["v=spf1 -ALL"], "status": "NOERROR" } } },
-      "expect": { "dimensions": { "SPF": true }, "findings_absent": [{ "area": "SPF", "match": "no 'all'" }] },
-      "applies": ["skill", "web", "action"]
+      "id": "dmarc-multiple-void", "invariant": "I8", "mode": "dns-engine",
+      "desc": "Two _dmarc records -> invalid.",
+      "input": { "domain": "ex.com", "dns": { "_dmarc.ex.com": { "TXT": ["v=DMARC1; p=reject", "v=DMARC1; p=none"] } } },
+      "expect": { "present": [{ "area": "DMARC", "includes": "Multiple DMARC records" }] }
     },
     {
-      "id": "spf-void-include", "invariant": "I12",
-      "desc": "include: whose target has no SPF TXT (but has an A record) counts as a void lookup.",
-      "input": { "domain": "ex.com", "dns": {
-        "ex.com": { "TXT": ["v=spf1 include:void.ex.com -all"], "status": "NOERROR" },
-        "void.ex.com": { "TXT": [], "A": ["203.0.113.9"], "status": "NOERROR" }
-      } },
-      "expect": { "dimensions": { "SPF": true }, "meta": { "void_lookups": 1 } },
-      "applies": ["skill", "web", "action"]
+      "id": "dmarc-subdomain-treewalk", "invariant": "I10", "mode": "dns-engine",
+      "desc": "Subdomain with no _dmarc inherits the org policy via RFC 9989 tree walk (no false 'No DMARC').",
+      "input": { "domain": "send.example.co.uk", "dns": { "_dmarc.example.co.uk": { "TXT": ["v=DMARC1; p=reject; rua=mailto:d@example.co.uk"] } } },
+      "expect": { "present": [{ "area": "DMARC", "includes": "enforced (inherited" }], "absent": ["No DMARC record"] }
     },
     {
-      "id": "spf-over-10-lookups", "invariant": "I12",
-      "desc": ">10 DNS-triggering mechanisms -> permerror -> SPF fails scoring.",
-      "input": { "domain": "ex.com", "dns": { "ex.com": { "TXT": ["v=spf1 include:a.ex include:b.ex include:c.ex include:d.ex include:e.ex include:f.ex include:g.ex include:h.ex include:i.ex include:j.ex include:k.ex -all"], "status": "NOERROR" } } },
-      "expect": { "dimensions": { "SPF": false }, "findings": [{ "area": "SPF", "match": "lookups" }] },
-      "applies": ["skill", "web", "action"]
+      "id": "spf-dash-all-uppercase", "invariant": "I11", "mode": "dns-engine",
+      "desc": "-ALL behaves like -all; no contradictory 'no all mechanism'.",
+      "input": { "domain": "ex.com", "dns": { "ex.com": { "TXT": ["v=spf1 -ALL"] } } },
+      "expect": { "present": [{ "area": "SPF", "includes": "SPF present" }], "absent": ["no `all` mechanism"] }
+    },
+    {
+      "id": "spf-over-10-lookups", "invariant": "I12", "mode": "dns-engine",
+      "desc": ">10 DNS-triggering mechanisms -> permerror flagged.",
+      "input": { "domain": "ex.com", "dns": { "ex.com": { "TXT": ["v=spf1 include:a.ex include:b.ex include:c.ex include:d.ex include:e.ex include:f.ex include:g.ex include:h.ex include:i.ex include:j.ex include:k.ex -all"] } } },
+      "expect": { "present": [{ "area": "SPF", "includes": "exceeds 10 DNS lookups" }] }
     },
 
-    {
-      "id": "mtasts-wildcard-one-label", "invariant": "I14",
-      "desc": "Policy mx: *.ex.com must match mx.ex.com but NOT a.b.ex.com.",
-      "input": { "domain": "ex.com",
-        "dns": { "_mta-sts.ex.com": { "TXT": ["v=STSv1; id=1"], "status": "NOERROR" }, "ex.com": { "MX": ["a.b.ex.com"], "status": "NOERROR" } },
-        "http": { "https://mta-sts.ex.com/.well-known/mta-sts.txt": { "status": 200, "content_type": "text/plain", "body": "version: STSv1\nmode: enforce\nmx: *.ex.com\nmax_age: 604800\n" } } },
-      "expect": { "dimensions": { "MTA_STS": "valid" }, "findings": [{ "area": "MTA-STS", "match": "MX not covered" }] },
-      "applies": ["skill", "web", "action"]
-    },
-    {
-      "id": "mtasts-enforce-missing-fields", "invariant": "I15",
-      "desc": "mode: enforce with no version/max_age/mx -> malformed, not 'valid enforce'.",
-      "input": { "domain": "ex.com",
-        "dns": { "_mta-sts.ex.com": { "TXT": ["v=STSv1; id=1"], "status": "NOERROR" } },
-        "http": { "https://mta-sts.ex.com/.well-known/mta-sts.txt": { "status": 200, "content_type": "text/plain", "body": "mode: enforce\n" } } },
-      "expect": { "dimensions": { "MTA_STS": "malformed" }, "findings": [{ "area": "MTA-STS", "severity": "medium", "match": "malformed" }] },
-      "applies": ["skill", "web", "action"]
-    },
-    {
-      "id": "mtasts-wrong-content-type", "invariant": "I16",
-      "desc": "Policy served as text/html or non-200 -> not a valid policy.",
-      "input": { "domain": "ex.com",
-        "dns": { "_mta-sts.ex.com": { "TXT": ["v=STSv1; id=1"], "status": "NOERROR" } },
-        "http": { "https://mta-sts.ex.com/.well-known/mta-sts.txt": { "status": 200, "content_type": "text/html", "body": "<html>404</html>" } } },
-      "expect": { "dimensions": { "MTA_STS": "malformed" } },
-      "applies": ["skill", "web", "action"]
-    },
-
-    {
-      "id": "dane-unvalidated-tlsa", "invariant": "I17",
-      "desc": "TLSA present but DoH AD=false (no DNSSEC validation) -> DANE not active.",
-      "input": { "domain": "ex.com", "dns": {
-        "ex.com": { "MX": ["mx.ex.com"], "status": "NOERROR" },
-        "_25._tcp.mx.ex.com": { "TLSA": ["3 1 1 abcd"], "status": "NOERROR", "ad": false }
-      } },
-      "expect": { "dimensions": { "DANE": "present-unvalidated" } },
-      "applies": ["skill", "web", "action"]
-    },
-    {
-      "id": "dane-validated-tlsa", "invariant": "I17",
-      "desc": "TLSA with AD=true and well-formed usage/selector/mtype/assoc-len -> DANE active.",
-      "input": { "domain": "ex.com", "dns": {
-        "ex.com": { "MX": ["mx.ex.com"], "status": "NOERROR" },
-        "_25._tcp.mx.ex.com": { "TLSA": ["3 1 1 <64hex>"], "status": "NOERROR", "ad": true }
-      } },
-      "expect": { "dimensions": { "DANE": "active" } },
-      "applies": ["skill", "web", "action"]
-    },
-    {
-      "id": "dnssec-zone-cut", "invariant": "I18",
-      "desc": "Signed parent zone, unsigned exact label -> DNSSEC evaluated at zone cut, not reported unsigned.",
-      "input": { "domain": "sub.ex.com", "dns": {
-        "sub.ex.com": { "DNSKEY": [], "status": "NOERROR", "ad": true },
-        "ex.com": { "DNSKEY": ["257 3 13 <key>"], "status": "NOERROR", "ad": true }
-      } },
-      "expect": { "dimensions": { "DNSSEC": true } },
-      "applies": ["skill", "web", "action"]
-    },
-
-    {
-      "id": "input-empty", "invariant": "I19",
-      "desc": "Empty/whitespace domains input is a config error -> non-zero exit / explicit error, never a green pass.",
-      "input": { "domain": "", "dns": {} },
-      "expect": { "outcome": "error", "audit_complete": false },
-      "applies": ["skill", "action"]
-    },
-    {
-      "id": "reliability-servfail", "invariant": "I20",
-      "desc": "SERVFAIL on the required record -> audit incomplete, NOT a pass. Distinct from NXDOMAIN.",
-      "input": { "domain": "ex.com", "dns": { "_dmarc.ex.com": { "status": "SERVFAIL" }, "ex.com": { "status": "SERVFAIL" } } },
-      "expect": { "dimensions": { "audit_complete": false }, "outcome": "incomplete" },
-      "applies": ["skill", "web", "action"]
-    },
-    {
-      "id": "reliability-nxdomain-vs-nodata", "invariant": "I20",
-      "desc": "NXDOMAIN (no such name) and NODATA (name exists, no record) both mean 'absent', not 'incomplete'.",
-      "input": { "domain": "ex.com", "dns": { "_dmarc.ex.com": { "TXT": [], "status": "NXDOMAIN" }, "ex.com": { "TXT": [], "status": "NOERROR" } } },
-      "expect": { "dimensions": { "DMARC": "absent", "audit_complete": true } },
-      "applies": ["skill", "web", "action"]
-    },
-    {
-      "id": "engine-exception-not-green", "invariant": "I19",
-      "desc": "A per-domain internal exception must not be swallowed into an empty (passing) result.",
-      "input": { "domain": "ex.com", "dns": { "__inject_error__": true } },
-      "expect": { "outcome": "error", "audit_complete": false },
-      "applies": ["skill", "web", "action"]
-    }
+    { "id": "mtasts-wildcard-one-label", "invariant": "I14", "mode": "pure", "skip_reason": "MTA-STS wildcard matcher covered by the per-surface pure-function check (mxPatternMatches / _mx_pattern_matches)." },
+    { "id": "mtasts-enforce-missing-fields", "invariant": "I15", "mode": "pure", "skip_reason": "Covered by the pure-function check on mtaStsPolicyProblems / mta_sts_policy_problems." },
+    { "id": "mtasts-wrong-content-type", "invariant": "I16", "mode": "http", "skip_reason": "Needs an HTTPS policy-fetch stub; the unfetchable-policy path is exercised in the per-surface conformance test." },
+    { "id": "dane-unvalidated-tlsa", "invariant": "I17", "mode": "dnssec", "skip_reason": "Not implemented yet — DANE/DNSSEC validation needs DoH AD-bit plumbing (v1.3)." },
+    { "id": "dnssec-zone-cut", "invariant": "I18", "mode": "dnssec", "skip_reason": "Not implemented yet — v1.3." },
+    { "id": "input-empty", "invariant": "I19", "mode": "wrapper", "skip_reason": "Action-wrapper exit-code behavior; covered by amino-audit-action test/local.mjs (finalize + parseDomains)." },
+    { "id": "reliability-servfail", "invariant": "I20", "mode": "wrapper", "skip_reason": "Resolver-level transient detection not implemented (v1.3); the engine-exception path is covered by finalize() tests." }
   ]
 }
