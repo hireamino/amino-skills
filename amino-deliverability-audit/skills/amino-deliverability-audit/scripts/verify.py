@@ -84,19 +84,27 @@ def count_lookups(domain, resolver, seen=None, depth=0):
 
 
 def dkim_state_indep(domain, resolver):
-    """Three-state DKIM via the given resolver (mirrors audit.dkim_lookup)."""
+    """Four-state DKIM via the given resolver (mirrors audit.dkim_lookup)."""
     weak = False
+    invalid = False
     for sel in dkim_candidates(domain):
         rec = txt_starting(f"{sel}._domainkey.{domain}", "v=dkim1", resolver)
         if not rec:
             rec = next((r for r in doh(f"{sel}._domainkey.{domain}", "TXT", resolver) if "p=" in r), None)
         if rec:
-            ktype, pub, bits, _ = parse_dkim(rec)
-            if ktype == "rsa" and bits == 1024:
+            ktype, pub, bits, _, invalid_reason = parse_dkim(rec)
+            if invalid_reason is not None:
+                invalid = True
+                continue
+            if ktype == "rsa" and bits and bits < 2048:
                 weak = True
                 continue
             return "good"
-    return "weak" if weak else "unknown"
+    if weak:
+        return "weak"
+    if invalid:
+        return "invalid"
+    return "unknown"
 
 
 def independent(domain, resolver="google"):
@@ -104,11 +112,11 @@ def independent(domain, resolver="google"):
     spf = txt_starting(domain, "v=spf1", resolver)
     term = eff_term(domain, resolver) if spf else "none"
     lookups = count_lookups(domain, resolver) if spf else 0
-    r["SPF"] = bool(spf) and term in ("-all", "~all") and lookups <= 10
+    r["SPF"] = bool(spf) and (term or "").lower() in ("-all", "~all") and lookups <= 10
     dmarc = txt_starting(f"_dmarc.{domain}", "v=dmarc1", resolver)
     if dmarc:
         r["DMARC"] = True
-        p = (re.search(r"p=\s*(\w+)", dmarc) or [None, ""])[1].lower()
+        p = (re.search(r"p=\s*(\w+)", dmarc, re.I) or [None, ""])[1].lower()
         r["DMARC_enforced"] = p in ("quarantine", "reject")
         r["DMARC_rua"] = "rua=" in dmarc.replace(" ", "")
     r["MTA_STS"] = bool(txt_starting(f"_mta-sts.{domain}", "v=stsv1", resolver))

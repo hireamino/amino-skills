@@ -17,12 +17,14 @@ import sys
 import time
 import socket
 import ssl
+import base64
 import ipaddress
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 
 from resolver import query as dig  # pluggable DNS (dig backend locally; DoH at the edge)
 from resolver import query_fresh   # uncached re-query, for confirming critical absences
+from resolver import meta as dns_meta  # DNSSEC/rcode side-channel (AD bit) for DANE/DNSSEC
 
 # Input is untrusted (any domain, incl. from the future public web tool). Validate it as
 # a real DNS hostname before it flows into dig args / socket connects / name construction.
@@ -140,6 +142,7 @@ def dkim_lookup(domain):
     cands = dkim_candidates(domain)
     weak = None
     weak_testing = False
+    invalid = None
     BATCH = 6
     for i in range(0, len(cands), BATCH):
         batch = cands[i:i + BATCH]
@@ -148,14 +151,24 @@ def dkim_lookup(domain):
         for sel, rec in zip(batch, recs):
             if not rec:
                 continue
-            ktype, pub, bits, testing = parse_dkim(rec)
-            if ktype == "rsa" and bits == 1024:
-                weak = weak or f"DKIM {sel}=RSA-1024"
+            ktype, pub, bits, testing, invalid_reason = parse_dkim(rec)
+            if invalid_reason is not None:
+                # Revoked/malformed key here; a healthy sibling selector still wins, so
+                # record it and keep scanning; surface it only if nothing better turns up.
+                invalid = invalid or (f"DKIM {sel} revoked (empty p=)" if invalid_reason == "revoked"
+                                      else f"DKIM {sel} malformed ({invalid_reason})")
+                continue
+            if ktype == "rsa" and bits and bits < 2048:
+                weak = weak or f"DKIM {sel}=RSA-{bits}"
                 weak_testing = weak_testing or testing
                 continue  # a stronger key later in priority order still wins
             label = ktype.upper() + (f"-{bits}" if bits else "")
             return ("good", f"DKIM {sel} ({label})", testing)
-    return ("weak", weak, weak_testing) if weak else ("unknown", "no DKIM key at common/provider selectors", False)
+    if weak:
+        return ("weak", weak, weak_testing)
+    if invalid:
+        return ("invalid", invalid, False)
+    return ("unknown", "no DKIM key at common/provider selectors", False)
 
 
 def resolves(domain):
@@ -205,11 +218,32 @@ def confirm_txt(name, prefix):
     return None
 
 
+# A pragmatic subset of the Public Suffix List: registry suffixes where the registrable
+# domain is the last THREE labels, not two. Not exhaustive (the full PSL is a ~200 KB data
+# dependency); it fixes the cases that matter for same-org checks — e.g. good.co.uk and
+# evil.co.uk must read as DIFFERENT orgs, not both "co.uk".
+PUBLIC_SUFFIX_2 = {
+    "co.uk", "org.uk", "gov.uk", "ac.uk", "me.uk", "net.uk", "ltd.uk", "plc.uk", "sch.uk",
+    "com.au", "net.au", "org.au", "edu.au", "gov.au", "id.au",
+    "co.nz", "net.nz", "org.nz", "govt.nz", "ac.nz",
+    "co.jp", "or.jp", "ne.jp", "ac.jp", "go.jp", "ad.jp",
+    "co.za", "org.za", "gov.za", "ac.za",
+    "co.in", "net.in", "org.in", "gen.in", "firm.in", "ind.in",
+    "com.br", "net.br", "org.br", "gov.br",
+    "com.cn", "net.cn", "org.cn", "gov.cn", "ac.cn",
+    "co.kr", "or.kr", "com.mx", "com.sg", "com.hk", "com.tw",
+    "co.il", "com.tr", "co.id", "com.my", "co.th", "or.th",
+}
+
+
 def org_base(host):
-    """Crude registrable base = last two labels (aspmx.l.google.com -> google.com).
-    Good enough to tell 'same org' from 'external' for report-destination checks."""
-    labels = host.rstrip(".").lower().split(".")
-    return ".".join(labels[-2:]) if len(labels) >= 2 else host.rstrip(".").lower()
+    """Registrable base (eTLD+1): last two labels, or last three when the last two are a
+    known multi-label public suffix — so good.co.uk and evil.co.uk read as different orgs."""
+    labels = [x for x in host.rstrip(".").lower().split(".") if x]
+    if len(labels) <= 2:
+        return ".".join(labels)
+    last_two = ".".join(labels[-2:])
+    return ".".join(labels[-3:] if last_two in PUBLIC_SUFFIX_2 else labels[-2:])
 
 
 def count_spf_lookups(domain, seen=None, depth=0):
@@ -249,7 +283,7 @@ def count_spf_lookups(domain, seen=None, depth=0):
 def spf_qualifier(spf):
     """The qualifier on the `all` mechanism. Bare `all` defaults to `+` (RFC 7208).
     Returns one of -/~/?/+ , or None if there's no `all` mechanism at all."""
-    m = re.search(r"([-~?+]?)all\b", spf)
+    m = re.search(r"([-~?+]?)all\b", spf, re.I)  # qualifiers are case-insensitive: -ALL == -all
     return None if not m else (m.group(1) or "+")
 
 
@@ -319,19 +353,72 @@ def check_spf(domain, F):
                   fix=None, record=spf))
 
 
+def _rsa_modulus_bits(b64):
+    """Real RSA modulus bit-length from a DKIM p= (base64 SubjectPublicKeyInfo DER), or
+    None if it can't be parsed — more accurate than estimating from the base64 length.
+    The caller falls back to the length estimate when this returns None."""
+    try:
+        data = base64.b64decode(b64 + "===", validate=False)
+    except Exception:
+        return None
+    i = 0
+
+    def read_len():
+        nonlocal i
+        n = data[i]; i += 1
+        if n & 0x80:
+            k = n & 0x7f; n = 0
+            for _ in range(k):
+                n = (n << 8) | data[i]; i += 1
+        return n
+
+    def expect(tag):
+        nonlocal i
+        if data[i] != tag:
+            raise ValueError
+        i += 1
+        return read_len()
+
+    try:
+        expect(0x30)                       # SubjectPublicKeyInfo SEQUENCE
+        alg = expect(0x30); i += alg        # skip AlgorithmIdentifier
+        expect(0x03); i += 1                # BIT STRING, skip the unused-bits byte
+        expect(0x30)                        # RSAPublicKey SEQUENCE
+        n = expect(0x02)                    # modulus INTEGER
+        if data[i] == 0x00:
+            n -= 1                          # strip a leading sign byte
+        return n * 8 if n > 0 else None
+    except (IndexError, ValueError):
+        return None
+
+
 def parse_dkim(rec):
-    """Returns (ktype, pub, bits, testing). testing = t=y flag (key not enforced)."""
-    kv = dict(re.findall(r"(\w+)=([^;]+)", rec))
+    """Returns (ktype, pub, bits, testing, invalid).
+    invalid is None when the key is usable, else a reason string:
+      'revoked'           -> empty p= (RFC 6376 §3.6.1): a revoked selector, never healthy
+      'malformed-ed25519' -> Ed25519 p= that doesn't decode to exactly 32 bytes
+    testing = t=y flag (key not enforced)."""
+    kv = {k.lower(): v for k, v in re.findall(r"(\w+)=([^;]+)", rec)}
     ktype = kv.get("k", "rsa").strip().lower()
     pub = kv.get("p", "").strip()
     flags = kv.get("t", "").strip().lower()
     testing = "y" in [x.strip() for x in flags.split(":")] if flags else False
-    bits = None
-    if ktype == "rsa" and pub:
-        # crude DER length -> approx modulus size estimate from base64 length
-        approx_bytes = len(pub) * 3 // 4
-        bits = 1024 if approx_bytes < 200 else (2048 if approx_bytes < 400 else 4096)
-    return ktype, pub, bits, testing
+    if pub == "":
+        return ktype, pub, None, testing, "revoked"
+    bits, invalid = None, None
+    if ktype == "rsa":
+        bits = _rsa_modulus_bits(pub)  # real modulus …
+        if bits is None:               # … or estimate from base64 length if unparseable
+            approx_bytes = len(pub) * 3 // 4
+            bits = 1024 if approx_bytes < 200 else (2048 if approx_bytes < 400 else 4096)
+    elif ktype == "ed25519":
+        # Ed25519 public keys are exactly 32 bytes; anything else is malformed.
+        try:
+            if len(base64.b64decode(pub + "===", validate=False)) != 32:
+                invalid = "malformed-ed25519"
+        except Exception:
+            invalid = "malformed-ed25519"
+    return ktype, pub, bits, testing, invalid
 
 
 def check_dkim(domain, F):
@@ -343,6 +430,10 @@ def check_dkim(domain, F):
         F.append(dict(area="DKIM", severity="high", title="DKIM key is RSA-1024 (legacy)",
                       detail="RSA-1024 is below current strength guidance and is being phased out; some receivers discount it, and it's the first thing a PQC/crypto-hygiene review flags.",
                       fix="Rotate the selector to RSA-2048 (or Ed25519): publish the new key, let it propagate, then switch signing over.", record=note))
+    elif state == "invalid":
+        F.append(dict(area="DKIM", severity="high", title="DKIM key is revoked or malformed",
+                      detail=f"A DKIM record is published but the key is unusable ({note}). A revoked (empty p=) or malformed key can't verify signatures — receivers treat the mail as unsigned, so DKIM gives no protection.",
+                      fix="Publish a valid key at this selector (RSA >=2048 or Ed25519), or remove the dead record and sign from a live selector.", record=note))
     else:  # unknown — a blind spot, NOT a confirmed gap
         F.append(dict(area="DKIM", severity="low", title="DKIM not found at common/provider selectors",
                       detail="No DKIM key at the selectors probed. DKIM has no discovery mechanism, so this is a blind spot — the domain may well sign with a custom selector. Verify against actual message headers before concluding DKIM is absent; don't treat this as a confirmed gap.",
@@ -353,24 +444,65 @@ def check_dkim(domain, F):
                       fix="Remove the t=y flag from the DKIM TXT record once you've confirmed signing works."))
 
 
+def discover_dmarc(domain):
+    """RFC 9989 (DMARCbis) tree walk: the applicable DMARC record is the domain's own
+    _dmarc if present, otherwise the nearest ancestor's, walking up to the organizational
+    domain (bounded to 5 lookups). Returns (rec, source, inherited)."""
+    domain = domain.rstrip(".").lower()
+    own = confirm_txt(f"_dmarc.{domain}", "v=dmarc1")
+    if own:
+        return own, domain, False
+    base = org_base(domain)
+    labels = domain.split(".")
+    for i in range(1, min(len(labels) - 1, 6)):
+        parent = ".".join(labels[i:])
+        rec = confirm_txt(f"_dmarc.{parent}", "v=dmarc1")
+        if rec:
+            return rec, parent, True
+        if parent == base:
+            break
+    return None, None, False
+
+
 def check_dmarc(domain, F):
-    rec = confirm_txt(f"_dmarc.{domain}", "v=dmarc1")
+    rec, source, inherited = discover_dmarc(domain)
     if not rec:
         F.append(dict(area="DMARC", severity="critical", title="No DMARC record",
                       detail="No policy at _dmarc. Receivers have no instruction on how to handle unauthenticated mail in your name — and as of 2024-25, Gmail/Yahoo/Microsoft require DMARC for bulk senders. This is both a spoofing exposure and a hard deliverability blocker.",
                       fix='Publish TXT at _dmarc: start with "v=DMARC1; p=none; rua=mailto:dmarc@<domain>" to collect reports, then ramp to p=quarantine and p=reject.'))
         return
-    dmarc_records = [r for r in dig(f"_dmarc.{domain}", "TXT") if r.lower().startswith("v=dmarc1")]
+    kv = {k.lower(): v for k, v in re.findall(r"(\w+)=\s*([^;]+)", rec)}
+    p = kv.get("p", "").strip().lower()
+    sp = kv.get("sp", "").strip().lower()
+    np_ = kv.get("np", "").strip().lower()
+
+    if inherited:
+        # No _dmarc at this subdomain: it inherits the org domain's policy — the sp
+        # (subdomain policy) tag if set, otherwise p (RFC 9989 tree walk).
+        eff = sp or p
+        tag = "sp" if sp else "p"
+        if eff not in ("quarantine", "reject"):
+            F.append(dict(area="DMARC", severity="high",
+                          title=f"DMARC subdomain not enforced (inherited {tag}={eff or '<missing>'} from {source})",
+                          detail=f"This subdomain has no _dmarc record; it inherits {source}'s policy, which resolves to {eff or '<missing>'} — spoofed mail from this subdomain isn't stopped.",
+                          fix=f"Publish _dmarc.{domain} with p=reject, or set sp=reject on {source}."))
+        else:
+            F.append(dict(area="DMARC", severity="pass",
+                          title=f"DMARC enforced (inherited {tag}={eff} from {source})",
+                          detail=f"This subdomain has no record of its own and is covered by {source}'s enforced policy.", fix=None, record=rec))
+        return
+
+    dmarc_records = [r for r in dig(f"_dmarc.{source}", "TXT") if r.lower().startswith("v=dmarc1")]
     if len(dmarc_records) > 1:
         F.append(dict(area="DMARC", severity="high", title="Multiple DMARC records (invalid)",
                       detail=f"{len(dmarc_records)} DMARC records exist at _dmarc. Exactly one is allowed — receivers ignore the policy entirely when there are several, so you effectively have no DMARC.",
                       fix="Keep one DMARC record and remove the rest."))
-    kv = dict(re.findall(r"(\w+)=\s*([^;]+)", rec))
-    p = kv.get("p", "none").strip().lower()
-    sp = kv.get("sp", "").strip().lower()
-    np_ = kv.get("np", "").strip().lower()
     rua = "rua" in kv
-    if p == "none":
+    if p not in ("none", "quarantine", "reject"):
+        F.append(dict(area="DMARC", severity="high", title=f"DMARC policy value is invalid (p={p or '<missing>'})",
+                      detail="The p= tag must be exactly none, quarantine, or reject (RFC 9989). An unrecognized or missing value means receivers apply no enforcement — you have a DMARC record but no effective policy.",
+                      fix="Set p= to none (monitor), quarantine, or reject."))
+    elif p == "none":
         F.append(dict(area="DMARC", severity="high", title="DMARC policy is p=none (monitor only)",
                       detail="p=none means spoofed mail is still delivered. It's a valid starting point but offers no protection at rest; mailbox providers increasingly treat enforced policies as a trust signal.",
                       fix="After reviewing aggregate reports, ramp to p=quarantine then p=reject (optionally with pct= staging)."))
@@ -430,8 +562,36 @@ def _mx_pattern_matches(pattern, host):
     pattern = pattern.strip().rstrip(".").lower()
     host = host.rstrip(".").lower()
     if pattern.startswith("*."):
-        return host.endswith(pattern[1:]) and host.count(".") >= pattern.count(".")
+        # RFC 8461 §4.1: a wildcard matches exactly ONE leftmost label — *.example.com
+        # matches mx.example.com but NOT a.b.example.com or example.com itself.
+        suffix = pattern[1:]  # ".example.com"
+        if not host.endswith(suffix):
+            return False
+        left = host[:-len(suffix)]
+        return bool(left) and "." not in left
     return pattern == host
+
+
+def mta_sts_policy_problems(policy):
+    """RFC 8461 §3.2 validation. Returns (problems, mode, max_age, pol_mx). A well-formed
+    policy has version: STSv1, a valid mode, an integer max_age in range, and (unless
+    mode: none) at least one mx:."""
+    version = (re.search(r"^[ \t]*version:[ \t]*(\S+)", policy, re.I | re.M) or [None, ""])[1]
+    mm = re.search(r"^[ \t]*mode:[ \t]*(\w+)", policy, re.I | re.M)
+    mode = mm.group(1).lower() if mm else ""
+    ma = re.search(r"^[ \t]*max_age:[ \t]*(\d+)", policy, re.I | re.M)
+    max_age = int(ma.group(1)) if ma else None
+    pol_mx = re.findall(r"^[ \t]*mx:[ \t]*(\S+)", policy, re.I | re.M)
+    problems = []
+    if not version or version.lower() != "stsv1":
+        problems.append("missing/invalid version (must be STSv1)")
+    if mode not in ("enforce", "testing", "none"):
+        problems.append("missing/invalid mode")
+    if max_age is None or max_age <= 0 or max_age > 31557600:
+        problems.append("missing/invalid max_age")
+    if mode != "none" and not pol_mx:
+        problems.append("no mx entries")
+    return problems, mode, max_age, pol_mx
 
 
 def check_mta_sts(domain, F):
@@ -448,13 +608,19 @@ def check_mta_sts(domain, F):
         req = f"GET /.well-known/mta-sts.txt HTTP/1.0\r\nHost: {mhost}\r\n\r\n"
         s.sendall(req.encode())
         data = b""
-        while len(data) < 8192:
+        while len(data) < 16384:  # HTTP headers + capped body
             chunk = s.recv(1024)
             if not chunk:
                 break
             data += chunk
         s.close()
-        policy = data.decode(errors="ignore")
+        raw = data.decode(errors="ignore")
+        head, _, body = raw.partition("\r\n\r\n")
+        status_line = head.split("\r\n", 1)[0]
+        # RFC 8461 §3.3: the policy MUST be HTTP 200 with Content-Type text/plain.
+        status_ok = re.match(r"HTTP/\d\.\d\s+200\b", status_line) is not None
+        ctype_ok = re.search(r"^content-type:\s*text/plain", head, re.I | re.M) is not None
+        policy = body[:8192] if (status_ok and ctype_ok) else None
     except Exception:
         policy = None
     if not txt:
@@ -462,30 +628,32 @@ def check_mta_sts(domain, F):
                       detail="MTA-STS lets you require TLS for inbound SMTP and is part of a modern transport posture (and a growing compliance ask under NIS2/gov mandates). Absent it, downgrade attacks on mail-in-transit are possible.",
                       fix="Publish _mta-sts TXT (v=STSv1; id=...) and host https://mta-sts.<domain>/.well-known/mta-sts.txt with mode: enforce."))
         return
-    mode = re.search(r"mode:\s*(\w+)", policy or "")
-    mode = mode.group(1).lower() if mode else "unknown"
+    if not policy:
+        F.append(dict(area="MTA-STS", severity="medium", title="MTA-STS TXT present but policy file not retrievable",
+                      detail=f"The _mta-sts TXT record advertises a policy, but https://mta-sts.{domain}/.well-known/mta-sts.txt did not return a valid policy (RFC 8461 requires HTTP 200 with Content-Type text/plain). Senders can't fetch it, so MTA-STS isn't actually enforced.",
+                      fix="Serve the policy at that URL over HTTPS with status 200 and Content-Type: text/plain."))
+        return
+    problems, mode, _max_age, pol_mx = mta_sts_policy_problems(policy)
+    if problems:
+        F.append(dict(area="MTA-STS", severity=("high" if mode == "enforce" else "medium"), title="MTA-STS policy is malformed",
+                      detail="The hosted policy is invalid (" + "; ".join(problems) + "). RFC 8461 requires version: STSv1, a valid mode, an integer max_age, and at least one mx: (unless mode: none)."
+                             + (" Under mode: enforce a malformed policy can break inbound mail delivery." if mode == "enforce" else ""),
+                      fix="Fix the hosted mta-sts.txt to include version: STSv1, mode:, max_age:, and mx: lines per RFC 8461."))
+        return
     sev = "pass" if mode == "enforce" else "medium"
     F.append(dict(area="MTA-STS", severity=sev, title=f"MTA-STS present (mode: {mode})",
                   detail="Policy published." + ("" if mode == "enforce" else " mode is not 'enforce' — testing/none gives no real protection."),
                   fix=None if mode == "enforce" else "Move policy to mode: enforce once tested."))
-    if policy:
-        # max_age sanity (spec allows up to 31557600s; a missing/tiny value weakens the policy).
-        ma = re.search(r"max_age:\s*(\d+)", policy)
-        if not ma:
-            F.append(dict(area="MTA-STS", severity="low", title="MTA-STS policy missing max_age",
-                          detail="The hosted policy has no max_age, so caching behavior is undefined and the policy may not 'stick' at senders.",
-                          fix="Add a max_age (e.g. max_age: 604800) to the hosted mta-sts.txt."))
-        # Every real MX must be covered by an mx: line, or mail to it fails under enforce.
-        pol_mx = re.findall(r"mx:\s*(\S+)", policy)
-        real_mx = _mx_hosts(domain)
-        if pol_mx and real_mx:
-            unmatched = [h for h in real_mx if not any(_mx_pattern_matches(p, h) for p in pol_mx)]
-            if unmatched:
-                F.append(dict(area="MTA-STS", severity=("high" if mode == "enforce" else "medium"),
-                              title="MTA-STS policy does not cover all MX hosts",
-                              detail=f"These live MX hosts match no mx: line in the policy: {', '.join(unmatched)}."
-                                     + (" Under mode: enforce, senders will REFUSE to deliver to them — active mail loss." if mode == "enforce" else " Once you move to enforce, mail to them will fail."),
-                              fix="Add the missing MX hostnames (or a *.<domain> wildcard) to the mx: lines in the hosted policy."))
+    # Every real MX must be covered by an mx: line, or mail to it fails under enforce.
+    real_mx = _mx_hosts(domain)
+    if pol_mx and real_mx:
+        unmatched = [h for h in real_mx if not any(_mx_pattern_matches(p, h) for p in pol_mx)]
+        if unmatched:
+            F.append(dict(area="MTA-STS", severity=("high" if mode == "enforce" else "medium"),
+                          title="MTA-STS policy does not cover all MX hosts",
+                          detail=f"These live MX hosts match no mx: line in the policy: {', '.join(unmatched)}."
+                                 + (" Under mode: enforce, senders will REFUSE to deliver to them — active mail loss." if mode == "enforce" else " Once you move to enforce, mail to them will fail."),
+                          fix="Add the missing MX hostnames (or a *.<domain> wildcard) to the mx: lines in the hosted policy."))
 
 
 def check_simple(domain, F):
@@ -554,7 +722,9 @@ def check_transport(domain, F):
     except Exception:
         pass
     # DANE
-    dane = dig(f"_25._tcp.{host}", "TLSA")
+    dane_name = f"_25._tcp.{host}"
+    dane = dig(dane_name, "TLSA")
+    dane_meta = dns_meta(dane_name, "TLSA")
     if tls_ver:
         sev = "pass" if tls_ver == "TLSv1.3" else "low"
         F.append(dict(area="Transport", severity=sev, title=f"Inbound SMTP STARTTLS: {tls_ver}",
@@ -570,8 +740,12 @@ def check_transport(domain, F):
             F.append(dict(area="Transport", severity="medium", title="DANE/TLSA present but misconfigured",
                           detail=f"TLSA records exist but {bad} For SMTP DANE only usage 3 (DANE-EE) or 2 (DANE-TA) are valid, and matching-type 1 (SHA-256) is recommended; an invalid record can break DANE-enforcing senders.",
                           fix="Correct the TLSA usage/selector/matching-type (typically '3 1 1' for the MX cert) and re-publish."))
+        elif dane_meta.get("ad") is False:
+            F.append(dict(area="Transport", severity="medium", title="DANE/TLSA present but not DNSSEC-validated",
+                          detail="TLSA records exist but the response isn't DNSSEC-authenticated (AD bit not set). DANE requires a validated DNSSEC chain — without it senders can't trust the TLSA, so DANE gives no protection and can't be enforced.",
+                          fix="Enable DNSSEC on the zone so the TLSA records are cryptographically validated."))
         else:
-            F.append(dict(area="Transport", severity="pass", title="DANE/TLSA present", detail="TLSA records bind the MX cert (requires DNSSEC).", fix=None))
+            F.append(dict(area="Transport", severity="pass", title="DANE/TLSA present", detail="TLSA records bind the MX cert" + (" (DNSSEC-validated)." if dane_meta.get("ad") else "."), fix=None))
     else:
         F.append(dict(area="Transport", severity="low", title="No DANE/TLSA",
                       detail="No TLSA records on the MX. DANE is an emerging transport-security ask (NIS2/BSI) and depends on DNSSEC.",
@@ -689,12 +863,18 @@ def _parse_iso8601(s):
 # ── DNSSEC ───────────────────────────────────────────────────────────────────
 
 def check_dnssec(domain, F):
-    if dig(domain, "DNSKEY"):
+    keys = dig(domain, "DNSKEY")
+    m = dns_meta(domain, "DNSKEY")
+    # AD bit from a validating resolver is authoritative and respects the zone cut (a
+    # validated NODATA in a signed parent still sets AD). Fall back to DNSKEY presence
+    # only when meta isn't available (a backend that doesn't record it / mock).
+    signed = m["ad"] if "ad" in m else bool(keys)
+    if signed:
         F.append(dict(area="DNSSEC", severity="pass", title="DNSSEC enabled",
-                      detail="The zone is DNSSEC-signed.", fix=None))
+                      detail="The zone is DNSSEC-signed and answers validate.", fix=None))
     else:
         F.append(dict(area="DNSSEC", severity="low", title="DNSSEC not enabled",
-                      detail="The zone publishes no DNSKEY, so DNS answers for this domain aren't cryptographically signed — and DANE can't be used without it. A trust/security gap more than a deliverability one.",
+                      detail="DNS answers for this domain aren't cryptographically signed/validated — and DANE can't be used without it. A trust/security gap more than a deliverability one.",
                       fix="Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."))
 
 

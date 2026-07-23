@@ -32,6 +32,25 @@ DNS_TIMEOUT = 8  # seconds, per dig invocation
 _DIG_SEM = threading.BoundedSemaphore(4)
 _TRANSIENT = {"SERVFAIL", "REFUSED", None}  # rcodes worth a retry (None = no status seen)
 
+# DNSSEC/rcode meta side-channel: (name, rrtype) -> {"status": str|None, "ad": bool}.
+# Populated by the dig backend (+dnssec, parses the header AD flag) or record_meta() for
+# alternate backends. Read via meta(); the DANE/DNSSEC/reliability checks use it, and the
+# plain query() contract stays list[str] so every other check is unchanged.
+_META = {}
+_META_LOCK = threading.Lock()
+
+
+def meta(name, rrtype):
+    """DNSSEC/rcode meta for the last lookup of (name, rrtype): {'status', 'ad'} or {}."""
+    with _META_LOCK:
+        return dict(_META.get((name, rrtype), {}))
+
+
+def record_meta(name, rrtype, status, ad):
+    """For alternate backends (e.g. DoH) to surface Status/AD into the meta channel."""
+    with _META_LOCK:
+        _META[(name, rrtype)] = {"status": status, "ad": bool(ad)}
+
 
 def _parse_answer(out, rrtype):
     """Pull the rdata for `rrtype` from a full (non-+short) dig ANSWER section."""
@@ -65,7 +84,7 @@ def _dig_backend(name, rrtype):
         try:
             with _DIG_SEM:
                 out = subprocess.run(
-                    ["dig", "+tries=2", "+time=2", rrtype, name],
+                    ["dig", "+dnssec", "+tries=2", "+time=2", rrtype, name],
                     capture_output=True, text=True, timeout=DNS_TIMEOUT,
                 ).stdout
         except Exception:
@@ -76,6 +95,12 @@ def _dig_backend(name, rrtype):
         if status in _TRANSIENT:
             time.sleep(0.15 * (attempt + 1))
             continue  # SERVFAIL/REFUSED under load → retry (don't trust the empty)
+        # AD (Authenticated Data) flag in the header = the validating resolver verified the
+        # DNSSEC chain. Record it (+ rcode) for the DANE/DNSSEC checks.
+        fm = re.search(r"flags:\s*([a-z ]+);", out)
+        ad = bool(fm and "ad" in fm.group(1).split())
+        with _META_LOCK:
+            _META[(name, rrtype)] = {"status": status, "ad": ad}
         return _parse_answer(out, rrtype)  # NOERROR/NXDOMAIN → authoritative
     return []
 
