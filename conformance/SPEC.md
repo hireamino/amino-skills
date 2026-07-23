@@ -67,9 +67,18 @@ CI gate in all three repos (Action `security-gate.yml`, web `skill-parity.yml`, 
 dns-engine cases pass on all three; 7 cases are logged SKIPPED with reasons (pure-function,
 HTTP-stub, or v1.3 DANE/DNSSEC/resolver-level).
 
-**Still open:** I2 (real RSA modulus), I13 (SPF contradiction polish) — minor. **v1.3:**
-I17/I18 (DANE/DNSSEC) + I20-resolver (SERVFAIL detection), all gated on plumbing DoH
-`Status`/`AD` through the `q` resolver.
+**v1.3 — DONE (all $0, DoH/dig only, zero new deps):** a resolver meta side-channel now
+surfaces DoH `Status` (RCODE) + `AD` (DNSSEC-validated) — JS via `query.meta`, skill via
+`resolver.meta` (dig `+dnssec` + header AD-flag parse). On it: **I17** (DANE requires a
+DNSSEC-validated TLSA — `ad=false` → "present but not DNSSEC-validated", not a pass),
+**I18** (DNSSEC via the AD bit, which respects the zone cut — no false "unsigned" on a
+subdomain of a signed zone), and **I20-resolver** (a SERVFAIL/REFUSED/error on a critical
+lookup (SPF/DMARC/MX) → `auditDomain` returns `inconclusive`, distinct from NXDOMAIN/NODATA;
+the Action folds it into `audit-complete`). Corpus: 14 dns-engine cases pass on all three
+(incl. DANE/DNSSEC with mock AD bits); I20-resolver covered by the Action suite.
+
+**Still open — minor polish only:** I2 (real RSA modulus vs approx-length), I13 (SPF
+contradiction cleanup). Everything false-pass / reliability / parity is closed.
 
 ## The invariants (the contract)
 
