@@ -1,0 +1,40 @@
+name: security-gate
+
+# LAYER 1 of the Amino security process: fast, deterministic scanners on every
+# push/PR — SAST + secrets, via vulngate (the tool Amino publishes; running it
+# here is deliberate dogfooding).
+# Layer 2 = AI semantic review. Layer 3 = the weekly deep audit + full-history
+# secret sweep (amino-security/ROUTINE-PROMPT.md).
+# Each control lives in exactly ONE layer — see amino-security/SECURITY-REVIEW.md.
+#
+# This repo is PUBLIC, so it gets two things the private Workers don't:
+#   * SARIF upload works (code scanning is free on public repos) -> Security tab.
+#   * Extra care: nothing private may leak here (see the runbook's surface map).
+# Replaces the previous secret-scan.yml, which used an older, unverified gitleaks
+# (8.18.4, no checksum) and an unpinned actions/checkout.
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write     # vulngate upserts a single findings comment on PRs
+  security-events: write   # SARIF -> Security tab (works: public repo)
+  actions: read            # required by the SARIF upload action
+
+jobs:
+  security-gate:
+    runs-on: ubuntu-latest
+    steps:
+      # Actions are SHA-pinned (supply-chain hardening); trailing comment = the tag.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      # Semgrep (SAST) + gitleaks 8.30.1 (secrets, checksum-verified by the action).
+      # NOTE: this gitleaks pass scans the WORKING TREE, which catches a secret at
+      # the moment it is introduced. Full-git-history sweeps are Layer 3's job.
+      - name: Security gate (SAST + secrets)
+        uses: cisoventures/vulngate@v1
+        with:
+          fail-on: high
+          ignore-dev-deps: true
