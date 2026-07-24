@@ -93,7 +93,7 @@ attacks):
 
 - **MTA-STS** — declares "always use TLS to reach me" via an HTTPS-published policy.
 - **TLS-RPT** — gives you reports when someone *fails* to connect securely.
-- **DANE** — pins your TLS certificate in DNS (requires DNSSEC).
+- **DANE** — pins your TLS certificate in DNS (and is only trusted when your DNSSEC chain validates).
 
 They aren't a deliverability lever the way DMARC is — your open rates won't jump. But
 they're increasingly **required** in regulated, government, and security-conscious
@@ -181,7 +181,7 @@ DNSSEC cryptographically signs your DNS so the answers — including your mail r
 can't be forged in transit, and it's the prerequisite for DANE. It's more a
 security/trust measure than a direct deliverability lever: enable it when a security
 review or compliance requirement calls for it, or as part of a strong overall posture.
-The audit flags whether your zone is signed.
+The audit flags whether your zone is signed (and its answers cryptographically validate).
 
 ### Does my domain's age affect deliverability?
 
