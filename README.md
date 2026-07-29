@@ -43,6 +43,16 @@ New to deliverability, or want the questions answered before you run anything? S
 enforcement actually means, the Gmail/Yahoo sender rules, MTA-STS/TLS-RPT/DANE, BIMI,
 DMARCbis, and what "post-quantum ready" means for email.
 
+## Correctness
+
+Deliverability checks are easy to get subtly wrong — a "pass" that isn't really a pass
+is worse than no check. This skill's audit is governed by a **conformance spec** with a
+fixtures-driven test suite (`conformance/`): each rule is a documented invariant with
+test cases, so the checks are verified against a fixed corpus rather than hand-waved.
+The same suite backs the sibling implementations — the [web tool](https://hireamino.com/audit)
+and the [GitHub Action](https://github.com/hireamino/amino-audit-action) — so all three
+agree on what "pass" means. Add a fixture once and every surface enforces it.
+
 ## Contributing
 
 Contributions welcome — new checks, missing DKIM selectors, standards updates, and
