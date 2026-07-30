@@ -505,7 +505,7 @@ def check_dmarc(domain, F):
     elif p == "none":
         F.append(dict(area="DMARC", severity="high", title="DMARC policy is p=none (monitor only)",
                       detail="p=none means spoofed mail is still delivered. It's a valid starting point but offers no protection at rest; mailbox providers increasingly treat enforced policies as a trust signal.",
-                      fix="After reviewing aggregate reports, ramp to p=quarantine then p=reject (optionally with pct= staging)."))
+                      fix="After reviewing aggregate reports, ramp to p=quarantine and then p=reject. (Don't reach for pct= to stage it — RFC 9989 removed that tag; DMARCbis uses t=y for a testing period instead.)"))
     else:
         F.append(dict(area="DMARC", severity="pass", title=f"DMARC enforced (p={p})",
                       detail="Enforcement policy in place.", fix=None, record=rec))
@@ -625,8 +625,8 @@ def check_mta_sts(domain, F):
         policy = None
     if not txt:
         F.append(dict(area="MTA-STS", severity="medium", title="No MTA-STS policy",
-                      detail="MTA-STS lets you require TLS for inbound SMTP and is part of a modern transport posture (and a growing compliance ask under NIS2/gov mandates). Absent it, downgrade attacks on mail-in-transit are possible.",
-                      fix="Publish _mta-sts TXT (v=STSv1; id=...) and host https://mta-sts.<domain>/.well-known/mta-sts.txt with mode: enforce."))
+                      detail="MTA-STS lets you require TLS for inbound SMTP and is part of a modern transport posture (and increasingly asked for in EU procurement, and specified in BSI's guidance for secure email transport (TR-03108)). Absent it, downgrade attacks on mail-in-transit are possible.",
+                      fix="Publish _mta-sts TXT (v=STSv1; id=...) and host https://mta-sts.<domain>/.well-known/mta-sts.txt. Stage it: publish TLS-RPT first so you get failure reports, start at mode: testing, confirm every production AND backup MX passes TLS, then switch to mode: enforce (RFC 8461 provides testing mode for exactly this)."))
         return
     if not policy:
         F.append(dict(area="MTA-STS", severity="medium", title="MTA-STS TXT present but policy file not retrievable",
@@ -748,7 +748,7 @@ def check_transport(domain, F):
             F.append(dict(area="Transport", severity="pass", title="DANE/TLSA present", detail="TLSA records bind the MX cert" + (" (DNSSEC-validated)." if dane_meta.get("ad") else "."), fix=None))
     else:
         F.append(dict(area="Transport", severity="low", title="No DANE/TLSA",
-                      detail="No TLSA records on the MX. DANE is an emerging transport-security ask (NIS2/BSI) and depends on DNSSEC.",
+                      detail="No TLSA records on the MX. DANE is recommended in BSI guidance for secure email transport (TR-03108) and depends on DNSSEC.",
                       fix="If DNSSEC is enabled, publish TLSA records for the MX; otherwise enable DNSSEC first."))
     return host
 
