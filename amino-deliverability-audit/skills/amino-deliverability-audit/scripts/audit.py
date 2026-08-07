@@ -1106,7 +1106,7 @@ def action(f):
         if "multiple dmarc" in t:
             return "Merge to a single DMARC record"
         if "p=none (monitor" in t:
-            return "Ramp DMARC up to p=reject"
+            return "Ramp DMARC up to p=reject — needs rua data first"
         if "subdomain policy" in t:
             return "Set DMARC sp=reject for subdomains"
         if "partially enforced" in t:
@@ -1116,7 +1116,7 @@ def action(f):
         if "report destination" in t:
             return "Authorize the external DMARC report destination"
         if "rua" in t:
-            return "Turn on DMARC reporting (rua)"
+            return "Turn on DMARC reporting (rua) — needed before you enforce"
         return "Strengthen the DMARC policy"
     if a == "MTA-STS":
         if "does not cover all mx" in t:
