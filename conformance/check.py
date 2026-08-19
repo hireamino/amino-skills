@@ -56,5 +56,28 @@ chk("I15 enforce missing fields → problems", len(audit.mta_sts_policy_problems
 chk("I15 max_age out of range → problem", any("max_age" in p for p in audit.mta_sts_policy_problems("version: STSv1\nmode: enforce\nmax_age: 99999999\nmx: a.ex.com")[0]), True)
 chk("I15 mode none needs no mx", audit.mta_sts_policy_problems("version: STSv1\nmode: none\nmax_age: 100")[0], [])
 
+# ── DMARC enforcement advice (RFC 9989 §7.4) ────────────────────────────────
+# The short action label is the ONLY remediation text some surfaces render, so it
+# is asserted BEHAVIOURALLY against the real mapper, not by grepping the source.
+# §7.4 scopes both its "SHOULD NOT publish p=reject" and its month-then-month
+# staging advice to domains hosting users who might post to mailing lists — so
+# neither may be stated here as universal, and the label must not name reject.
+_pnone = {"area": "DMARC", "severity": "high", "title": "DMARC policy is p=none (monitor only)"}
+chk("§7.4 label is the staged one", audit.action(_pnone), "Review DMARC reports, then stage quarantine")
+chk("§7.4 label does not name reject", "reject" in audit.action(_pnone).lower(), False)
+
+_SRC = open(os.path.join(SCRIPTS, "audit.py"), encoding="utf-8").read()
+chk("§7.4 reject is not framed as the destination",
+    "ramp to p=quarantine and then p=reject" in _SRC, False)
+chk("§7.4 no unevidenced provider trust-signal claim",
+    "increasingly treat enforced policies as a trust signal" in _SRC, False)
+chk("§7.4 mailing-list caution is stated and scoped",
+    "users may post to mailing lists not to publish p=reject" in _SRC, True)
+chk("§7.4 staging advice is scoped, not universal",
+    "for those that still do, it recommends at least a month" in _SRC, True)
+chk("§7.4 DKIM-not-SPF-alone prerequisite is stated",
+    "DMARC-aligned DKIM rather than relying only on SPF" in _SRC, True)
+chk("t=y is offered in place of the removed pct", "use t=y to test an enforcement policy" in _SRC, True)
+
 print("\nALL PASS" if ok else "\nSOME FAILED")
 sys.exit(0 if ok else 1)

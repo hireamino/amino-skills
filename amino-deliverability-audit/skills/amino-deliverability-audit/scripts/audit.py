@@ -504,8 +504,8 @@ def check_dmarc(domain, F):
                       fix="Set p= to none (monitor), quarantine, or reject."))
     elif p == "none":
         F.append(dict(area="DMARC", severity="high", title="DMARC policy is p=none (monitor only)",
-                      detail="p=none means spoofed mail is still delivered. It's a valid starting point but offers no protection at rest; mailbox providers increasingly treat enforced policies as a trust signal.",
-                      fix="After reviewing aggregate reports, ramp to p=quarantine and then p=reject. (Don't reach for pct= to stage it — RFC 9989 removed that tag; DMARCbis uses t=y for a testing period instead.)"))
+                      detail="p=none offers, in the words of RFC 9989, no expression of preference — a receiver applying DMARC has nothing to act on, though its own filtering still applies. An enforcement policy requests quarantine or rejection of failures, but it can affect legitimate mail when an authorized sender is unauthenticated or misaligned, which is why aggregate reports come first. This is primarily an anti-spoofing gap, not a deliverability failure.",
+                      fix="Collect and review DMARC aggregate reports before enforcement, and remediate every legitimate unauthenticated or misaligned stream. Move to p=quarantine once authorized sources are passing. Before considering p=reject, ensure every legitimate stream has valid, DMARC-aligned DKIM rather than relying only on SPF. RFC 9989 §7.4 advises domains whose users may post to mailing lists not to publish p=reject; for those that still do, it recommends at least a month at p=none followed by an equally long period at p=quarantine. Treat reject as conditional on your mail flows, not as the default destination. RFC 9989 removed pct; use t=y to test an enforcement policy instead."))
     else:
         F.append(dict(area="DMARC", severity="pass", title=f"DMARC enforced (p={p})",
                       detail="Enforcement policy in place.", fix=None, record=rec))
@@ -1106,7 +1106,7 @@ def action(f):
         if "multiple dmarc" in t:
             return "Merge to a single DMARC record"
         if "p=none (monitor" in t:
-            return "Ramp DMARC up to p=reject — needs rua data first"
+            return "Review DMARC reports, then stage quarantine"
         if "subdomain policy" in t:
             return "Set DMARC sp=reject for subdomains"
         if "partially enforced" in t:
