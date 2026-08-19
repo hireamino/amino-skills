@@ -469,7 +469,7 @@ def check_dmarc(domain, F):
     if not rec:
         F.append(dict(area="DMARC", severity="critical", title="No DMARC record",
                       detail="No policy at _dmarc. Receivers have no instruction on how to handle unauthenticated mail in your name — and as of 2024-25, Gmail/Yahoo/Microsoft require DMARC for bulk senders. This is both a spoofing exposure and a hard deliverability blocker.",
-                      fix='Publish TXT at _dmarc: start with "v=DMARC1; p=none; rua=mailto:dmarc@<domain>" to collect reports, then ramp to p=quarantine and p=reject.'))
+                      fix='Publish TXT at _dmarc: start with "v=DMARC1; p=none; rua=mailto:dmarc@<domain>" to collect reports. Review those reports before any enforcement, then stage p=quarantine; whether p=reject is appropriate depends on your mail flows (RFC 9989 §7.4).'))
         return
     kv = {k.lower(): v for k, v in re.findall(r"(\w+)=\s*([^;]+)", rec)}
     p = kv.get("p", "").strip().lower()

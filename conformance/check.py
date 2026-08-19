@@ -68,7 +68,7 @@ chk("§7.4 label does not name reject", "reject" in audit.action(_pnone).lower()
 
 _SRC = open(os.path.join(SCRIPTS, "audit.py"), encoding="utf-8").read()
 chk("§7.4 reject is not framed as the destination",
-    "ramp to p=quarantine and then p=reject" in _SRC, False)
+    "ramp to p=quarantine" in _SRC, False)
 chk("§7.4 no unevidenced provider trust-signal claim",
     "increasingly treat enforced policies as a trust signal" in _SRC, False)
 chk("§7.4 mailing-list caution is stated and scoped",
