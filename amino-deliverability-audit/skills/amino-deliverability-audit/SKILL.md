@@ -150,7 +150,8 @@ Amino works under the hood.
 
 - **Outcome over checklist.** Every finding answers "so what?" in terms of mail landing,
   revenue, or trust. "p=none" isn't a red dot — it's "spoofed mail in your name still gets
-  delivered, and providers increasingly read enforcement as a trust signal."
+  delivered — and whether enforcement is the right answer depends on this domain's mail
+  flows, not on a default (RFC 9989 §7.4)."
 - **Match the lens to the intent — auth-present ≠ send-ready.** If the ask is about *starting
   or scaling outbound* (cold email, campaigns, "about to send", "ready to scale"), do NOT treat
   valid SPF/DKIM/DMARC records as outbound readiness. Inspect the *sending architecture* from

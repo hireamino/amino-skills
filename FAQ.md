@@ -48,24 +48,42 @@ spoofable.
 
 DMARC's `p=` policy tells receivers how to handle mail that fails authentication:
 
-- **`p=none`** — monitor only. Failing mail still gets delivered. Useful for
-  *observing* before you enforce, but it provides **no protection** — anyone can still
-  spoof your domain. Most domains that think they "have DMARC" are stuck here.
-- **`p=quarantine`** — send failing mail to spam.
-- **`p=reject`** — reject failing mail outright. This is the goal: it's what actually
-  stops spoofing and what large mailbox providers increasingly expect from bulk senders.
+- **`p=none`** — monitor only. RFC 9989 defines it as the domain owner offering "no
+  expression of preference", so a receiver applying DMARC has nothing to act on and
+  anyone can still spoof your domain — though the receiver's own filtering still applies.
+  Most domains that think they "have DMARC" are here.
+- **`p=quarantine`** — asks receivers to treat failures as suspicious.
+- **`p=reject`** — asks receivers to reject failing mail outright. Receivers can still
+  apply their own local policy either way.
 
-The path is `none` → `quarantine` → `reject`, ramping as you confirm (via the `rua=`
-aggregate reports) that your legitimate mail passes. Staying on `p=none` forever is the
-most common deliverability mistake.
+**Which policy you should end on depends on your mail flows, and `reject` is not
+automatically the answer.** RFC 9989 §7.4 says domains that host users who might post
+to mailing lists **SHOULD NOT** publish `p=reject`, because mail forwarded with an
+unmodified `From:` line frequently fails and gets rejected. It also requires that any
+domain publishing `p=reject` apply valid DKIM rather than relying on SPF alone. A
+dedicated transactional domain faces fewer indirect-mail risks, but should still verify
+its actual forwarding and third-party flows rather than assume it has none.
+
+For the domains §7.4 addresses, its advice is `p=none` for at least a month, then
+`p=quarantine` for an equally long period, comparing the aggregate-report results before
+going further. As of August 2026, Google's bulk-sender guidance permits `p=none`.
+Enforcement is primarily an anti-spoofing choice, not a universal deliverability
+requirement.
 
 ### What is a good DMARC record?
 
-A strong posture looks like:
-`v=DMARC1; p=reject; adkim=s; aspf=s; rua=mailto:reports@yourdomain.com`
-— enforcing policy (`p=reject`), strict alignment for both DKIM (`adkim=s`) and SPF
-(`aspf=s`), and an aggregate-report address (`rua=`) so you can actually see who's
-sending as you. Add `ruf=` for forensic reports if your provider supports it.
+Start every domain here:
+`v=DMARC1; p=none; rua=mailto:reports@yourdomain.com`
+— an aggregate-report address (`rua=`) so you can actually see who is sending as you.
+That is the part no domain should be without, and it is the prerequisite for every
+decision below it.
+
+Where you go next is a judgement about your own mail, not a fixed target. Strict
+alignment (`adkim=s`, `aspf=s`) and an enforcing policy are the strong end, and
+`p=quarantine` is the right next step once your authorized senders are passing. Whether
+`p=reject` belongs on a given domain depends on whether it carries general user mail —
+see the §7.4 caveats above. Add `ruf=` for forensic reports if your provider supports
+them.
 
 ---
 
@@ -132,8 +150,10 @@ this is the first Standards-Track DMARC. The changes that matter to operators:
 
 - **A DNS "Tree Walk" replaces the Public Suffix List** for determining organizational
   domains — this changes how alignment and policy discovery work, especially for subdomains.
-- **`np=` is new** — a policy for *non-existent* subdomains (set `np=reject` to shut down a
-  common cousin-domain spoofing trick). `sp=` still governs existing subdomains.
+- **`np=` is new** — a policy for *non-existent* subdomains of **your own** domain (set
+  `np=reject` so nobody can send as a subdomain you never created). `sp=` still governs
+  existing subdomains. Note what it does **not** do: a lookalike "cousin" domain is a
+  separate registration, and no DMARC policy on your domain can reach it.
 - **`pct`, `rf`, and `ri` are removed.** Records still using them aren't broken yet, but
   they're no longer spec-conformant — worth cleaning up.
 
