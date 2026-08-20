@@ -19,7 +19,8 @@ alignment, MTA-STS, TLS-RPT, DANE, BIMI, and MX hygiene, plus the surrounding tr
 signals (DNSSEC, CAA, reverse DNS/FCrDNS, domain age, and AI-crawler visibility) — then
 tells you, in plain terms, where you stand and what to fix first.
 
-Read-only: it inspects public DNS and drafts the exact changes, but never touches anything.
+Read-only: it reads public DNS, plus your published MTA-STS policy, `robots.txt` and public
+RDAP registration data over HTTPS, and drafts the exact changes — but never touches anything.
 
 **What makes it different from a free DMARC checker:**
 
@@ -33,8 +34,9 @@ Read-only: it inspects public DNS and drafts the exact changes, but never touche
 - **Forward-readiness no other free checker does:** flags **DMARCbis (RFC 9989)** cleanup
   (removed `pct`/`rf`/`ri` tags, missing `np=`) and **post-quantum** exposure (RSA-1024 DKIM,
   TLS 1.2 transport) — so you fix today's gaps and get ahead of the ones coming.
-- **Read-only and local.** Inspects public DNS and drafts the exact records; never sends mail,
-  needs credentials, or changes anything.
+- **Read-only and local.** Reads public DNS, your published MTA-STS policy, `robots.txt` and
+  public RDAP registration data, and drafts the exact records; never sends mail, needs
+  credentials, or changes anything.
 
 ## Learn
 

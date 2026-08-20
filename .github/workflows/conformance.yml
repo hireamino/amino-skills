@@ -8,14 +8,20 @@ on:
     paths:
       - 'amino-deliverability-audit/skills/amino-deliverability-audit/scripts/**'
       - 'amino-deliverability-audit/skills/amino-deliverability-audit/SKILL.md'
+      - 'amino-deliverability-audit/skills/amino-deliverability-audit/references/**'
       - 'conformance/**'
       - 'FAQ.md'
+      - 'README.md'
+      - 'CONTRIBUTING.md'
   pull_request:
     paths:
       - 'amino-deliverability-audit/skills/amino-deliverability-audit/scripts/**'
       - 'amino-deliverability-audit/skills/amino-deliverability-audit/SKILL.md'
+      - 'amino-deliverability-audit/skills/amino-deliverability-audit/references/**'
       - 'conformance/**'
       - 'FAQ.md'
+      - 'README.md'
+      - 'CONTRIBUTING.md'
 
 jobs:
   conformance:

@@ -115,5 +115,65 @@ chk("CI would run this file when FAQ.md alone changes", "- 'FAQ.md'" in _WF, Tru
 chk("CI would run this file when SKILL.md alone changes",
     "amino-deliverability-audit/SKILL.md'" in _WF, True)
 
+# ── the OTHER claims corrected in the engines on 2026-07-30 ────────────────
+# Same lesson as the np= one directly above: each of these was fixed in audit.py and
+# left standing in the docs, because the guards written for them grep engine source.
+# Every doc that states a claim is now read here, and every doc read here is listed in
+# conformance.yml's path filter (asserted at the end).
+_DOCS = {
+    "FAQ.md": _FAQ,
+    "README.md": open(os.path.join(_ROOT, "README.md"), encoding="utf-8").read(),
+    "CONTRIBUTING.md": open(os.path.join(_ROOT, "CONTRIBUTING.md"), encoding="utf-8").read(),
+    "SKILL.md": _SKILL,
+    "standards-radar.md": open(os.path.join(
+        _ROOT, "amino-deliverability-audit", "skills", "amino-deliverability-audit",
+        "references", "standards-radar.md"), encoding="utf-8").read(),
+}
+# Markdown wraps, so a claim can straddle a line break. Normalise whitespace before
+# matching — otherwise an assertion fails on reflow rather than on the claim changing,
+# and the next person "fixes" it by weakening the assertion.
+_flat = lambda t: " ".join(t.split())
+_DOCS = {k: _flat(v) for k, v in _DOCS.items()}
+_ALL = " ".join(_DOCS.values())
+
+# The scope claim. audit.py fetches the MTA-STS policy over HTTPS (~l.598), RDAP at
+# rdap.org (~l.887) and robots.txt (~l.965). "Inspects public DNS" understates what a
+# user's domain gets sent to, which makes it a transparency claim, not a detail.
+chk("docs: no bare 'inspects public DNS' scope claim",
+    "inspects public DNS" in _ALL, False)
+for _n in ("FAQ.md", "README.md", "CONTRIBUTING.md", "SKILL.md"):
+    chk(f"docs: {_n} names the non-DNS fetches", "RDAP" in _DOCS[_n], True)
+
+# IR 8547 — re-verified at csrc.nist.gov 2026-08-19: still an Initial Public Draft
+# (published 2024-11-12, comments closed 2025-01-10, no final publication).
+chk("docs: IR 8547 is not presented as settled policy",
+    "IR 8547) sets" in _ALL or "IR 8547** sets" in _ALL, False)
+chk("docs: IR 8547 draft status is stated in FAQ.md",
+    "still an initial public draft" in _DOCS["FAQ.md"], True)
+chk("docs: IR 8547 draft status is stated in standards-radar.md",
+    "still an initial public draft" in _DOCS["standards-radar.md"], True)
+
+# No standardized PQ-DKIM exists — /cbom already said this correctly while the FAQ
+# asserted a migration path, i.e. our own surfaces contradicted each other.
+chk("docs: no claimed PQC migration path for DKIM",
+    "the migration path is to larger PQC signatures" in _ALL, False)
+chk("docs: the absence of a PQ-DKIM path is stated",
+    "no standardized post-quantum path" in _ALL, True)
+
+# Google scopes one-click unsubscribe. Verified verbatim: "Marketing messages and
+# subscribed messages must support one-click unsubscribe".
+chk("docs: one-click unsubscribe is scoped, not blanket",
+    "marketing and subscribed messages" in _ALL, True)
+
+# BSI TR-03108, not NIS2, is what actually specifies secure email transport.
+chk("docs: MTA-STS compliance cites BSI TR-03108", "TR-03108" in _ALL, True)
+
+# and the coupling: every doc asserted above must be in the workflow's path filter
+_PATHS = {"FAQ.md": "- 'FAQ.md'", "README.md": "- 'README.md'",
+          "CONTRIBUTING.md": "- 'CONTRIBUTING.md'", "SKILL.md": "SKILL.md'",
+          "standards-radar.md": "references/**'"}
+for _n, _pat in _PATHS.items():
+    chk(f"CI would run this file when {_n} alone changes", _pat in _WF, True)
+
 print("\nALL PASS" if ok else "\nSOME FAILED")
 sys.exit(0 if ok else 1)
