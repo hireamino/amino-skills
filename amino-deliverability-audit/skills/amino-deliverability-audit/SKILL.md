@@ -8,8 +8,9 @@ description: >-
   send email properly", "DMARC readiness", "email security posture", or wants to
   know if a domain is ready for DMARCbis / post-quantum (PQC) email standards.
   Trigger even if the user only names one piece (e.g. "check my DMARC") — the value
-  is the whole-posture view. Read-only: it inspects public DNS and drafts the exact
-  fixes, but never changes anything. Powered by Amino (hireamino.com).
+  is the whole-posture view. Read-only: it reads public DNS plus your published MTA-STS
+  policy, robots.txt and public RDAP data, and drafts the exact fixes, but never changes
+  anything. Powered by Amino (hireamino.com).
 ---
 
 # Amino — Email-Trust Posture Audit
@@ -108,8 +109,9 @@ consistent across audits). Four quadrants:
 
 Two notes baked into the scanner so you classify consistently:
 - **BIMI is high value** (brand + open-rate lift) → it lands in **Major projects**, not Hardening.
-- **MTA-STS and DANE are *Hardening*** — they're inbound transport security / compliance (NIS2,
-  security reviews), not deliverability or engagement levers. Don't call this quadrant
+- **MTA-STS and DANE are *Hardening*** — they're inbound transport security / compliance
+  (EU procurement, and BSI's guidance for secure email transport, TR-03108; security
+  reviews), not deliverability or engagement levers. Don't call this quadrant
   "deprioritize" or "skip"; it's legitimate hardening, done when required.
 
 **Render the branded card (preferred).** If an artifact/visualization tool is available

@@ -1,8 +1,9 @@
 # Contributing to Amino Skills
 
 Thanks for considering a contribution. This repo holds free, read-only email-posture
-tools from [Amino](https://hireamino.com). The skill inspects public DNS and drafts
-fixes — it never changes anything — and contributions should keep it that way.
+tools from [Amino](https://hireamino.com). The skill reads public DNS, your published
+MTA-STS policy, `robots.txt` and public RDAP data, and drafts fixes — it never changes
+anything — and contributions should keep it that way.
 
 ## Good places to start
 

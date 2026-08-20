@@ -138,7 +138,8 @@ posture. High value — not just hardening.
 Since 2024, Gmail and Yahoo require bulk senders (roughly 5,000+ messages/day to their
 users) to: authenticate with SPF **and** DKIM, publish a DMARC policy (at least
 `p=none`, with alignment), keep spam complaint rates low (under ~0.3%), and support
-one-click unsubscribe. Microsoft has announced similar expectations. These aren't
+one-click unsubscribe **on marketing and subscribed messages** — Google scopes that
+requirement to those categories, not to transactional mail. Microsoft has announced similar expectations. These aren't
 suggestions — mail that doesn't comply gets throttled or junked. The bar for "set up
 correctly" has permanently risen.
 
@@ -162,16 +163,20 @@ that still use removed tags and checks whether your subdomain policy is actually
 
 ### Does email need to be "post-quantum ready"?
 
-Eventually, yes — and the clock is public. NIST guidance (IR 8547) sets today's
-classical crypto (RSA-2048, ECC P-256) as **deprecated by 2030 and disallowed by 2035**;
-US national-security acquisitions move to post-quantum (PQC) even sooner. For email this
-shows up in three places:
+Eventually, yes — and the direction of travel is public, though less settled than it is
+often made to sound. NIST's draft guidance on the transition (**IR 8547, still an initial
+public draft** rather than a final publication) proposes treating today's classical crypto
+(RSA-2048, ECC P-256) as deprecated around 2030 and disallowed after 2035. NSA CNSA 2.0
+wants PQC for new national-security acquisitions sooner. Treat both as direction, not as
+settled mandate. For email this shows up in three places:
 
 - **Transport:** TLS 1.3 is the floor for hybrid post-quantum key exchange
   (`X25519MLKEM768`). A domain still on TLS 1.2 can't adopt PQC transport at all.
-- **DKIM signing:** the migration path is to larger PQC signatures (ML-DSA / SLH-DSA,
-  likely hybrid). A domain still on **RSA-1024 DKIM** is doubly behind — weak *today*
-  and furthest from the coming migration.
+- **DKIM signing:** there is as yet **no standardized post-quantum path**. The PQC
+  signature schemes (ML-DSA, SLH-DSA) are large relative to what DNS TXT records carry
+  comfortably, and the IETF work is early — so the actionable move today is classical
+  hygiene, not waiting for a migration. A domain still on **RSA-1024 DKIM** is behind on
+  the standard that already exists.
 - **DNSSEC** (which DANE and MTA-STS lean on) has its own unsolved PQC signature-size
   problem.
 
@@ -221,9 +226,13 @@ you can decide which to allow.
 
 ### Is it really read-only? Does it change anything?
 
-Yes, fully read-only. It inspects public DNS and *drafts* the exact changes for you to
-review, but it never touches your DNS, sends mail, or needs credentials. Nothing
-changes until you choose to apply a fix yourself.
+Yes, fully read-only — though "read" covers a little more than DNS, so here is the whole
+list. It queries your public DNS records; it fetches your published MTA-STS policy over
+HTTPS (that file is served over HTTPS by design, not DNS); it reads your `robots.txt` to
+check AI-crawler visibility; and it looks up your domain's registration date via public
+RDAP. All four are public information, and it *drafts* the exact changes for you to
+review — it never touches your DNS, sends mail, or needs credentials. Nothing changes
+until you choose to apply a fix yourself.
 
 ### How is this different from a free DMARC checker?
 

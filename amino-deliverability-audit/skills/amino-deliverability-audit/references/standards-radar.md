@@ -39,9 +39,10 @@ Not a standards body, but the de-facto rules that gate the inbox:
 
 ## 3. Post-quantum cryptography (PQC) — the long migration
 
-The macro clock: **NIST IR 8547** sets RSA-2048 / ECC P-256 as **deprecated by 2030,
-disallowed by 2035**; NSA CNSA 2.0 wants PQC for new national-security acquisitions by
-**2027**. Quantum-vulnerable crypto is woven through email in three places:
+The macro clock, stated carefully: **NIST IR 8547 is still an initial public draft**, and
+it *proposes* treating RSA-2048 / ECC P-256 as deprecated around 2030 and disallowed after
+2035; NSA CNSA 2.0 wants PQC for new national-security acquisitions by **2027**. Direction
+of travel, not settled mandate — do not cite the dates as policy. Quantum-vulnerable crypto is woven through email in three places:
 
 - **Transport (most urgent — "harvest now, decrypt later").** Mail captured in transit today
   can be decrypted post-quantum. The fix is **TLS 1.3 + hybrid ML-KEM key exchange**
