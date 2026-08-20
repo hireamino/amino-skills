@@ -7,11 +7,15 @@ on:
   push:
     paths:
       - 'amino-deliverability-audit/skills/amino-deliverability-audit/scripts/**'
+      - 'amino-deliverability-audit/skills/amino-deliverability-audit/SKILL.md'
       - 'conformance/**'
+      - 'FAQ.md'
   pull_request:
     paths:
       - 'amino-deliverability-audit/skills/amino-deliverability-audit/scripts/**'
+      - 'amino-deliverability-audit/skills/amino-deliverability-audit/SKILL.md'
       - 'conformance/**'
+      - 'FAQ.md'
 
 jobs:
   conformance:

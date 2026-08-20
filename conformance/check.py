@@ -79,5 +79,41 @@ chk("§7.4 DKIM-not-SPF-alone prerequisite is stated",
     "DMARC-aligned DKIM rather than relying only on SPF" in _SRC, True)
 chk("t=y is offered in place of the removed pct", "use t=y to test an enforcement policy" in _SRC, True)
 
+# ── the DOCS carry claims too, and nothing was reading them ─────────────────
+# The np= cousin-domain claim was corrected in all three ENGINES on 2026-07-30 and
+# guarded by an assertion that reads engine source — so it survived in FAQ.md, the
+# public front door of this skill, for three weeks. A claim guard that only inspects
+# code cannot see the docs shipped beside it.
+_ROOT = os.path.join(os.path.dirname(__file__), "..")
+_FAQ = open(os.path.join(_ROOT, "FAQ.md"), encoding="utf-8").read()
+_SKILL = open(os.path.join(
+    _ROOT, "amino-deliverability-audit", "skills", "amino-deliverability-audit", "SKILL.md"
+), encoding="utf-8").read()
+
+chk("FAQ: p=reject is not called 'the goal'", "This is the goal" in _FAQ, False)
+chk("FAQ: p=none is not called the most common deliverability mistake",
+    "most common deliverability mistake" in _FAQ, False)
+chk("FAQ: the recommended starting record is p=none with rua",
+    "v=DMARC1; p=none; rua=mailto:reports@yourdomain.com" in _FAQ, True)
+chk("FAQ: no p=reject record offered as the universal good posture",
+    "A strong posture looks like:\n`v=DMARC1; p=reject" in _FAQ, False)
+chk("FAQ: the §7.4 mailing-list caveat is stated",
+    "SHOULD NOT** publish `p=reject`" in _FAQ, True)
+chk("FAQ: np= is not claimed to stop cousin-domain spoofing",
+    "cousin-domain spoofing trick" in _FAQ, False)
+chk("FAQ: the cousin-domain limit is stated explicitly",
+    "no DMARC policy on your domain can reach it" in _FAQ, True)
+chk("SKILL: no unevidenced provider trust-signal claim",
+    "read enforcement as a trust signal" in _SKILL, False)
+
+# check.py runs ONLY from conformance.yml, and only for the paths that workflow filters
+# on. Adding a docs assertion above without widening that filter would have produced a
+# guard that never runs for the change it exists to catch — the same "a test file is not
+# a test until CI runs it" trap already recorded on /preflight. Assert the coupling.
+_WF = open(os.path.join(_ROOT, ".github", "workflows", "conformance.yml"), encoding="utf-8").read()
+chk("CI would run this file when FAQ.md alone changes", "- 'FAQ.md'" in _WF, True)
+chk("CI would run this file when SKILL.md alone changes",
+    "amino-deliverability-audit/SKILL.md'" in _WF, True)
+
 print("\nALL PASS" if ok else "\nSOME FAILED")
 sys.exit(0 if ok else 1)
