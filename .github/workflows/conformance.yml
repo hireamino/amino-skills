@@ -35,3 +35,5 @@ jobs:
         run: python3 conformance/check.py
       - name: Fixtures-driven conformance runner (shared corpus)
         run: python3 conformance/run_py.py
+      - name: Mutation canaries (material contract + network kill switch)
+        run: python3 conformance/canary_py.py

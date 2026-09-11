@@ -1,4 +1,4 @@
-# Amino Deliverability — Correctness Conformance Spec (v1.2)
+# Amino Deliverability — Correctness Conformance Spec (v1.4)
 
 **Status:** proposed · **Owner:** hireamino · **Canonical home:** `amino-skills/conformance/`
 
@@ -22,13 +22,35 @@ fixture corpus (`fixtures.json`) run against every surface in CI.
 
 Each surface ships a thin **conformance harness** that:
 1. injects a fixture's canned DNS/HTTP state into its resolver seam (mock — no network), and
-2. emits a normalized verdict `{ dimension: value, findings: [{area, severity}] }`.
+2. emits its findings plus the DNS-only score contract.
 
-The runner diffs each surface's output against the fixture's `expect`. A surface may
-declare a fixture **N/A** only for a documented reason (e.g. the edge can't open `:25`, so
-live-STARTTLS fixtures are web/Action-N/A). Any other diff fails CI.
+The runner checks each surface against a reviewed answer in `expect`, never against
+another surface or a regenerated snapshot. For every `dns-engine` fixture:
 
-## v1.2 status
+- `present` and `absent` retain the original positive/negative guards;
+- `findings` is a closed list: missing, duplicate, and additional findings fail;
+- finding identity, severity, action, and explicit-null/fix substring are asserted;
+- `score` is exact, including all buckets, DKIM state, gap, and note; and
+- a surface may omit a finding only through `surfaces` plus a non-empty
+  `notApplicable` reason for that surface.
+
+The only current N/A is the skill's live port-25 STARTTLS finding on the two DANE
+fixtures: the web and Action engines intentionally omit that capability. Any other
+difference fails CI and requires Product review. The corpus has no expectation
+regeneration mode; reviewed answers cannot be replaced by current output.
+
+## Current status
+
+**v1.4 / WHI-8 — material contract is load-bearing:** all 15 `dns-engine`
+fixtures assert 139 common findings, the two documented skill-only STARTTLS findings,
+and 15 exact score objects across the published skill, web audit, and GitHub Action.
+The Python runner executes `audit.main()` itself, then rebinds every import-time
+`batch_score.py` lookup to the fixture resolver. Real DNS and socket fallbacks are
+kill-switched. Runtime assertion ledgers fail if a runner stubs out the new checks.
+Committed mutation canaries prove severity, finding presence, action, fix, score,
+runner integrity, and the Python network kill switch independently.
+
+Historical delivery notes follow.
 
 **Batch 1 — fixed across all three surfaces:** **I1** (DKIM revoked empty `p=`), **I4**
 (Ed25519 length), **I6/I9** (DMARC policy must be `{none,quarantine,reject}`), **I7**
@@ -61,11 +83,10 @@ the tree walk — the skill only parsed `sp`/`np` on the record it already had).
 **WS1/WS5 — DONE (unified runner):** `conformance/run.mjs` (JS, `ENGINE` env → either
 JS engine: the Action's `engine.mjs` or the web's `audit.js`) and `conformance/run_py.py`
 (skill) drive the SAME `fixtures.json`
-corpus through each real engine with a mock resolver and assert `expect`. Wired as a hard
+corpus through each real engine with a mock resolver and assert the reviewed contract. Wired as a hard
 CI gate in all three repos (Action `security-gate.yml`, web `skill-parity.yml`, skill
-`conformance.yml`). Add a fixture once → all three surfaces must pass it. Currently 10
-dns-engine cases pass on all three; 7 cases are logged SKIPPED with reasons (pure-function,
-HTTP-stub, or v1.3 DANE/DNSSEC/resolver-level).
+`conformance.yml`). Add a fixture once → all three surfaces must pass it. Currently 15
+dns-engine cases pass on all three; five cases are logged SKIPPED with reasons.
 
 **v1.3 — DONE (all $0, DoH/dig only, zero new deps):** a resolver meta side-channel now
 surfaces DoH `Status` (RCODE) + `AD` (DNSSEC-validated) — JS via `query.meta`, skill via
@@ -129,13 +150,14 @@ ahead on the tree walk (I10). The universal bugs — in **all three** — are **
 
 ## Release gate
 
-`v1.2` = every ✗ and (implementation-confirmed) `?`/`~` in I1–I16 + I19–I20 turned ✓ on all
-three surfaces, with the conformance runner green in all three repos' CI. I17/I18 (DANE/
-DNSSEC depth) may slip to **v1.3** if scoped out explicitly — they're advisory-only and
-equally absent everywhere, so they don't cause *divergence*, only shared understatement.
+Every shipping surface must consume the same reviewed corpus revision and pass the
+closed-world runner plus its mutation canaries. A severity, action, fix-meaning, or score
+difference is a product decision and cannot be normalized by weakening an expectation.
+The web and Action pin files must name the same full amino-skills commit before release.
 
 ## Fixtures
 
-See `fixtures.json`. ~24 known-answer cases, one+ per invariant. Each is language-neutral:
-it declares logical DNS/HTTP state and the expected normalized verdict, and every surface's
-harness adapts it to its own resolver mock.
+See `fixtures.json`. It contains 20 known-answer cases: 15 closed-world
+`dns-engine` cases plus five explicitly skipped pure/HTTP/wrapper cases covered by
+per-surface tests or later work. Each is language-neutral and every harness adapts it to
+its own resolver mock.
