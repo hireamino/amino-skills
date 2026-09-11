@@ -1,12 +1,12 @@
 {
-  "$schema": "amino-conformance/v2",
-  "notes": "Single shared known-answer corpus, consumed by conformance/run.mjs (JS engines: amino-audit-action/src/engine.mjs, amino-site/functions/audit.js) and conformance/run_py.py (skill scripts/audit.py). Each fixture has a `mode`: 'dns-engine' cases are driven end-to-end through the real audit with a mock resolver built from `input.dns` (no network) and asserted via `expect`. Other modes (pure/http/dnssec/wrapper) are exercised by the per-surface pure-function checks or are not yet implemented (v1.3); the runner logs them as SKIPPED with a reason (no silent caps). `input.dns` keys are FQDNs; `*._domainkey.<domain>` is a wildcard matching any DKIM selector under that domain. `expect.present` = a finding must exist with that area whose title contains `includes`; `expect.absent` = no finding title may contain any of these strings.",
+  "$schema": "amino-conformance/v3",
+  "notes": "Single shared reviewed-answer corpus consumed by conformance/run.mjs (web and Action) and conformance/run_py.py (published skill). For every dns-engine fixture, legacy present/absent assertions remain active and expect.findings is a closed list: area, title, severity, action, and fixIncludes (or explicit null) are asserted. expect.score is the exact 8-boolean + DKIM-state + gap + note object. Surface-specific findings require surfaces plus a documented notApplicable reason for every omitted shipping surface. No expectation-regeneration mode exists. Non-dns-engine modes remain explicitly skipped with a reason.",
   "fixtures": [
     {
       "id": "dkim-revoked-empty-p",
       "invariant": "I1",
       "mode": "dns-engine",
-      "desc": "Empty p= is a revoked selector \u2014 never healthy.",
+      "desc": "Empty p= is a revoked selector — never healthy.",
       "input": {
         "domain": "ex.com",
         "dns": {
@@ -26,7 +26,85 @@
         ],
         "absent": [
           "DKIM present"
-        ]
+        ],
+        "findings": [
+          {
+            "area": "DMARC",
+            "title": "No DMARC record",
+            "severity": "critical",
+            "action": "Publish a DMARC policy",
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to"
+          },
+          {
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM key is revoked or malformed",
+            "severity": "high",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Publish a valid key at this selector (RSA >=2048 or Ed25519), or remove the dead record"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "action": "Confirm STARTTLS on the mail server",
+            "fixIncludes": null
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": false,
+          "DMARC_enforced": false,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "invalid",
+          "gap": 8,
+          "note": "no SPF; DKIM selector1 revoked (empty p=); no DMARC"
+        }
       }
     },
     {
@@ -53,7 +131,85 @@
         ],
         "absent": [
           "DKIM present"
-        ]
+        ],
+        "findings": [
+          {
+            "area": "DMARC",
+            "title": "No DMARC record",
+            "severity": "critical",
+            "action": "Publish a DMARC policy",
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to"
+          },
+          {
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM key is revoked or malformed",
+            "severity": "high",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Publish a valid key at this selector (RSA >=2048 or Ed25519), or remove the dead record"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "action": "Confirm STARTTLS on the mail server",
+            "fixIncludes": null
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": false,
+          "DMARC_enforced": false,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "invalid",
+          "gap": 8,
+          "note": "no SPF; DKIM selector1 malformed (malformed-ed25519); no DMARC"
+        }
       }
     },
     {
@@ -80,7 +236,85 @@
         ],
         "absent": [
           "revoked or malformed"
-        ]
+        ],
+        "findings": [
+          {
+            "area": "DMARC",
+            "title": "No DMARC record",
+            "severity": "critical",
+            "action": "Publish a DMARC policy",
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to"
+          },
+          {
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "action": "Confirm STARTTLS on the mail server",
+            "fixIncludes": null
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM present (DKIM selector1 (RSA-2048))",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": false,
+          "DMARC_enforced": false,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "good",
+          "gap": 8,
+          "note": "no SPF; no DMARC"
+        }
       }
     },
     {
@@ -107,7 +341,85 @@
         ],
         "absent": [
           "DKIM present"
-        ]
+        ],
+        "findings": [
+          {
+            "area": "DMARC",
+            "title": "No DMARC record",
+            "severity": "critical",
+            "action": "Publish a DMARC policy",
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to"
+          },
+          {
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM key is RSA-1024 (legacy)",
+            "severity": "high",
+            "action": "Rotate DKIM to a 2048-bit key",
+            "fixIncludes": "Rotate the selector to RSA-2048 (or Ed25519): publish the new key, let it propagate,"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "action": "Confirm STARTTLS on the mail server",
+            "fixIncludes": null
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": false,
+          "DMARC_enforced": false,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "weak",
+          "gap": 9,
+          "note": "no SPF; DKIM selector1=RSA-1024; no DMARC"
+        }
       }
     },
     {
@@ -134,7 +446,85 @@
         ],
         "absent": [
           "DMARC enforced"
-        ]
+        ],
+        "findings": [
+          {
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with"
+          },
+          {
+            "area": "DMARC",
+            "title": "DMARC policy value is invalid (p=banana)",
+            "severity": "high",
+            "action": "Strengthen the DMARC policy",
+            "fixIncludes": "Set p= to none (monitor), quarantine, or reject."
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "action": "Confirm STARTTLS on the mail server",
+            "fixIncludes": null
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": true,
+          "DMARC_enforced": false,
+          "DMARC_rua": true,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 6,
+          "note": "no SPF; no DKIM key at common/provider selectors"
+        }
       }
     },
     {
@@ -161,7 +551,85 @@
         ],
         "absent": [
           "policy value is invalid"
-        ]
+        ],
+        "findings": [
+          {
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "action": "Confirm STARTTLS on the mail server",
+            "fixIncludes": null
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+          },
+          {
+            "area": "DMARC",
+            "title": "DMARC enforced (p=reject)",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": true,
+          "DMARC_enforced": false,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 7,
+          "note": "no SPF; no DKIM key at common/provider selectors; no rua"
+        }
       }
     },
     {
@@ -188,7 +656,85 @@
         ],
         "absent": [
           "DMARC enforced"
-        ]
+        ],
+        "findings": [
+          {
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with"
+          },
+          {
+            "area": "DMARC",
+            "title": "DMARC policy is p=none (monitor only)",
+            "severity": "high",
+            "action": "Review DMARC reports, then stage quarantine",
+            "fixIncludes": "Collect and review DMARC aggregate reports before enforcement, and remediate every"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "action": "Confirm STARTTLS on the mail server",
+            "fixIncludes": null
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": true,
+          "DMARC_enforced": false,
+          "DMARC_rua": true,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 6,
+          "note": "no SPF; no DKIM key at common/provider selectors; DMARC p=none"
+        }
       }
     },
     {
@@ -213,7 +759,99 @@
             "area": "DMARC",
             "includes": "Multiple DMARC records"
           }
-        ]
+        ],
+        "findings": [
+          {
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with"
+          },
+          {
+            "area": "DMARC",
+            "title": "Multiple DMARC records (invalid)",
+            "severity": "high",
+            "action": "Merge to a single DMARC record",
+            "fixIncludes": "Keep one DMARC record and remove the rest."
+          },
+          {
+            "area": "DMARC",
+            "title": "DMARC has no rua (no aggregate reporting)",
+            "severity": "medium",
+            "action": "Turn on DMARC reporting (rua) — needed before you enforce",
+            "fixIncludes": "Add rua=mailto:dmarc@<domain> to receive daily aggregate XML reports."
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "action": "Confirm STARTTLS on the mail server",
+            "fixIncludes": null
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+          },
+          {
+            "area": "DMARC",
+            "title": "DMARC enforced (p=reject)",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": true,
+          "DMARC_enforced": true,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 6,
+          "note": "no SPF; no DKIM key at common/provider selectors; no rua"
+        }
       }
     },
     {
@@ -240,7 +878,85 @@
         ],
         "absent": [
           "No DMARC record"
-        ]
+        ],
+        "findings": [
+          {
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "action": "Confirm STARTTLS on the mail server",
+            "fixIncludes": null
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+          },
+          {
+            "area": "DMARC",
+            "title": "DMARC enforced (inherited p=reject from example.co.uk)",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": false,
+          "DMARC_enforced": false,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 8,
+          "note": "no SPF; no DKIM key at common/provider selectors; no DMARC"
+        }
       }
     },
     {
@@ -267,7 +983,85 @@
         ],
         "absent": [
           "no `all` mechanism"
-        ]
+        ],
+        "findings": [
+          {
+            "area": "DMARC",
+            "title": "No DMARC record",
+            "severity": "critical",
+            "action": "Publish a DMARC policy",
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "action": "Confirm STARTTLS on the mail server",
+            "fixIncludes": null
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+          },
+          {
+            "area": "SPF",
+            "title": "SPF present",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null
+          }
+        ],
+        "score": {
+          "SPF": true,
+          "DMARC": false,
+          "DMARC_enforced": false,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 7,
+          "note": "no DKIM key at common/provider selectors; no DMARC"
+        }
       }
     },
     {
@@ -291,7 +1085,99 @@
             "area": "SPF",
             "includes": "exceeds 10 DNS lookups"
           }
-        ]
+        ],
+        "findings": [
+          {
+            "area": "DMARC",
+            "title": "No DMARC record",
+            "severity": "critical",
+            "action": "Publish a DMARC policy",
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to"
+          },
+          {
+            "area": "SPF",
+            "title": "SPF exceeds 10 DNS lookups (11)",
+            "severity": "high",
+            "action": "Flatten SPF to under 10 lookups",
+            "fixIncludes": "Flatten or consolidate includes; remove unused senders. Target <=8 to leave headroom."
+          },
+          {
+            "area": "SPF",
+            "title": "SPF exceeds the void-lookup limit (11)",
+            "severity": "high",
+            "action": "Remove dead SPF includes",
+            "fixIncludes": "Find and remove the dead include/redirect/a/mx targets (the ones that no longer"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "action": "Confirm STARTTLS on the mail server",
+            "fixIncludes": null
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+          },
+          {
+            "area": "SPF",
+            "title": "SPF present",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": false,
+          "DMARC_enforced": false,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 8,
+          "note": "SPF 11 lookups; no DKIM key at common/provider selectors; no DMARC"
+        }
       }
     },
     {
@@ -340,7 +1226,99 @@
             "area": "Transport",
             "includes": "not DNSSEC-validated"
           }
-        ]
+        ],
+        "findings": [
+          {
+            "area": "DMARC",
+            "title": "No DMARC record",
+            "severity": "critical",
+            "action": "Publish a DMARC policy",
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to"
+          },
+          {
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+          },
+          {
+            "area": "Transport",
+            "title": "DANE/TLSA present but not DNSSEC-validated",
+            "severity": "medium",
+            "action": "Publish DANE/TLSA records",
+            "fixIncludes": "Enable DNSSEC on the zone so the TLSA records are cryptographically validated."
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC enabled",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null
+          },
+          {
+            "area": "Transport",
+            "title": "Could not establish STARTTLS to primary MX",
+            "severity": "medium",
+            "action": "Confirm STARTTLS on the mail server",
+            "fixIncludes": "Verify the MX offers STARTTLS with a valid certificate.",
+            "surfaces": [
+              "skill"
+            ],
+            "notApplicable": {
+              "web": "The edge engine cannot open port 25 for a live STARTTLS probe.",
+              "action": "The vendored JS engine intentionally omits live port-25 STARTTLS probing."
+            }
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": false,
+          "DMARC_enforced": false,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": true,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 7,
+          "note": "no SPF; no DKIM key at common/provider selectors; no DMARC"
+        }
       }
     },
     {
@@ -374,7 +1352,99 @@
         ],
         "absent": [
           "not DNSSEC-validated"
-        ]
+        ],
+        "findings": [
+          {
+            "area": "DMARC",
+            "title": "No DMARC record",
+            "severity": "critical",
+            "action": "Publish a DMARC policy",
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to"
+          },
+          {
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+          },
+          {
+            "area": "Transport",
+            "title": "DANE/TLSA present",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC enabled",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null
+          },
+          {
+            "area": "Transport",
+            "title": "Could not establish STARTTLS to primary MX",
+            "severity": "medium",
+            "action": "Confirm STARTTLS on the mail server",
+            "fixIncludes": "Verify the MX offers STARTTLS with a valid certificate.",
+            "surfaces": [
+              "skill"
+            ],
+            "notApplicable": {
+              "web": "The edge engine cannot open port 25 for a live STARTTLS probe.",
+              "action": "The vendored JS engine intentionally omits live port-25 STARTTLS probing."
+            }
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": false,
+          "DMARC_enforced": false,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": true,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 7,
+          "note": "no SPF; no DKIM key at common/provider selectors; no DMARC"
+        }
       }
     },
     {
@@ -400,7 +1470,85 @@
         ],
         "absent": [
           "DNSSEC not enabled"
-        ]
+        ],
+        "findings": [
+          {
+            "area": "DMARC",
+            "title": "No DMARC record",
+            "severity": "critical",
+            "action": "Publish a DMARC policy",
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to"
+          },
+          {
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "action": "Confirm STARTTLS on the mail server",
+            "fixIncludes": null
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC enabled",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": false,
+          "DMARC_enforced": false,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 8,
+          "note": "no SPF; no DKIM key at common/provider selectors; no DMARC"
+        }
       }
     },
     {
@@ -426,7 +1574,85 @@
         ],
         "absent": [
           "DNSSEC enabled"
-        ]
+        ],
+        "findings": [
+          {
+            "area": "DMARC",
+            "title": "No DMARC record",
+            "severity": "critical",
+            "action": "Publish a DMARC policy",
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to"
+          },
+          {
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "action": "Confirm STARTTLS on the mail server",
+            "fixIncludes": null
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": false,
+          "DMARC_enforced": false,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 8,
+          "note": "no SPF; no DKIM key at common/provider selectors; no DMARC"
+        }
       }
     },
     {

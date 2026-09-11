@@ -1,50 +1,81 @@
 #!/usr/bin/env python3
-"""Unified conformance runner for the Python skill surface (WS1/WS5).
+"""Closed-world conformance runner for the published Python skill.
 
-Drives the SHARED conformance/fixtures.json corpus through the real scripts/audit.py
-check functions with a fixture-backed resolver (no network), and asserts each fixture's
-`expect`. Same corpus as the JS runner (conformance/run.mjs) — a fixture added once is
-enforced on every surface. Exits non-zero on any failure; non-dns-engine fixtures are
-logged SKIPPED with a reason (no silent caps).
+The runner calls audit.main() itself so it exercises the exact finding composition
+used by the shipping skill. DNS is fixture-backed, every socket/DNS fallback is
+blocked, and batch_score's import-time bindings are redirected to the same fixture.
 """
+import contextlib
+import io
 import json
 import os
 import sys
 
 HERE = os.path.dirname(__file__)
-SCRIPTS = os.path.join(HERE, "..", "amino-deliverability-audit", "skills",
-                       "amino-deliverability-audit", "scripts")
-sys.path.insert(0, os.path.abspath(SCRIPTS))
+DEFAULT_SCRIPTS = os.path.join(
+    HERE, "..", "amino-deliverability-audit", "skills",
+    "amino-deliverability-audit", "scripts",
+)
+SCRIPTS = os.path.abspath(os.environ.get("AUDIT_SCRIPTS", DEFAULT_SCRIPTS))
+sys.path.insert(0, SCRIPTS)
+
+import resolver  # noqa: E402
+
+
+NETWORK_ATTEMPTS = []
+
+
+def _blocked_dns(name, rtype):
+    message = f"external network disabled: DNS lookup attempted for {name} {rtype}"
+    NETWORK_ATTEMPTS.append(message)
+    raise AssertionError(message)
+
+
+def _blocked_socket(*args, **kwargs):
+    message = f"external network disabled: socket lookup attempted for {args!r}"
+    NETWORK_ATTEMPTS.append(message)
+    raise AssertionError(message)
+
+
+# Fail closed before importing the shipping modules. Any binding the fixture
+# substitution misses points at a backend that raises instead of reaching real DNS.
+resolver.set_backend(_blocked_dns)
+
 import audit  # noqa: E402
+import batch_score  # noqa: E402
+
+audit.socket.create_connection = _blocked_socket
+audit.socket.getaddrinfo = _blocked_socket
+audit.socket.gethostbyaddr = _blocked_socket
+audit.time.sleep = lambda _seconds: None
 
 
-def _norm(n):
-    return n.rstrip(".").lower()
+def _norm(name):
+    return name.rstrip(".").lower()
 
 
 def install_resolver(dns):
-    """Point audit.py's resolver seam at fixture DNS. `*._domainkey.<domain>` is a
-    wildcard matching any DKIM selector under that domain."""
-    m = {_norm(k): v for k, v in (dns or {}).items()}
+    """Install one fixture's DNS in audit and every batch_score import binding."""
+    records = {_norm(name): value for name, value in (dns or {}).items()}
 
-    def recs(name, rtype="A", *a, **k):
+    def recs(name, rtype="A", *args, **kwargs):
         name = _norm(name)
-        if name in m and rtype in m[name]:
-            return m[name][rtype]
-        for key, val in m.items():
-            if key.startswith("*._domainkey.") and name.endswith(key[1:]) and rtype in val:
-                return val[rtype]
+        if name in records and rtype in records[name]:
+            return records[name][rtype]
+        for key, value in records.items():
+            if key.startswith("*._domainkey.") and name.endswith(key[1:]) and rtype in value:
+                return value[rtype]
         return []
 
     def first_txt(name, prefix):
-        for r in recs(name, "TXT"):
-            if r.lower().startswith(prefix.lower()):
-                return r
+        for row in recs(name, "TXT"):
+            if row.lower().startswith(prefix.lower()):
+                return row
         return None
 
     def dns_meta(name, rtype):
-        e = m.get(_norm(name), {})
-        return {"status": e.get("status", 0), "ad": bool(e.get("ad"))}
+        entry = records.get(_norm(name), {})
+        return {"status": entry.get("status", 0), "ad": bool(entry.get("ad"))}
 
     audit.dig = recs
     audit.query_fresh = recs
@@ -52,52 +83,258 @@ def install_resolver(dns):
     audit.confirm_txt = lambda name, prefix: first_txt(name, prefix)
     audit.dns_meta = dns_meta
 
+    # batch_score imports these names from audit at module load. Rebind every one
+    # so the scorer cannot silently escape the fixture resolver.
+    for name in (
+        "first_txt", "count_spf_lookups", "effective_terminator", "resolves",
+        "dkim_lookup", "mx_providers",
+    ):
+        setattr(batch_score, name, getattr(audit, name))
+    batch_score.dig = recs
+    return recs
 
-CHECKS = {"DKIM": "check_dkim", "DMARC": "check_dmarc", "SPF": "check_spf",
-          "Transport": "check_transport", "DNSSEC": "check_dnssec"}
+
+def run_shipping_audit(domain):
+    """Execute audit.main(), capturing its public JSON result."""
+    old_argv = sys.argv
+    output = io.StringIO()
+    try:
+        sys.argv = [audit.__file__, domain]
+        with contextlib.redirect_stdout(output):
+            audit.main()
+    finally:
+        sys.argv = old_argv
+    return json.loads(output.getvalue())
+
+
+def run_score(domain):
+    buckets, note = batch_score.score(domain)
+    return {**buckets, "gap": batch_score.gap_of(buckets), "note": note}
+
+
+def finding_key(finding):
+    return finding["area"], finding["title"]
+
+
+def finding_label(finding):
+    return f"{finding.get('area')}|{finding.get('title')}"
+
+
+def expected_findings(fx):
+    findings = fx.get("expect", {}).get("findings")
+    if not isinstance(findings, list):
+        raise AssertionError(f"{fx['id']}.expect.findings must be a reviewed closed list")
+    expected = []
+    not_applicable = 0
+    for finding in findings:
+        for field in ("area", "title", "severity", "action", "fixIncludes"):
+            if field not in finding:
+                raise AssertionError(f"{fx['id']}.expect.findings missing {field}")
+        surfaces = finding.get("surfaces", ["skill", "web", "action"])
+        if "skill" in surfaces:
+            expected.append(finding)
+        else:
+            reason = finding.get("notApplicable", {}).get("skill")
+            if not reason:
+                raise AssertionError(
+                    f"{fx['id']}.expect.findings[{finding_label(finding)}] "
+                    "omits skill without a notApplicable reason"
+                )
+            not_applicable += 1
+    return expected, not_applicable
+
+
+def compare_legacy(fx, findings):
+    problems = []
+    titles = [f"{finding['area']}:{finding['title']}" for finding in findings]
+    for present in fx["expect"].get("present", []):
+        if not any(
+            finding["area"] == present["area"]
+            and present["includes"] in finding["title"]
+            for finding in findings
+        ):
+            problems.append(
+                f"legacy.present[{present['area']}~{present['includes']!r}]: missing"
+            )
+    for absent in fx["expect"].get("absent", []):
+        if any(absent in title for title in titles):
+            problems.append(f"legacy.absent[{absent!r}]: unexpected match")
+    return problems
+
+
+def compare_contract(fx, findings, score, ledger):
+    problems = []
+    expected, _ = expected_findings(fx)
+    actual_by_key = {}
+    for actual in findings:
+        key = finding_key(actual)
+        if key in actual_by_key:
+            problems.append(
+                f"findings[{finding_label(actual)}].identity: duplicate actual finding"
+            )
+        else:
+            actual_by_key[key] = actual
+
+    expected_keys = set()
+    for wanted in expected:
+        for field in ("identity", "severity", "action", "fix"):
+            ledger[field] += 1
+        key = finding_key(wanted)
+        if key in expected_keys:
+            problems.append(
+                f"findings[{finding_label(wanted)}].identity: duplicate expectation"
+            )
+            continue
+        expected_keys.add(key)
+        actual = actual_by_key.get(key)
+        if actual is None:
+            problems.append(
+                f"findings[{finding_label(wanted)}].identity: expected finding, got missing"
+            )
+            continue
+        if actual.get("severity") != wanted["severity"]:
+            problems.append(
+                f"findings[{finding_label(wanted)}].severity: "
+                f"expected {wanted['severity']!r}, got {actual.get('severity')!r}"
+            )
+        actual_action = actual.get("action")
+        if actual_action != wanted["action"]:
+            problems.append(
+                f"findings[{finding_label(wanted)}].action: "
+                f"expected {wanted['action']!r}, got {actual_action!r}"
+            )
+        actual_fix = actual.get("fix")
+        if wanted["fixIncludes"] is None:
+            if actual_fix is not None:
+                problems.append(
+                    f"findings[{finding_label(wanted)}].fix: expected None, got {actual_fix!r}"
+                )
+        elif not isinstance(actual_fix, str) or wanted["fixIncludes"] not in actual_fix:
+            problems.append(
+                f"findings[{finding_label(wanted)}].fix: "
+                f"expected substring {wanted['fixIncludes']!r}, got {actual_fix!r}"
+            )
+
+    ledger["closedWorld"] += 1
+    for actual in findings:
+        if finding_key(actual) not in expected_keys:
+            problems.append(
+                f"findings[{finding_label(actual)}].identity: unexpected finding"
+            )
+
+    wanted_score = fx["expect"].get("score")
+    if not isinstance(wanted_score, dict):
+        problems.append("score: missing reviewed score object")
+        return problems
+    ledger["scoreFields"] += len(wanted_score)
+    if sorted(score) != sorted(wanted_score):
+        problems.append(
+            f"score.keys: expected {sorted(wanted_score)!r}, got {sorted(score)!r}"
+        )
+    for field, wanted in wanted_score.items():
+        actual = score.get(field)
+        if actual != wanted:
+            problems.append(
+                f"score.{field}: expected {wanted!r}, got {actual!r}"
+            )
+    return problems
+
+
+def assertion_plan(fixtures):
+    plan = {
+        "identity": 0, "severity": 0, "action": 0, "fix": 0,
+        "scoreFields": 0, "closedWorld": 0,
+    }
+    for fx in fixtures:
+        if fx.get("mode") != "dns-engine":
+            continue
+        expected, _ = expected_findings(fx)
+        for field in ("identity", "severity", "action", "fix"):
+            plan[field] += len(expected)
+        plan["scoreFields"] += len(fx.get("expect", {}).get("score", {}))
+        plan["closedWorld"] += 1
+    return plan
 
 
 def run():
-    fixtures = json.load(open(os.path.join(HERE, "fixtures.json")))["fixtures"]
-    npass = nfail = nskip = 0
+    with open(os.path.join(HERE, "fixtures.json"), encoding="utf-8") as handle:
+        fixtures = json.load(handle)["fixtures"]
+    only = os.environ.get("CONFORMANCE_FIXTURE")
+    if only:
+        fixtures = [fx for fx in fixtures if fx["id"] == only]
+        if not fixtures:
+            print(f"unknown CONFORMANCE_FIXTURE: {only}", file=sys.stderr)
+            return 2
+
+    passed = failed = skipped = not_applicable = 0
+    failures = []
+    ledger = {
+        "identity": 0, "severity": 0, "action": 0, "fix": 0,
+        "scoreFields": 0, "closedWorld": 0,
+    }
+
     for fx in fixtures:
         if fx.get("mode") != "dns-engine":
-            nskip += 1
-            print(f"  SKIP  {fx['id']} ({fx['invariant']}) — {fx.get('skip_reason', fx.get('mode'))}")
+            skipped += 1
+            print(
+                f"  SKIP  {fx['id']} ({fx['invariant']}) — "
+                f"{fx.get('skip_reason', fx.get('mode'))}"
+            )
             continue
-        area = fx["expect"]["present"][0]["area"] if fx["expect"].get("present") else None
-        fn = getattr(audit, CHECKS.get(area, ""), None)
-        if fn is None:
-            nskip += 1
-            print(f"  SKIP  {fx['id']} ({fx['invariant']}) — no python check mapped for area {area}")
-            continue
-        install_resolver(fx["input"]["dns"])
-        F = []
+
+        NETWORK_ATTEMPTS.clear()
+        install_resolver(fx["input"].get("dns", {}))
+        if os.environ.get("CONFORMANCE_CANARY_NETWORK_LOOKUP") == "1":
+            batch_score.dig = resolver.query
+
         try:
-            fn(fx["input"]["domain"], F)
-        except Exception as e:
-            nfail += 1
-            print(f"  FAIL  {fx['id']} ({fx['invariant']}) — threw {e}")
+            findings = run_shipping_audit(fx["input"]["domain"]).get("findings", [])
+            score = run_score(fx["input"]["domain"])
+            expected, n_a = expected_findings(fx)
+            not_applicable += n_a
+            if NETWORK_ATTEMPTS:
+                raise AssertionError("; ".join(NETWORK_ATTEMPTS))
+        except Exception as error:
+            failed += 1
+            message = f"{fx['id']}.execution: threw {error}"
+            failures.append(message)
+            print(f"  FAIL  {fx['id']} ({fx['invariant']}) — {message}")
             continue
-        titles = [f"{f['area']}:{f['title']}" for f in F]
-        problems = []
-        for p in fx["expect"].get("present", []):
-            if not any(f["area"] == p["area"] and p["includes"] in f["title"] for f in F):
-                problems.append(f'missing present [{p["area"]} ~ "{p["includes"]}"]')
-        for a in fx["expect"].get("absent", []):
-            if any(a in t for t in titles):
-                problems.append(f'unexpected absent-match "{a}"')
+
+        problems = [
+            *compare_legacy(fx, findings),
+            *compare_contract(fx, findings, score, ledger),
+        ]
         if problems:
-            nfail += 1
-            print(f"  FAIL  {fx['id']} ({fx['invariant']}) — {'; '.join(problems)}")
+            failed += 1
+            failures.extend(f"{fx['id']}.{problem}" for problem in problems)
+            print(
+                f"  FAIL  {fx['id']} ({fx['invariant']}) — "
+                + "; ".join(problems)
+            )
         else:
-            npass += 1
+            passed += 1
             print(f"  PASS  {fx['id']} ({fx['invariant']})")
 
-    print(f"\nEngine: scripts/audit.py")
-    print(f"Results: {npass} passed, {nfail} failed, {nskip} skipped.")
-    sys.exit(1 if nfail else 0)
+    plan = assertion_plan(fixtures)
+    for field, wanted in plan.items():
+        actual = ledger[field]
+        if actual != wanted:
+            failed += 1
+            message = f"runner.assertions.{field}: expected {wanted}, got {actual}"
+            failures.append(message)
+            print(f"  FAIL  {message}")
+
+    print("\nSurface: skill")
+    print(f"Engine: {audit.__file__}")
+    print(
+        f"Results: {passed} passed, {failed} failed, {skipped} skipped, "
+        f"{not_applicable} N/A."
+    )
+    if failures:
+        print("Failures:\n- " + "\n- ".join(failures))
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
-    run()
+    sys.exit(run())
