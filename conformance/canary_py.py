@@ -10,6 +10,7 @@ import tempfile
 
 HERE = Path(__file__).resolve().parent
 RUNNER = HERE / "run_py.py"
+CHECK = HERE / "check.py"
 SCRIPTS = (
     HERE.parent
     / "amino-deliverability-audit"
@@ -37,6 +38,21 @@ def execute(extra_env=None):
     }
     return subprocess.run(
         [sys.executable, str(RUNNER)],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=False,
+    )
+
+
+def execute_check(extra_env=None):
+    env = {
+        **os.environ,
+        "PYTHONDONTWRITEBYTECODE": "1",
+        **(extra_env or {}),
+    }
+    return subprocess.run(
+        [sys.executable, str(CHECK)],
         text=True,
         capture_output=True,
         env=env,
@@ -105,12 +121,32 @@ try:
             }),
             "null-mx-not-applicable.score.MTA_STS: expected None, got False",
         )
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi50-verify-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py", "verify.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        verify_path = target / "verify.py"
+        source = verify_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '    if null_mx:\n        r["MTA_STS"] = None',
+            '    if False:  # WHI-50 verifier-wiring canary\n        r["MTA_STS"] = None',
+            "independent verifier null-MX wiring",
+        )
+        verify_path.write_text(source, encoding="utf-8")
+        expect_red(
+            "I removed independent-verifier wiring",
+            execute_check({"AUDIT_SCRIPTS": str(target)}),
+            "WHI-50 verifier wires null MX into N/A buckets -> "
+            "(False, False, False) (exp (None, None, None))",
+        )
 except Exception as error:
     print(f"FAIL  canary setup — {error}")
     FAILED += 1
 
-print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 3 cases.")
-if PASSED + FAILED != 3:
-    print(f"FAIL  canary count: expected 3, got {PASSED + FAILED}", file=sys.stderr)
+print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 4 cases.")
+if PASSED + FAILED != 4:
+    print(f"FAIL  canary count: expected 4, got {PASSED + FAILED}", file=sys.stderr)
     sys.exit(1)
 sys.exit(1 if FAILED else 0)

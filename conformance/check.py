@@ -10,7 +10,7 @@ import base64
 import os
 import sys
 
-SCRIPTS = os.path.join(
+SCRIPTS = os.environ.get("AUDIT_SCRIPTS") or os.path.join(
     os.path.dirname(__file__), "..",
     "amino-deliverability-audit", "skills", "amino-deliverability-audit", "scripts",
 )
@@ -73,6 +73,21 @@ chk("WHI-50 verifier does not exempt no MX", verify._null_mx_answer([]), False)
 chk("WHI-50 verifier does not exempt ambiguous MX",
     verify._null_mx_answer(["0 .", "10 mx.example.com."]), False)
 chk("WHI-50 verifier renders N/A as dash", verify.cell(None), "—")
+_verify_doh, _verify_txt = verify.doh, verify.txt_starting
+try:
+    verify.txt_starting = lambda *_args, **_kwargs: None
+    verify.doh = lambda name, rrtype, resolver="google": ["0 ."] if (name, rrtype) == ("d", "MX") else []
+    _independent_null = verify.independent("d")[0]
+    chk("WHI-50 verifier wires null MX into N/A buckets",
+        tuple(_independent_null[b] for b in ("MTA_STS", "TLS_RPT", "DANE")),
+        (None, None, None))
+    verify.doh = lambda *_args, **_kwargs: []
+    _independent_no_mx = verify.independent("d")[0]
+    chk("WHI-50 verifier wiring does not exempt no MX",
+        tuple(_independent_no_mx[b] for b in ("MTA_STS", "TLS_RPT", "DANE")),
+        (False, False, False))
+finally:
+    verify.doh, verify.txt_starting = _verify_doh, _verify_txt
 
 # ── DMARC enforcement advice (RFC 9989 §7.4) ────────────────────────────────
 # The short action label is the ONLY remediation text some surfaces render, so it
