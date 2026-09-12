@@ -554,8 +554,31 @@ def _mx_hosts(domain):
     for r in dig(domain, "MX"):
         parts = r.split()
         if len(parts) >= 2 and parts[0].isdigit():
-            out.append(parts[-1].rstrip(".").lower())
+            host = parts[-1].rstrip(".").lower()
+            if host:
+                out.append(host)
     return out
+
+
+def _is_null_mx_row(row):
+    """Preserve the existing accepted null-MX spellings for one MX row."""
+    parts = row.split()
+    return bool(parts) and (parts[-1].rstrip(".") == "" or row.strip() in ("0 .", "0."))
+
+
+def is_null_mx(mx_rows):
+    """True only for an unambiguous null MX answer.
+
+    A null exchange alongside any real MX is contradictory evidence, not permission
+    to suppress inbound controls.  Requiring every returned row to be null preserves
+    the existing row parser while making that ambiguity fail toward reporting.
+    """
+    rows = list(mx_rows)
+    return bool(rows) and all(_is_null_mx_row(row) for row in rows)
+
+
+def _real_mx_rows(mx_rows):
+    return [row for row in mx_rows if not _is_null_mx_row(row)]
 
 
 def _mx_pattern_matches(pattern, host):
@@ -595,6 +618,15 @@ def mta_sts_policy_problems(policy):
 
 
 def check_mta_sts(domain, F):
+    if is_null_mx(dig(domain, "MX")):
+        F.append(dict(
+            area="MTA-STS",
+            severity="pass",
+            title="MTA-STS not applicable — domain receives no mail",
+            detail="MTA-STS tells sending servers to require TLS when delivering TO this domain. This domain publishes a null MX, so there is no inbound delivery for a policy to protect. Not a gap.",
+            fix=None,
+        ))
+        return
     txt = confirm_txt(f"_mta-sts.{domain}", "v=stsv1")
     policy = None
     mhost = f"mta-sts.{domain}"
@@ -658,18 +690,19 @@ def check_mta_sts(domain, F):
 
 def check_simple(domain, F):
     # TLS-RPT
-    tlsrpt = first_txt(f"_smtp._tls.{domain}", "v=tlsrptv1")
-    if tlsrpt:
-        if "rua=" not in tlsrpt.lower():
-            F.append(dict(area="TLS-RPT", severity="low", title="TLS-RPT present but has no rua endpoint",
-                          detail="A TLS-RPT record exists but defines no rua= destination, so no TLS failure reports are actually delivered anywhere.",
-                          fix='Add a destination: "v=TLSRPTv1; rua=mailto:tlsrpt@<domain>".'))
+    if not is_null_mx(dig(domain, "MX")):
+        tlsrpt = first_txt(f"_smtp._tls.{domain}", "v=tlsrptv1")
+        if tlsrpt:
+            if "rua=" not in tlsrpt.lower():
+                F.append(dict(area="TLS-RPT", severity="low", title="TLS-RPT present but has no rua endpoint",
+                              detail="A TLS-RPT record exists but defines no rua= destination, so no TLS failure reports are actually delivered anywhere.",
+                              fix='Add a destination: "v=TLSRPTv1; rua=mailto:tlsrpt@<domain>".'))
+            else:
+                F.append(dict(area="TLS-RPT", severity="pass", title="TLS-RPT present", detail="Receiving TLS failure reports.", fix=None))
         else:
-            F.append(dict(area="TLS-RPT", severity="pass", title="TLS-RPT present", detail="Receiving TLS failure reports.", fix=None))
-    else:
-        F.append(dict(area="TLS-RPT", severity="low", title="No TLS-RPT",
-                      detail="No SMTP TLS reporting; you won't learn when senders fail to negotiate TLS to you.",
-                      fix='Add _smtp._tls TXT: "v=TLSRPTv1; rua=mailto:tlsrpt@<domain>".'))
+            F.append(dict(area="TLS-RPT", severity="low", title="No TLS-RPT",
+                          detail="No SMTP TLS reporting; you won't learn when senders fail to negotiate TLS to you.",
+                          fix='Add _smtp._tls TXT: "v=TLSRPTv1; rua=mailto:tlsrpt@<domain>".'))
     # BIMI
     bimi = first_txt(f"default._bimi.{domain}", "v=bimi1")
     if bimi:
@@ -693,12 +726,12 @@ def check_transport(domain, F):
                       detail="No inbound mail servers (may be intentional for a send-only/parked domain).", fix=None))
         return None
     # Null MX (RFC 7505): "0 ." positively declares the domain sends/receives no mail.
-    if any(r.split()[-1].rstrip(".") == "" or r.strip() in ("0 .", "0.") for r in mx) or \
-       all(r.split()[-1].rstrip(".") == "" for r in mx if r.split()):
+    if is_null_mx(mx):
         F.append(dict(area="Transport", severity="pass", title="Null MX (RFC 7505) — domain declares no mail",
                       detail="A null MX (0 .) correctly signals this domain neither sends nor receives mail, which helps receivers reject spoofed mail from it. Good hygiene for a non-mail domain.", fix=None))
         return None
-    host = sorted(mx, key=lambda r: int(r.split()[0]) if r.split()[0].isdigit() else 99)[0].split()[-1].rstrip(".")
+    real_mx = _real_mx_rows(mx)
+    host = sorted(real_mx, key=lambda r: int(r.split()[0]) if r.split()[0].isdigit() else 99)[0].split()[-1].rstrip(".")
     tls_ver = None
     try:
         ips = host_public_ips(host)
@@ -979,9 +1012,12 @@ def _primary_mx(domain):
     mx = dig(domain, "MX")
     if not mx:
         return None
-    if any(r.split()[-1].rstrip(".") == "" for r in mx if r.split()):
+    if is_null_mx(mx):
         return None  # null MX
-    return sorted(mx, key=lambda r: int(r.split()[0]) if r.split()[0].isdigit() else 99)[0].split()[-1].rstrip(".")
+    real_mx = _real_mx_rows(mx)
+    if not real_mx:
+        return None
+    return sorted(real_mx, key=lambda r: int(r.split()[0]) if r.split()[0].isdigit() else 99)[0].split()[-1].rstrip(".")
 
 
 def _reverse_name(ip):

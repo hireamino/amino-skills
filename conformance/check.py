@@ -16,6 +16,7 @@ SCRIPTS = os.path.join(
 )
 sys.path.insert(0, os.path.abspath(SCRIPTS))
 import audit  # noqa: E402
+import batch_score  # noqa: E402
 
 ok = True
 
@@ -55,6 +56,17 @@ chk("I15 valid enforce → no problems", audit.mta_sts_policy_problems("version:
 chk("I15 enforce missing fields → problems", len(audit.mta_sts_policy_problems("mode: enforce\n")[0]) > 0, True)
 chk("I15 max_age out of range → problem", any("max_age" in p for p in audit.mta_sts_policy_problems("version: STSv1\nmode: enforce\nmax_age: 99999999\nmx: a.ex.com")[0]), True)
 chk("I15 mode none needs no mx", audit.mta_sts_policy_problems("version: STSv1\nmode: none\nmax_age: 100")[0], [])
+
+# WHI-50 — only an unambiguous null MX exempts inbound-only controls.
+chk("WHI-50 null MX is detected", audit.is_null_mx(["0 ."]), True)
+chk("WHI-50 no MX is not exempt", audit.is_null_mx([]), False)
+chk("WHI-50 null + real MX is ambiguous", audit.is_null_mx(["0 .", "10 mx.example.com."]), False)
+_null_score = {bucket: False for bucket in batch_score.BOOL_BUCKETS}
+for _bucket in ("MTA_STS", "TLS_RPT", "DANE"):
+    _null_score[_bucket] = None
+_null_score["DKIM"] = "good"
+chk("WHI-50 N/A buckets do not add to gap", batch_score.gap_of(_null_score), 5)
+chk("WHI-50 N/A bucket renders as dash", batch_score.disp(_null_score, "MTA_STS"), "—")
 
 # ── DMARC enforcement advice (RFC 9989 §7.4) ────────────────────────────────
 # The short action label is the ONLY remediation text some surfaces render, so it

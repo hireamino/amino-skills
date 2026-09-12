@@ -83,12 +83,34 @@ try:
         "dkim-revoked-empty-p.execution: threw external network disabled: "
         "DNS lookup attempted for ex.com MX",
     )
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi50-skill-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        score_path = target / "batch_score.py"
+        source = score_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '    if null_mx:\n        r["MTA_STS"] = None',
+            '    if False:  # WHI-50 null-MX exemption canary\n        r["MTA_STS"] = None',
+            "null-MX score exemption",
+        )
+        score_path.write_text(source, encoding="utf-8")
+        expect_red(
+            "H removed null-MX score exemption",
+            execute({
+                "AUDIT_SCRIPTS": str(target),
+                "CONFORMANCE_FIXTURE": "null-mx-not-applicable",
+            }),
+            "null-mx-not-applicable.score.MTA_STS: expected None, got False",
+        )
 except Exception as error:
     print(f"FAIL  canary setup — {error}")
     FAILED += 1
 
-print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 2 cases.")
-if PASSED + FAILED != 2:
-    print(f"FAIL  canary count: expected 2, got {PASSED + FAILED}", file=sys.stderr)
+print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 3 cases.")
+if PASSED + FAILED != 3:
+    print(f"FAIL  canary count: expected 3, got {PASSED + FAILED}", file=sys.stderr)
     sys.exit(1)
 sys.exit(1 if FAILED else 0)
