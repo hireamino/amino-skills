@@ -4,6 +4,7 @@
 The runner calls audit.main() itself so it exercises the exact finding composition
 used by the shipping skill. DNS is fixture-backed, every socket/DNS fallback is
 blocked, and batch_score's import-time bindings are redirected to the same fixture.
+Selected findings also assert exact detail and effort/value placement.
 """
 import contextlib
 import io
@@ -130,6 +131,21 @@ def expected_findings(fx):
         for field in ("area", "title", "severity", "action", "fixIncludes"):
             if field not in finding:
                 raise AssertionError(f"{fx['id']}.expect.findings missing {field}")
+        if finding["severity"] != "pass" and finding["fixIncludes"] is None:
+            raise AssertionError(
+                f"{fx['id']}.findings[{finding_label(finding)}].fix: "
+                "non-pass finding must declare a non-null fixIncludes"
+            )
+        if "detail" in finding and not isinstance(finding["detail"], str):
+            raise AssertionError(
+                f"{fx['id']}.findings[{finding_label(finding)}].detail: "
+                "expected an exact string"
+            )
+        if ("effort" in finding) != ("value" in finding):
+            raise AssertionError(
+                f"{fx['id']}.findings[{finding_label(finding)}].effort/value: "
+                "must be declared together"
+            )
         surfaces = finding.get("surfaces", ["skill", "web", "action"])
         if "skill" in surfaces:
             expected.append(finding)
@@ -197,6 +213,26 @@ def compare_contract(fx, findings, score, ledger):
                 f"findings[{finding_label(wanted)}].severity: "
                 f"expected {wanted['severity']!r}, got {actual.get('severity')!r}"
             )
+        if "detail" in wanted:
+            ledger["detail"] += 1
+            if actual.get("detail") != wanted["detail"]:
+                problems.append(
+                    f"findings[{finding_label(wanted)}].detail: "
+                    f"expected {wanted['detail']!r}, got {actual.get('detail')!r}"
+                )
+        if "effort" in wanted:
+            ledger["effort"] += 1
+            ledger["value"] += 1
+            if actual.get("effort") != wanted["effort"]:
+                problems.append(
+                    f"findings[{finding_label(wanted)}].effort: "
+                    f"expected {wanted['effort']!r}, got {actual.get('effort')!r}"
+                )
+            if actual.get("value") != wanted["value"]:
+                problems.append(
+                    f"findings[{finding_label(wanted)}].value: "
+                    f"expected {wanted['value']!r}, got {actual.get('value')!r}"
+                )
         actual_action = actual.get("action")
         if actual_action != wanted["action"]:
             problems.append(
@@ -243,6 +279,7 @@ def compare_contract(fx, findings, score, ledger):
 def assertion_plan(fixtures):
     plan = {
         "identity": 0, "severity": 0, "action": 0, "fix": 0,
+        "detail": 0, "effort": 0, "value": 0,
         "scoreFields": 0, "closedWorld": 0,
     }
     for fx in fixtures:
@@ -251,6 +288,9 @@ def assertion_plan(fixtures):
         expected, _ = expected_findings(fx)
         for field in ("identity", "severity", "action", "fix"):
             plan[field] += len(expected)
+        plan["detail"] += sum("detail" in finding for finding in expected)
+        plan["effort"] += sum("effort" in finding for finding in expected)
+        plan["value"] += sum("value" in finding for finding in expected)
         plan["scoreFields"] += len(fx.get("expect", {}).get("score", {}))
         plan["closedWorld"] += 1
     return plan
@@ -270,6 +310,7 @@ def run():
     failures = []
     ledger = {
         "identity": 0, "severity": 0, "action": 0, "fix": 0,
+        "detail": 0, "effort": 0, "value": 0,
         "scoreFields": 0, "closedWorld": 0,
     }
 

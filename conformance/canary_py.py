@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Mutation canaries for the published-skill conformance runner."""
 
+import json
 import os
 from pathlib import Path
 import shutil
@@ -29,7 +30,7 @@ def replace_exactly_once(source, old, new, name):
     return source.replace(old, new, 1)
 
 
-def execute(extra_env=None):
+def execute(extra_env=None, runner=RUNNER):
     env = {
         **os.environ,
         "CONFORMANCE_FIXTURE": "dkim-revoked-empty-p",
@@ -37,7 +38,7 @@ def execute(extra_env=None):
         **(extra_env or {}),
     }
     return subprocess.run(
-        [sys.executable, str(RUNNER)],
+        [sys.executable, str(runner)],
         text=True,
         capture_output=True,
         env=env,
@@ -141,12 +142,134 @@ try:
             "WHI-50 verifier wires null MX into N/A buckets -> "
             "(False, False, False) (exp (None, None, None))",
         )
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi10-detail-nullmx-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            "A null MX (0 .) declares under RFC 7505 that this domain accepts no inbound mail. That is good hygiene for a domain not meant to receive mail. It says nothing about whether the domain sends — outbound authentication is assessed separately.",
+            "A null MX (0 .) correctly signals this domain neither sends nor receives mail, which helps receivers reject spoofed mail from it. Good hygiene for a non-mail domain.",
+            "null-MX detail",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red(
+            "J reverted null-MX detail",
+            execute({
+                "AUDIT_SCRIPTS": str(target),
+                "CONFORMANCE_FIXTURE": "null-mx-not-applicable",
+            }),
+            "null-mx-not-applicable.findings[Transport|Null MX (RFC 7505) — domain declares no mail].detail: "
+            "expected 'A null MX (0 .) declares under RFC 7505 that this domain accepts no inbound mail. That is good hygiene for a domain not meant to receive mail. It says nothing about whether the domain sends — outbound authentication is assessed separately.', "
+            "got 'A null MX (0 .) correctly signals this domain neither sends nor receives mail, which helps receivers reject spoofed mail from it. Good hygiene for a non-mail domain.'",
+        )
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi10-action-nomx-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            'if t == "no mx records":\n            return "Confirm whether this domain should receive mail"',
+            'if t == "no mx records":\n            return "Confirm STARTTLS on the mail server"',
+            "No-MX action",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red(
+            "K restored STARTTLS action",
+            execute({
+                "AUDIT_SCRIPTS": str(target),
+                "CONFORMANCE_FIXTURE": "no-mx-not-exempt",
+            }),
+            "no-mx-not-exempt.findings[Transport|No MX records].action: "
+            "expected 'Confirm whether this domain should receive mail', "
+            "got 'Confirm STARTTLS on the mail server'",
+        )
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi10-fix-nomx-") as temporary:
+        target = Path(temporary)
+        runner = target / "run_py.py"
+        shutil.copyfile(RUNNER, runner)
+        corpus = json.loads((HERE / "fixtures.json").read_text(encoding="utf-8"))
+        no_mx_fixture = next(
+            fixture for fixture in corpus["fixtures"]
+            if fixture["id"] == "no-mx-not-exempt"
+        )
+        no_mx_finding = next(
+            finding for finding in no_mx_fixture["expect"]["findings"]
+            if finding["area"] == "Transport" and finding["title"] == "No MX records"
+        )
+        if no_mx_finding["fixIncludes"] is None:
+            raise AssertionError("No-MX corpus fix: expected a non-null fixture anchor")
+        no_mx_finding["fixIncludes"] = None
+        (target / "fixtures.json").write_text(json.dumps(corpus), encoding="utf-8")
+        expect_red(
+            "L restored null No-MX corpus fix",
+            execute({
+                "AUDIT_SCRIPTS": str(SCRIPTS),
+                "CONFORMANCE_FIXTURE": "no-mx-not-exempt",
+            }, runner=runner),
+            "no-mx-not-exempt.findings[Transport|No MX records].fix: "
+            "non-pass finding must declare a non-null fixIncludes",
+        )
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi10-value-bimi-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            'if a == "BIMI":\n        return ("high", "low")',
+            'if a == "BIMI":\n        return ("high", "high")',
+            "BIMI value",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red(
+            "M restored BIMI high value",
+            execute({
+                "AUDIT_SCRIPTS": str(target),
+                "CONFORMANCE_FIXTURE": "bimi-present-without-vmc",
+            }),
+            "bimi-present-without-vmc.findings[BIMI|BIMI present without a VMC].value: "
+            "expected 'low', got 'high'",
+        )
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi10-detail-nomx-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            "No MX record is published. SMTP then treats the domain as if it had an implicit MX pointing to itself and resolves that host's address records, so this does not show that the domain receives no mail — a null MX (0 .) is what says that explicitly. This may be intentional for a send-only or parked domain.",
+            "No inbound mail servers (may be intentional for a send-only/parked domain).",
+            "No-MX detail",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red(
+            "N reverted No-MX detail",
+            execute({
+                "AUDIT_SCRIPTS": str(target),
+                "CONFORMANCE_FIXTURE": "no-mx-not-exempt",
+            }),
+            "no-mx-not-exempt.findings[Transport|No MX records].detail: "
+            'expected "No MX record is published. SMTP then treats the domain as if it had an implicit MX pointing to itself and resolves that host\'s address records, so this does not show that the domain receives no mail — a null MX (0 .) is what says that explicitly. This may be intentional for a send-only or parked domain.", '
+            "got 'No inbound mail servers (may be intentional for a send-only/parked domain).'",
+        )
 except Exception as error:
     print(f"FAIL  canary setup — {error}")
     FAILED += 1
 
-print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 4 cases.")
-if PASSED + FAILED != 4:
-    print(f"FAIL  canary count: expected 4, got {PASSED + FAILED}", file=sys.stderr)
+print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 9 cases.")
+if PASSED + FAILED != 9:
+    print(f"FAIL  canary count: expected 9, got {PASSED + FAILED}", file=sys.stderr)
     sys.exit(1)
 sys.exit(1 if FAILED else 0)

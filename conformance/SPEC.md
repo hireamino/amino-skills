@@ -1,4 +1,4 @@
-# Amino Deliverability — Correctness Conformance Spec (v1.5)
+# Amino Deliverability — Correctness Conformance Spec (v1.6)
 
 **Status:** proposed · **Owner:** hireamino · **Canonical home:** `amino-skills/conformance/`
 
@@ -29,7 +29,10 @@ another surface or a regenerated snapshot. For every `dns-engine` fixture:
 
 - `present` and `absent` retain the original positive/negative guards;
 - `findings` is a closed list: missing, duplicate, and additional findings fail;
-- finding identity, severity, action, and explicit-null/fix substring are asserted;
+- finding identity, severity, action, and fix substring are asserted;
+- every non-pass expected finding must declare a non-null fix substring;
+- exact detail and effort+value are asserted only where a fixture declares them, and
+  effort and value must be declared together;
 - `score` is exact, including all buckets, DKIM state, gap, and note; and
 - a surface may omit a finding only through `surfaces` plus a non-empty
   `notApplicable` reason for that surface.
@@ -43,6 +46,13 @@ review. The corpus has no expectation regeneration mode; reviewed answers cannot
 replaced by current output.
 
 ## Current status
+
+**v1.6 / WHI-10 Phase 1 — evidence-boundary fields are enforceable:** selected
+findings can assert exact detail and effort+value placement without making either
+field universal. Every non-pass finding in the corpus must carry a remediation fix,
+preventing a surface from pairing an action with "no action needed" evidence. The
+No-MX and null-MX copy boundaries and the brand/optional low-value rule are guarded
+by targeted mutation canaries.
 
 **v1.5 / WHI-50 — null MX has an explicit inbound-only boundary:** a true null MX
 emits the same MTA-STS not-applicable pass on every surface, suppresses TLS-RPT as a
@@ -115,7 +125,7 @@ resolved by the I11 case fix (`-ALL` → "SPF present" with no contradictory "no
 mechanism" — asserted by the `spf-dash-all` fixture).
 
 **Nothing open.** All 21 original invariants are addressed across the three surfaces (I17/I18 +
-I20-resolver shipped in v1.3). The corpus runs 18 dns-engine cases green on skill / web /
+I20-resolver shipped in v1.3). The corpus runs 19 dns-engine cases green on skill / web /
 Action; the rest are pure-function / HTTP-stub / wrapper cases covered by per-surface tests.
 
 ## The invariants (the contract)
@@ -161,13 +171,14 @@ ahead on the tree walk (I10). The universal bugs — in **all three** — are **
 ## Release gate
 
 Every shipping surface must consume the same reviewed corpus revision and pass the
-closed-world runner plus its mutation canaries. A severity, action, fix-meaning, or score
-difference is a product decision and cannot be normalized by weakening an expectation.
+closed-world runner plus its mutation canaries. A severity, action, fix-meaning, selected
+exact-detail, selected effort/value, or score difference is a product decision and cannot
+be normalized by weakening an expectation.
 The web and Action pin files must name the same full amino-skills commit before release.
 
 ## Fixtures
 
-See `fixtures.json`. It contains 23 known-answer cases: 18 closed-world
+See `fixtures.json`. It contains 24 known-answer cases: 19 closed-world
 `dns-engine` cases plus five explicitly skipped pure/HTTP/wrapper cases covered by
 per-surface tests or later work. Each is language-neutral and every harness adapts it to
 its own resolver mock.

@@ -150,6 +150,82 @@ try {
     "null-mx-not-applicable.score.MTA_STS: expected null, got false",
   );
 
+  const revertedNullMxDetail = replaceExactlyOnce(
+    portableEngine,
+    "A null MX (0 .) declares under RFC 7505 that this domain accepts no inbound mail. That is good hygiene for a domain not meant to receive mail. It says nothing about whether the domain sends — outbound authentication is assessed separately.",
+    "A null MX (0 .) correctly signals this domain neither sends nor receives mail, which helps receivers reject spoofed mail from it. Good hygiene for a non-mail domain.",
+    "null-MX detail",
+  );
+  expectRed(
+    "J reverted null-MX detail",
+    revertedNullMxDetail,
+    "null-mx-not-applicable",
+    'null-mx-not-applicable.findings[Transport|Null MX (RFC 7505) — domain declares no mail].detail: expected "A null MX (0 .) declares under RFC 7505 that this domain accepts no inbound mail. That is good hygiene for a domain not meant to receive mail. It says nothing about whether the domain sends — outbound authentication is assessed separately.", got "A null MX (0 .) correctly signals this domain neither sends nor receives mail, which helps receivers reject spoofed mail from it. Good hygiene for a non-mail domain."',
+  );
+
+  const restoredNoMxAction = replaceExactlyOnce(
+    portableEngine,
+    'if (t === "no mx records") return "Confirm whether this domain should receive mail";',
+    'if (t === "no mx records") return "Confirm STARTTLS on the mail server";',
+    "No-MX action",
+  );
+  expectRed(
+    "K restored STARTTLS action",
+    restoredNoMxAction,
+    "no-mx-not-exempt",
+    'no-mx-not-exempt.findings[Transport|No MX records].action: expected "Confirm whether this domain should receive mail", got "Confirm STARTTLS on the mail server"',
+  );
+
+  const invalidCorpus = JSON.parse(readFileSync(resolve(here, "fixtures.json"), "utf8"));
+  const noMxFixture = invalidCorpus.fixtures.find((fixture) => fixture.id === "no-mx-not-exempt");
+  const noMxFinding = noMxFixture?.expect?.findings?.find(
+    (finding) => finding.area === "Transport" && finding.title === "No MX records",
+  );
+  if (!noMxFinding || noMxFinding.fixIncludes === null) {
+    throw new Error("No-MX corpus fix: expected a non-null fixture anchor");
+  }
+  noMxFinding.fixIncludes = null;
+  writeFileSync(join(temporary, "fixtures.json"), JSON.stringify(invalidCorpus));
+  const structuralRunner = join(temporary, "run-structural.mjs");
+  writeFileSync(structuralRunner, readFileSync(runner, "utf8"));
+  expectRed(
+    "L restored null No-MX corpus fix",
+    portableEngine,
+    "no-mx-not-exempt",
+    "no-mx-not-exempt.findings[Transport|No MX records].fix: non-pass finding must declare a non-null fixIncludes",
+    structuralRunner,
+  );
+  writeFileSync(
+    join(temporary, "fixtures.json"),
+    readFileSync(resolve(here, "fixtures.json"), "utf8"),
+  );
+
+  const restoredBimiHighValue = replaceExactlyOnce(
+    portableEngine,
+    'if (a === "BIMI") return ["high", "low"];',
+    'if (a === "BIMI") return ["high", "high"];',
+    "BIMI value",
+  );
+  expectRed(
+    "M restored BIMI high value",
+    restoredBimiHighValue,
+    "bimi-present-without-vmc",
+    'bimi-present-without-vmc.findings[BIMI|BIMI present without a VMC].value: expected "low", got "high"',
+  );
+
+  const revertedNoMxDetail = replaceExactlyOnce(
+    portableEngine,
+    "No MX record is published. SMTP then treats the domain as if it had an implicit MX pointing to itself and resolves that host's address records, so this does not show that the domain receives no mail — a null MX (0 .) is what says that explicitly. This may be intentional for a send-only or parked domain.",
+    "No inbound mail servers (may be intentional for a send-only/parked domain).",
+    "No-MX detail",
+  );
+  expectRed(
+    "N reverted No-MX detail",
+    revertedNoMxDetail,
+    "no-mx-not-exempt",
+    'no-mx-not-exempt.findings[Transport|No MX records].detail: expected "No MX record is published. SMTP then treats the domain as if it had an implicit MX pointing to itself and resolves that host\'s address records, so this does not show that the domain receives no mail — a null MX (0 .) is what says that explicitly. This may be intentional for a send-only or parked domain.", got "No inbound mail servers (may be intentional for a send-only/parked domain)."',
+  );
+
   const originalRunner = readFileSync(runner, "utf8");
   const stubbedRunner = replaceExactlyOnce(
     originalRunner,
@@ -173,9 +249,9 @@ try {
   rmSync(temporary, { recursive: true, force: true });
 }
 
-console.log(`\nCanaries (${surface}): ${passed} passed, ${failed} failed; expected 7 cases.`);
-if (passed + failed !== 7) {
-  console.error(`FAIL  canary count: expected 7, got ${passed + failed}`);
+console.log(`\nCanaries (${surface}): ${passed} passed, ${failed} failed; expected 12 cases.`);
+if (passed + failed !== 12) {
+  console.error(`FAIL  canary count: expected 12, got ${passed + failed}`);
   process.exit(1);
 }
 process.exit(failed ? 1 : 0);

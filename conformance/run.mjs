@@ -4,7 +4,8 @@
  *
  * Every dns-engine fixture keeps the original present/absent guards and also
  * asserts the reviewed material contract: exact finding identity, severity,
- * action, explicit-null/fix substring, and the complete score object.
+ * action, explicit-null/fix substring, selectively exact detail and effort/value,
+ * and the complete score object.
  *
  *   SURFACE=web    ENGINE=../amino-site/functions/audit.js node conformance/run.mjs
  *   SURFACE=action ENGINE=../amino-audit-action/src/engine.mjs node conformance/run.mjs
@@ -77,6 +78,17 @@ function expectedFindings(fx, surface) {
     for (const field of ["area", "title", "severity", "action", "fixIncludes"]) {
       if (!own(finding, field)) throw new Error(`${fx.id}.expect.findings missing ${field}`);
     }
+    if (finding.severity !== "pass" && finding.fixIncludes === null) {
+      throw new Error(`${fx.id}.findings[${findingLabel(finding)}].fix: non-pass finding must declare a non-null fixIncludes`);
+    }
+    if (own(finding, "detail") && typeof finding.detail !== "string") {
+      throw new Error(`${fx.id}.findings[${findingLabel(finding)}].detail: expected an exact string`);
+    }
+    const hasEffort = own(finding, "effort");
+    const hasValue = own(finding, "value");
+    if (hasEffort !== hasValue) {
+      throw new Error(`${fx.id}.findings[${findingLabel(finding)}].effort/value: must be declared together`);
+    }
     const surfaces = finding.surfaces || ["skill", "web", "action"];
     if (surfaces.includes(surface)) {
       expected.push(finding);
@@ -140,6 +152,22 @@ function compareContract(fx, findings, score, surface, ledger) {
     if (actual.severity !== wanted.severity) {
       problems.push(`findings[${findingLabel(wanted)}].severity: expected ${shown(wanted.severity)}, got ${shown(actual.severity)}`);
     }
+    if (own(wanted, "detail")) {
+      ledger.detail++;
+      if (actual.detail !== wanted.detail) {
+        problems.push(`findings[${findingLabel(wanted)}].detail: expected ${shown(wanted.detail)}, got ${shown(actual.detail)}`);
+      }
+    }
+    if (own(wanted, "effort")) {
+      ledger.effort++;
+      ledger.value++;
+      if (actual.effort !== wanted.effort) {
+        problems.push(`findings[${findingLabel(wanted)}].effort: expected ${shown(wanted.effort)}, got ${shown(actual.effort)}`);
+      }
+      if (actual.value !== wanted.value) {
+        problems.push(`findings[${findingLabel(wanted)}].value: expected ${shown(wanted.value)}, got ${shown(actual.value)}`);
+      }
+    }
     const actualAction = actual.action ?? null;
     if (actualAction !== wanted.action) {
       problems.push(`findings[${findingLabel(wanted)}].action: expected ${shown(wanted.action)}, got ${shown(actualAction)}`);
@@ -180,13 +208,16 @@ function compareContract(fx, findings, score, surface, ledger) {
 }
 
 function assertionPlan(surface) {
-  const plan = { identity: 0, severity: 0, action: 0, fix: 0, scoreFields: 0, closedWorld: 0 };
+  const plan = { identity: 0, severity: 0, action: 0, fix: 0, detail: 0, effort: 0, value: 0, scoreFields: 0, closedWorld: 0 };
   for (const fx of fixtures.filter((fixture) => fixture.mode === "dns-engine")) {
     const { expected } = expectedFindings(fx, surface);
     plan.identity += expected.length;
     plan.severity += expected.length;
     plan.action += expected.length;
     plan.fix += expected.length;
+    plan.detail += expected.filter((finding) => own(finding, "detail")).length;
+    plan.effort += expected.filter((finding) => own(finding, "effort")).length;
+    plan.value += expected.filter((finding) => own(finding, "value")).length;
     plan.scoreFields += Object.keys(fx.expect.score || {}).length;
     plan.closedWorld++;
   }
@@ -198,7 +229,7 @@ let fail = 0;
 let skip = 0;
 let notApplicable = 0;
 const failures = [];
-const ledger = { identity: 0, severity: 0, action: 0, fix: 0, scoreFields: 0, closedWorld: 0 };
+const ledger = { identity: 0, severity: 0, action: 0, fix: 0, detail: 0, effort: 0, value: 0, scoreFields: 0, closedWorld: 0 };
 
 for (const fx of fixtures) {
   if (fx.mode !== "dns-engine") {

@@ -1,6 +1,6 @@
 {
-  "$schema": "amino-conformance/v3",
-  "notes": "Single shared reviewed-answer corpus consumed by conformance/run.mjs (web and Action) and conformance/run_py.py (published skill). For every dns-engine fixture, legacy present/absent assertions remain active and expect.findings is a closed list: area, title, severity, action, and fixIncludes (or explicit null) are asserted. expect.score is the exact bucket + DKIM-state + gap + note object; a true null MX uses explicit null for the inbound-only MTA_STS, TLS_RPT, and DANE buckets. Surface-specific findings require surfaces plus a documented notApplicable reason for every omitted shipping surface. No expectation-regeneration mode exists. Non-dns-engine modes remain explicitly skipped with a reason.",
+  "$schema": "amino-conformance/v4",
+  "notes": "Single shared reviewed-answer corpus consumed by conformance/run.mjs (web and Action) and conformance/run_py.py (published skill). For every dns-engine fixture, legacy present/absent assertions remain active and expect.findings is a closed list: area, title, severity, action, and fixIncludes are asserted; every non-pass finding must declare a non-null fixIncludes. Optional exact detail and optional effort+value pairs are asserted only where declared. expect.score is the exact bucket + DKIM-state + gap + note object; a true null MX uses explicit null for the inbound-only MTA_STS, TLS_RPT, and DANE buckets. Surface-specific findings require surfaces plus a documented notApplicable reason for every omitted shipping surface. No expectation-regeneration mode exists. Non-dns-engine modes remain explicitly skipped with a reason.",
   "fixtures": [
     {
       "id": "dkim-revoked-empty-p",
@@ -67,6 +67,8 @@
             "area": "BIMI",
             "title": "No BIMI",
             "severity": "low",
+            "effort": "high",
+            "value": "low",
             "action": "Get a VMC, then publish BIMI",
             "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
           },
@@ -74,8 +76,8 @@
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
-            "action": "Confirm STARTTLS on the mail server",
-            "fixIncludes": null
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
           },
           {
             "area": "DNSSEC",
@@ -88,6 +90,8 @@
             "area": "CAA",
             "title": "No CAA records",
             "severity": "low",
+            "effort": "low",
+            "value": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
           }
@@ -179,8 +183,8 @@
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
-            "action": "Confirm STARTTLS on the mail server",
-            "fixIncludes": null
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
           },
           {
             "area": "DNSSEC",
@@ -277,8 +281,8 @@
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
-            "action": "Confirm STARTTLS on the mail server",
-            "fixIncludes": null
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
           },
           {
             "area": "DNSSEC",
@@ -389,8 +393,8 @@
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
-            "action": "Confirm STARTTLS on the mail server",
-            "fixIncludes": null
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
           },
           {
             "area": "DNSSEC",
@@ -494,8 +498,8 @@
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
-            "action": "Confirm STARTTLS on the mail server",
-            "fixIncludes": null
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
           },
           {
             "area": "DNSSEC",
@@ -592,8 +596,8 @@
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
-            "action": "Confirm STARTTLS on the mail server",
-            "fixIncludes": null
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
           },
           {
             "area": "DNSSEC",
@@ -704,8 +708,8 @@
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
-            "action": "Confirm STARTTLS on the mail server",
-            "fixIncludes": null
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
           },
           {
             "area": "DNSSEC",
@@ -814,8 +818,8 @@
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
-            "action": "Confirm STARTTLS on the mail server",
-            "fixIncludes": null
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
           },
           {
             "area": "DNSSEC",
@@ -919,8 +923,8 @@
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
-            "action": "Confirm STARTTLS on the mail server",
-            "fixIncludes": null
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
           },
           {
             "area": "DNSSEC",
@@ -1024,8 +1028,8 @@
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
-            "action": "Confirm STARTTLS on the mail server",
-            "fixIncludes": null
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
           },
           {
             "area": "DNSSEC",
@@ -1140,8 +1144,8 @@
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
-            "action": "Confirm STARTTLS on the mail server",
-            "fixIncludes": null
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
           },
           {
             "area": "DNSSEC",
@@ -1518,8 +1522,8 @@
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
-            "action": "Confirm STARTTLS on the mail server",
-            "fixIncludes": null
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
           },
           {
             "area": "CAA",
@@ -1622,8 +1626,8 @@
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
-            "action": "Confirm STARTTLS on the mail server",
-            "fixIncludes": null
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
           },
           {
             "area": "DNSSEC",
@@ -1755,6 +1759,7 @@
             "area": "Transport",
             "title": "Null MX (RFC 7505) — domain declares no mail",
             "severity": "pass",
+            "detail": "A null MX (0 .) declares under RFC 7505 that this domain accepts no inbound mail. That is good hygiene for a domain not meant to receive mail. It says nothing about whether the domain sends — outbound authentication is assessed separately.",
             "action": null,
             "fixIncludes": null
           }
@@ -1856,8 +1861,9 @@
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
-            "action": "Confirm STARTTLS on the mail server",
-            "fixIncludes": null
+            "detail": "No MX record is published. SMTP then treats the domain as if it had an implicit MX pointing to itself and resolves that host's address records, so this does not show that the domain receives no mail — a null MX (0 .) is what says that explicitly. This may be intentional for a send-only or parked domain.",
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
           },
           {
             "area": "DNSSEC",
@@ -1899,6 +1905,137 @@
           "BIMI": false,
           "DKIM": "unknown",
           "gap": 5,
+          "note": "no DKIM key at common/provider selectors; no rua"
+        }
+      }
+    },
+    {
+      "id": "bimi-present-without-vmc",
+      "invariant": "WHI-10",
+      "mode": "dns-engine",
+      "desc": "A published BIMI record without a VMC remains a low-severity, high-effort, low-value brand-optional finding.",
+      "input": {
+        "domain": "bimi-novmc.invalid",
+        "dns": {
+          "bimi-novmc.invalid": {
+            "TXT": [
+              "v=spf1 -all"
+            ],
+            "MX": [
+              "0 ."
+            ]
+          },
+          "_dmarc.bimi-novmc.invalid": {
+            "TXT": [
+              "v=DMARC1; p=reject"
+            ]
+          },
+          "default._bimi.bimi-novmc.invalid": {
+            "TXT": [
+              "v=BIMI1; l=https://bimi-novmc.invalid/logo.svg"
+            ]
+          }
+        }
+      },
+      "expect": {
+        "present": [
+          {
+            "area": "BIMI",
+            "includes": "without a VMC"
+          },
+          {
+            "area": "MTA-STS",
+            "includes": "not applicable"
+          },
+          {
+            "area": "Transport",
+            "includes": "Null MX"
+          }
+        ],
+        "absent": [
+          "No BIMI",
+          "No MTA-STS policy",
+          "No TLS-RPT",
+          "No DANE/TLSA"
+        ],
+        "findings": [
+          {
+            "area": "DMARC",
+            "title": "DMARC has no rua (no aggregate reporting)",
+            "severity": "medium",
+            "action": "Turn on DMARC reporting (rua) — needed before you enforce",
+            "fixIncludes": "Add rua=mailto:dmarc@<domain> to receive daily aggregate XML reports."
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+          },
+          {
+            "area": "BIMI",
+            "title": "BIMI present without a VMC",
+            "severity": "low",
+            "effort": "high",
+            "value": "low",
+            "action": "Add a VMC to your BIMI record",
+            "fixIncludes": "Obtain a VMC (or a CMC) and add it as a=https://<domain>/path/vmc.pem to the BIMI record."
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+          },
+          {
+            "area": "SPF",
+            "title": "SPF present",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null
+          },
+          {
+            "area": "DMARC",
+            "title": "DMARC enforced (p=reject)",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null
+          },
+          {
+            "area": "MTA-STS",
+            "title": "MTA-STS not applicable — domain receives no mail",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null
+          },
+          {
+            "area": "Transport",
+            "title": "Null MX (RFC 7505) — domain declares no mail",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null
+          }
+        ],
+        "score": {
+          "SPF": true,
+          "DMARC": true,
+          "DMARC_enforced": true,
+          "DMARC_rua": false,
+          "MTA_STS": null,
+          "TLS_RPT": null,
+          "DANE": null,
+          "BIMI": true,
+          "DKIM": "unknown",
+          "gap": 1,
           "note": "no DKIM key at common/provider selectors; no rua"
         }
       }
