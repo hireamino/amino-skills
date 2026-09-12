@@ -727,12 +727,13 @@ def check_transport(domain, F):
     mx = dig(domain, "MX")
     if not mx:
         F.append(dict(area="Transport", severity="low", title="No MX records",
-                      detail="No inbound mail servers (may be intentional for a send-only/parked domain).", fix=None))
+                      detail="No MX record is published. SMTP then treats the domain as if it had an implicit MX pointing to itself and resolves that host's address records, so this does not show that the domain receives no mail — a null MX (0 .) is what says that explicitly. This may be intentional for a send-only or parked domain.",
+                      fix="If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."))
         return None
-    # Null MX (RFC 7505): "0 ." positively declares the domain sends/receives no mail.
+    # Null MX (RFC 7505): "0 ." positively declares that the domain accepts no mail.
     if is_null_mx(mx):
         F.append(dict(area="Transport", severity="pass", title="Null MX (RFC 7505) — domain declares no mail",
-                      detail="A null MX (0 .) correctly signals this domain neither sends nor receives mail, which helps receivers reject spoofed mail from it. Good hygiene for a non-mail domain.", fix=None))
+                      detail="A null MX (0 .) declares under RFC 7505 that this domain accepts no inbound mail. That is good hygiene for a domain not meant to receive mail. It says nothing about whether the domain sends — outbound authentication is assessed separately.", fix=None))
         return None
     real_mx = _real_mx_rows(mx)
     host = sorted(real_mx, key=lambda r: int(r.split()[0]) if r.split()[0].isdigit() else 99)[0].split()[-1].rstrip(".")
@@ -1088,7 +1089,7 @@ def priority(f):
     if a == "TLS-RPT":
         return ("low", "low")
     if a == "BIMI":
-        return ("high", "high")   # logo-in-inbox: brand trust + open-rate lift = high value for engagement-led senders
+        return ("high", "low")    # brand-optional work must not occupy a high-value quadrant
     if a == "MX":
         return ("low", "high")          # remove stale/duplicate MX — quick + protective
     if a == "Transport":
@@ -1171,6 +1172,8 @@ def action(f):
     if a == "MX":
         return "Consolidate to one MX provider"
     if a == "Transport":
+        if t == "no mx records":
+            return "Confirm whether this domain should receive mail"
         if "misconfigured" in t:
             return "Correct the DANE/TLSA record"
         if "no reverse dns" in t or "has no reverse" in t:

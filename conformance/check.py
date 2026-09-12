@@ -7,6 +7,7 @@ runs as a CI gate. The full DNS-driven fixtures (fixtures.json) are consumed by 
 cross-surface runner in web-parity/ (WS1); this file guards the pure logic here.
 """
 import base64
+import json
 import os
 import sys
 
@@ -88,6 +89,29 @@ try:
         (False, False, False))
 finally:
     verify.doh, verify.txt_starting = _verify_doh, _verify_txt
+
+# WHI-10 — brand/optional findings never occupy a high-value quadrant.
+chk("WHI-10 No BIMI priority", audit.priority({
+    "area": "BIMI", "severity": "low", "title": "No BIMI",
+}), ("high", "low"))
+chk("WHI-10 BIMI without VMC priority", audit.priority({
+    "area": "BIMI", "severity": "low", "title": "BIMI present without a VMC",
+}), ("high", "low"))
+chk("WHI-10 No CAA priority", audit.priority({
+    "area": "CAA", "severity": "low", "title": "No CAA records",
+}), ("low", "low"))
+
+# A non-pass fixture with no remediation would let /audit render an action in its
+# plan and "no action needed" in its evidence row for the same finding.
+with open(os.path.join(os.path.dirname(__file__), "fixtures.json"), encoding="utf-8") as _handle:
+    _FIXTURES = json.load(_handle)["fixtures"]
+_NON_PASS_WITHOUT_FIX = [
+    f"{_fixture['id']}:{_finding['area']}|{_finding['title']}"
+    for _fixture in _FIXTURES
+    for _finding in _fixture.get("expect", {}).get("findings", [])
+    if _finding.get("severity") != "pass" and _finding.get("fixIncludes") is None
+]
+chk("WHI-10 every non-pass fixture finding declares a fix", _NON_PASS_WITHOUT_FIX, [])
 
 # ── DMARC enforcement advice (RFC 9989 §7.4) ────────────────────────────────
 # The short action label is the ONLY remediation text some surfaces render, so it
