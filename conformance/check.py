@@ -17,6 +17,7 @@ SCRIPTS = os.path.join(
 sys.path.insert(0, os.path.abspath(SCRIPTS))
 import audit  # noqa: E402
 import batch_score  # noqa: E402
+import verify  # noqa: E402
 
 ok = True
 
@@ -67,6 +68,11 @@ for _bucket in ("MTA_STS", "TLS_RPT", "DANE"):
 _null_score["DKIM"] = "good"
 chk("WHI-50 N/A buckets do not add to gap", batch_score.gap_of(_null_score), 5)
 chk("WHI-50 N/A bucket renders as dash", batch_score.disp(_null_score, "MTA_STS"), "—")
+chk("WHI-50 verifier detects null MX independently", verify._null_mx_answer(["0 ."]), True)
+chk("WHI-50 verifier does not exempt no MX", verify._null_mx_answer([]), False)
+chk("WHI-50 verifier does not exempt ambiguous MX",
+    verify._null_mx_answer(["0 .", "10 mx.example.com."]), False)
+chk("WHI-50 verifier renders N/A as dash", verify.cell(None), "—")
 
 # ── DMARC enforcement advice (RFC 9989 §7.4) ────────────────────────────────
 # The short action label is the ONLY remediation text some surfaces render, so it

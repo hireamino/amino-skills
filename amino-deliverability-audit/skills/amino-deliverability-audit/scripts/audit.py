@@ -561,7 +561,11 @@ def _mx_hosts(domain):
 
 
 def _is_null_mx_row(row):
-    """Preserve the existing accepted null-MX spellings for one MX row."""
+    """Preserve the existing accepted root-exchange spellings for one MX row.
+
+    WHI-50 changes only the ambiguity rule, so preference validation deliberately
+    remains unchanged (the previous parser also accepted a non-zero preference).
+    """
     parts = row.split()
     return bool(parts) and (parts[-1].rstrip(".") == "" or row.strip() in ("0 .", "0."))
 
