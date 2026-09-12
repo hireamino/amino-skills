@@ -1,4 +1,4 @@
-# Amino Deliverability — Correctness Conformance Spec (v1.4)
+# Amino Deliverability — Correctness Conformance Spec (v1.5)
 
 **Status:** proposed · **Owner:** hireamino · **Canonical home:** `amino-skills/conformance/`
 
@@ -34,14 +34,24 @@ another surface or a regenerated snapshot. For every `dns-engine` fixture:
 - a surface may omit a finding only through `surfaces` plus a non-empty
   `notApplicable` reason for that surface.
 
-The only current N/A is the skill's live port-25 STARTTLS finding on the two DANE
-fixtures: the web and Action engines intentionally omit that capability. Any other
-difference fails CI and requires Product review. The corpus has no expectation
-regeneration mode; reviewed answers cannot be replaced by current output.
+The only surface-specific finding N/A is the skill's live port-25 STARTTLS finding
+when a fixture has a real MX: the web and Action engines intentionally omit that
+capability. A true null MX also makes the score buckets `MTA_STS`, `TLS_RPT`, and
+`DANE` explicitly `null` on every surface; `null` means not applicable, renders as
+`—`, and is excluded from the gap. Any other difference fails CI and requires Product
+review. The corpus has no expectation regeneration mode; reviewed answers cannot be
+replaced by current output.
 
 ## Current status
 
-**v1.4 / WHI-8 — material contract is load-bearing:** all 15 `dns-engine`
+**v1.5 / WHI-50 — null MX has an explicit inbound-only boundary:** a true null MX
+emits the same MTA-STS not-applicable pass on every surface, suppresses TLS-RPT as a
+gap, and represents MTA-STS/TLS-RPT/DANE as `null` score buckets. The two remaining
+outbound-relevant gaps in the reviewed fixture still count. Separate fixtures prove
+that no MX records and a null exchange mixed with a real MX do not receive the
+exemption. Removing the score exemption on any surface is mutation-canaried.
+
+**v1.4 / WHI-8 — material contract is load-bearing:** all 15 original `dns-engine`
 fixtures assert 139 common findings, the two documented skill-only STARTTLS findings,
 and 15 exact score objects across the published skill, web audit, and GitHub Action.
 The Python runner executes `audit.main()` itself, then rebinds every import-time
@@ -104,8 +114,8 @@ the DER can't be parsed), and weak = any RSA `< 2048`, not just `== 1024`. **I13
 resolved by the I11 case fix (`-ALL` → "SPF present" with no contradictory "no all
 mechanism" — asserted by the `spf-dash-all` fixture).
 
-**Nothing open.** All 21 invariants are addressed across the three surfaces (I17/I18 +
-I20-resolver shipped in v1.3). The corpus runs 15 dns-engine cases green on skill / web /
+**Nothing open.** All 21 original invariants are addressed across the three surfaces (I17/I18 +
+I20-resolver shipped in v1.3). The corpus runs 18 dns-engine cases green on skill / web /
 Action; the rest are pure-function / HTTP-stub / wrapper cases covered by per-surface tests.
 
 ## The invariants (the contract)
@@ -157,7 +167,7 @@ The web and Action pin files must name the same full amino-skills commit before 
 
 ## Fixtures
 
-See `fixtures.json`. It contains 20 known-answer cases: 15 closed-world
+See `fixtures.json`. It contains 23 known-answer cases: 18 closed-world
 `dns-engine` cases plus five explicitly skipped pure/HTTP/wrapper cases covered by
 per-surface tests or later work. Each is language-neutral and every harness adapts it to
 its own resolver mock.

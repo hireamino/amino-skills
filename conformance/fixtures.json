@@ -1,6 +1,6 @@
 {
   "$schema": "amino-conformance/v3",
-  "notes": "Single shared reviewed-answer corpus consumed by conformance/run.mjs (web and Action) and conformance/run_py.py (published skill). For every dns-engine fixture, legacy present/absent assertions remain active and expect.findings is a closed list: area, title, severity, action, and fixIncludes (or explicit null) are asserted. expect.score is the exact 8-boolean + DKIM-state + gap + note object. Surface-specific findings require surfaces plus a documented notApplicable reason for every omitted shipping surface. No expectation-regeneration mode exists. Non-dns-engine modes remain explicitly skipped with a reason.",
+  "notes": "Single shared reviewed-answer corpus consumed by conformance/run.mjs (web and Action) and conformance/run_py.py (published skill). For every dns-engine fixture, legacy present/absent assertions remain active and expect.findings is a closed list: area, title, severity, action, and fixIncludes (or explicit null) are asserted. expect.score is the exact bucket + DKIM-state + gap + note object; a true null MX uses explicit null for the inbound-only MTA_STS, TLS_RPT, and DANE buckets. Surface-specific findings require surfaces plus a documented notApplicable reason for every omitted shipping surface. No expectation-regeneration mode exists. Non-dns-engine modes remain explicitly skipped with a reason.",
   "fixtures": [
     {
       "id": "dkim-revoked-empty-p",
@@ -1652,6 +1652,398 @@
           "DKIM": "unknown",
           "gap": 8,
           "note": "no SPF; no DKIM key at common/provider selectors; no DMARC"
+        }
+      }
+    },
+    {
+      "id": "null-mx-not-applicable",
+      "invariant": "WHI-50",
+      "mode": "dns-engine",
+      "desc": "A true null MX makes only inbound MTA-STS, TLS-RPT, and DANE controls not applicable; outbound-relevant controls remain scored.",
+      "input": {
+        "domain": "nomail.invalid",
+        "dns": {
+          "nomail.invalid": {
+            "TXT": [
+              "v=spf1 -all"
+            ],
+            "MX": [
+              "0 ."
+            ]
+          },
+          "_dmarc.nomail.invalid": {
+            "TXT": [
+              "v=DMARC1; p=reject"
+            ]
+          }
+        }
+      },
+      "expect": {
+        "present": [
+          {
+            "area": "MTA-STS",
+            "includes": "not applicable"
+          },
+          {
+            "area": "Transport",
+            "includes": "Null MX"
+          }
+        ],
+        "absent": [
+          "No MTA-STS policy",
+          "No TLS-RPT",
+          "No DANE/TLSA"
+        ],
+        "findings": [
+          {
+            "area": "DMARC",
+            "title": "DMARC has no rua (no aggregate reporting)",
+            "severity": "medium",
+            "action": "Turn on DMARC reporting (rua) — needed before you enforce",
+            "fixIncludes": "Add rua=mailto:dmarc@<domain> to receive daily aggregate XML reports."
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+          },
+          {
+            "area": "SPF",
+            "title": "SPF present",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null
+          },
+          {
+            "area": "DMARC",
+            "title": "DMARC enforced (p=reject)",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null
+          },
+          {
+            "area": "MTA-STS",
+            "title": "MTA-STS not applicable — domain receives no mail",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null
+          },
+          {
+            "area": "Transport",
+            "title": "Null MX (RFC 7505) — domain declares no mail",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null
+          }
+        ],
+        "score": {
+          "SPF": true,
+          "DMARC": true,
+          "DMARC_enforced": true,
+          "DMARC_rua": false,
+          "MTA_STS": null,
+          "TLS_RPT": null,
+          "DANE": null,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 2,
+          "note": "no DKIM key at common/provider selectors; no rua"
+        }
+      }
+    },
+    {
+      "id": "no-mx-not-exempt",
+      "invariant": "WHI-50",
+      "mode": "dns-engine",
+      "desc": "No MX records is not a null MX declaration; inbound controls remain applicable and scored.",
+      "input": {
+        "domain": "nomx.invalid",
+        "dns": {
+          "nomx.invalid": {
+            "TXT": [
+              "v=spf1 -all"
+            ],
+            "NS": [
+              "ns.nomx.invalid."
+            ]
+          },
+          "_dmarc.nomx.invalid": {
+            "TXT": [
+              "v=DMARC1; p=reject"
+            ]
+          }
+        }
+      },
+      "expect": {
+        "present": [
+          {
+            "area": "Transport",
+            "includes": "No MX records"
+          },
+          {
+            "area": "MTA-STS",
+            "includes": "No MTA-STS policy"
+          },
+          {
+            "area": "TLS-RPT",
+            "includes": "No TLS-RPT"
+          }
+        ],
+        "absent": [
+          "MTA-STS not applicable",
+          "Null MX"
+        ],
+        "findings": [
+          {
+            "area": "DMARC",
+            "title": "DMARC has no rua (no aggregate reporting)",
+            "severity": "medium",
+            "action": "Turn on DMARC reporting (rua) — needed before you enforce",
+            "fixIncludes": "Add rua=mailto:dmarc@<domain> to receive daily aggregate XML reports."
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "action": "Confirm STARTTLS on the mail server",
+            "fixIncludes": null
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+          },
+          {
+            "area": "SPF",
+            "title": "SPF present",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null
+          },
+          {
+            "area": "DMARC",
+            "title": "DMARC enforced (p=reject)",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null
+          }
+        ],
+        "score": {
+          "SPF": true,
+          "DMARC": true,
+          "DMARC_enforced": true,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 5,
+          "note": "no DKIM key at common/provider selectors; no rua"
+        }
+      }
+    },
+    {
+      "id": "ambiguous-null-mx-not-exempt",
+      "invariant": "WHI-50",
+      "mode": "dns-engine",
+      "desc": "A null exchange alongside a real MX is ambiguous and must fail toward reporting, never exemption.",
+      "input": {
+        "domain": "ambiguous.invalid",
+        "dns": {
+          "ambiguous.invalid": {
+            "TXT": [
+              "v=spf1 -all"
+            ],
+            "MX": [
+              "0 .",
+              "10 mx.ambiguous.invalid."
+            ]
+          },
+          "_dmarc.ambiguous.invalid": {
+            "TXT": [
+              "v=DMARC1; p=reject"
+            ]
+          }
+        }
+      },
+      "expect": {
+        "present": [
+          {
+            "area": "MTA-STS",
+            "includes": "No MTA-STS policy"
+          },
+          {
+            "area": "TLS-RPT",
+            "includes": "No TLS-RPT"
+          },
+          {
+            "area": "Transport",
+            "includes": "No DANE/TLSA"
+          }
+        ],
+        "absent": [
+          "MTA-STS not applicable",
+          "Null MX (RFC 7505)"
+        ],
+        "findings": [
+          {
+            "area": "DMARC",
+            "title": "DMARC has no rua (no aggregate reporting)",
+            "severity": "medium",
+            "action": "Turn on DMARC reporting (rua) — needed before you enforce",
+            "fixIncludes": "Add rua=mailto:dmarc@<domain> to receive daily aggregate XML reports."
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+          },
+          {
+            "area": "Transport",
+            "title": "Could not establish STARTTLS to primary MX",
+            "severity": "medium",
+            "action": "Confirm STARTTLS on the mail server",
+            "fixIncludes": "Verify the MX offers STARTTLS with a valid certificate.",
+            "surfaces": [
+              "skill"
+            ],
+            "notApplicable": {
+              "web": "The edge engine cannot open port 25 for a live STARTTLS probe.",
+              "action": "The vendored JS engine intentionally omits live port-25 STARTTLS probing."
+            }
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+          },
+          {
+            "area": "Transport",
+            "title": "No DANE/TLSA",
+            "severity": "low",
+            "action": "Publish DANE/TLSA records",
+            "fixIncludes": "If DNSSEC is enabled, publish TLSA records for the MX; otherwise enable DNSSEC first."
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+          },
+          {
+            "area": "SPF",
+            "title": "SPF present",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null
+          },
+          {
+            "area": "DMARC",
+            "title": "DMARC enforced (p=reject)",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null
+          }
+        ],
+        "score": {
+          "SPF": true,
+          "DMARC": true,
+          "DMARC_enforced": true,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 5,
+          "note": "no DKIM key at common/provider selectors; no rua"
         }
       }
     },

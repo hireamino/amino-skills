@@ -137,6 +137,19 @@ try {
     "spf-over-10-lookups.score.SPF: expected false, got true",
   );
 
+  const removedNullMxExemption = replaceExactlyOnce(
+    portableEngine,
+    "if (nullMx) {\n    r.MTA_STS = null;",
+    "if (false) { // WHI-50 null-MX exemption canary\n    r.MTA_STS = null;",
+    "null-MX score exemption",
+  );
+  expectRed(
+    "H removed null-MX score exemption",
+    removedNullMxExemption,
+    "null-mx-not-applicable",
+    "null-mx-not-applicable.score.MTA_STS: expected null, got false",
+  );
+
   const originalRunner = readFileSync(runner, "utf8");
   const stubbedRunner = replaceExactlyOnce(
     originalRunner,
@@ -160,9 +173,9 @@ try {
   rmSync(temporary, { recursive: true, force: true });
 }
 
-console.log(`\nCanaries (${surface}): ${passed} passed, ${failed} failed; expected 6 cases.`);
-if (passed + failed !== 6) {
-  console.error(`FAIL  canary count: expected 6, got ${passed + failed}`);
+console.log(`\nCanaries (${surface}): ${passed} passed, ${failed} failed; expected 7 cases.`);
+if (passed + failed !== 7) {
+  console.error(`FAIL  canary count: expected 7, got ${passed + failed}`);
   process.exit(1);
 }
 process.exit(failed ? 1 : 0);

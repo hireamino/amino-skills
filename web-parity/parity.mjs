@@ -22,7 +22,9 @@
  * the run.
  */
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -33,9 +35,17 @@ const SCRIPTS = process.env.PARITY_SCRIPTS || resolve(here, "../scripts");
 const WEB_FN = process.env.PARITY_JS || resolve(here, "../../amino-site/functions/audit.js");
 
 // The function is plain .js with ES `export`; copy to a .mjs so Node imports it as ESM.
-const tmp = join(tmpdir(), "amino_audit_web.mjs");
+const temporary = mkdtempSync(join(tmpdir(), "amino-audit-parity-"));
+const tmp = join(temporary, "audit.mjs");
 writeFileSync(tmp, readFileSync(WEB_FN));
-const { buckets } = await import(tmp);
+const metrics = join(dirname(WEB_FN), "_metrics.mjs");
+if (existsSync(metrics)) copyFileSync(metrics, join(temporary, "_metrics.mjs"));
+let buckets;
+try {
+  ({ buckets } = await import(tmp));
+} finally {
+  rmSync(temporary, { recursive: true, force: true });
+}
 
 const DOMAINS = process.argv.slice(2).length ? process.argv.slice(2) : [
   "hireamino.com", "whiteboard.vc", "google.com", "microsoft.com", "github.com",
@@ -44,7 +54,11 @@ const DOMAINS = process.argv.slice(2).length ? process.argv.slice(2) : [
 ];
 
 const COLS = ["SPF", "DKIM", "DMARC", "DMARC_enforced", "DMARC_rua", "MTA_STS", "TLS_RPT", "DANE", "BIMI"];
-const disp = (r, k) => k === "DKIM" ? ({ good: "Y", weak: "N", invalid: "N", unknown: "—" }[r.DKIM]) : (r[k] ? "Y" : "N");
+const disp = (r, k) => {
+  if (k === "DKIM") return ({ good: "Y", weak: "N", invalid: "N", unknown: "—" }[r.DKIM]);
+  if (r[k] === null) return "—";
+  return r[k] ? "Y" : "N";
+};
 
 const tsv = execFileSync("python3", ["batch_score.py", ...DOMAINS.map((d) => `${d}=${d}`)],
   { cwd: SCRIPTS, encoding: "utf8" });

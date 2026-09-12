@@ -107,6 +107,21 @@ def dkim_state_indep(domain, resolver):
     return "unknown"
 
 
+def _empty_mx_exchange(row):
+    """Whether an independently resolved MX row names the root as its exchange.
+
+    Keep preference handling independent but aligned with the ratified boundary:
+    WHI-50 changes mixed-answer ambiguity, not the accepted root-exchange spellings.
+    """
+    parts = row.split()
+    return bool(parts) and (parts[-1].rstrip(".") == "" or row.strip() == "0.")
+
+
+def _null_mx_answer(mx_rows):
+    """Recognise null MX independently from the scanner implementation."""
+    return bool(mx_rows) and all(_empty_mx_exchange(row) for row in mx_rows)
+
+
 def independent(domain, resolver="google"):
     r = {b: False for b in BOOL_BUCKETS}
     spf = txt_starting(domain, "v=spf1", resolver)
@@ -119,11 +134,18 @@ def independent(domain, resolver="google"):
         p = (re.search(r"p=\s*(\w+)", dmarc, re.I) or [None, ""])[1].lower()
         r["DMARC_enforced"] = p in ("quarantine", "reject")
         r["DMARC_rua"] = "rua=" in dmarc.replace(" ", "")
-    r["MTA_STS"] = bool(txt_starting(f"_mta-sts.{domain}", "v=stsv1", resolver))
-    r["TLS_RPT"] = bool(txt_starting(f"_smtp._tls.{domain}", "v=tlsrptv1", resolver))
     mx = doh(domain, "MX", resolver)
-    if mx:
-        host = sorted(mx, key=lambda x: int(x.split()[0]) if x.split()[0].isdigit() else 99)[0].split()[-1].rstrip(".")
+    null_mx = _null_mx_answer(mx)
+    if null_mx:
+        r["MTA_STS"] = None
+        r["TLS_RPT"] = None
+        r["DANE"] = None
+    else:
+        r["MTA_STS"] = bool(txt_starting(f"_mta-sts.{domain}", "v=stsv1", resolver))
+        r["TLS_RPT"] = bool(txt_starting(f"_smtp._tls.{domain}", "v=tlsrptv1", resolver))
+    real_mx = [row for row in mx if not _empty_mx_exchange(row)]
+    if real_mx and not null_mx:
+        host = sorted(real_mx, key=lambda x: int(x.split()[0]) if x.split()[0].isdigit() else 99)[0].split()[-1].rstrip(".")
         r["DANE"] = bool(doh(f"_25._tcp.{host}", "TLSA", resolver))
     r["BIMI"] = bool(txt_starting(f"default._bimi.{domain}", "v=bimi1", resolver))
     r["DKIM"] = dkim_state_indep(domain, resolver)
@@ -131,6 +153,8 @@ def independent(domain, resolver="google"):
 
 
 def cell(v):
+    if v is None:
+        return "—"
     if isinstance(v, bool):
         return "Y" if v else "N"
     return {"good": "Y", "weak": "wk", "unknown": "?"}.get(v, v)

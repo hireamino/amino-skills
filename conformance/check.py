@@ -10,12 +10,14 @@ import base64
 import os
 import sys
 
-SCRIPTS = os.path.join(
+SCRIPTS = os.environ.get("AUDIT_SCRIPTS") or os.path.join(
     os.path.dirname(__file__), "..",
     "amino-deliverability-audit", "skills", "amino-deliverability-audit", "scripts",
 )
 sys.path.insert(0, os.path.abspath(SCRIPTS))
 import audit  # noqa: E402
+import batch_score  # noqa: E402
+import verify  # noqa: E402
 
 ok = True
 
@@ -55,6 +57,37 @@ chk("I15 valid enforce → no problems", audit.mta_sts_policy_problems("version:
 chk("I15 enforce missing fields → problems", len(audit.mta_sts_policy_problems("mode: enforce\n")[0]) > 0, True)
 chk("I15 max_age out of range → problem", any("max_age" in p for p in audit.mta_sts_policy_problems("version: STSv1\nmode: enforce\nmax_age: 99999999\nmx: a.ex.com")[0]), True)
 chk("I15 mode none needs no mx", audit.mta_sts_policy_problems("version: STSv1\nmode: none\nmax_age: 100")[0], [])
+
+# WHI-50 — only an unambiguous null MX exempts inbound-only controls.
+chk("WHI-50 null MX is detected", audit.is_null_mx(["0 ."]), True)
+chk("WHI-50 no MX is not exempt", audit.is_null_mx([]), False)
+chk("WHI-50 null + real MX is ambiguous", audit.is_null_mx(["0 .", "10 mx.example.com."]), False)
+_null_score = {bucket: False for bucket in batch_score.BOOL_BUCKETS}
+for _bucket in ("MTA_STS", "TLS_RPT", "DANE"):
+    _null_score[_bucket] = None
+_null_score["DKIM"] = "good"
+chk("WHI-50 N/A buckets do not add to gap", batch_score.gap_of(_null_score), 5)
+chk("WHI-50 N/A bucket renders as dash", batch_score.disp(_null_score, "MTA_STS"), "—")
+chk("WHI-50 verifier detects null MX independently", verify._null_mx_answer(["0 ."]), True)
+chk("WHI-50 verifier does not exempt no MX", verify._null_mx_answer([]), False)
+chk("WHI-50 verifier does not exempt ambiguous MX",
+    verify._null_mx_answer(["0 .", "10 mx.example.com."]), False)
+chk("WHI-50 verifier renders N/A as dash", verify.cell(None), "—")
+_verify_doh, _verify_txt = verify.doh, verify.txt_starting
+try:
+    verify.txt_starting = lambda *_args, **_kwargs: None
+    verify.doh = lambda name, rrtype, resolver="google": ["0 ."] if (name, rrtype) == ("d", "MX") else []
+    _independent_null = verify.independent("d")[0]
+    chk("WHI-50 verifier wires null MX into N/A buckets",
+        tuple(_independent_null[b] for b in ("MTA_STS", "TLS_RPT", "DANE")),
+        (None, None, None))
+    verify.doh = lambda *_args, **_kwargs: []
+    _independent_no_mx = verify.independent("d")[0]
+    chk("WHI-50 verifier wiring does not exempt no MX",
+        tuple(_independent_no_mx[b] for b in ("MTA_STS", "TLS_RPT", "DANE")),
+        (False, False, False))
+finally:
+    verify.doh, verify.txt_starting = _verify_doh, _verify_txt
 
 # ── DMARC enforcement advice (RFC 9989 §7.4) ────────────────────────────────
 # The short action label is the ONLY remediation text some surfaces render, so it
