@@ -11,7 +11,7 @@ import json
 import os
 import sys
 
-HERE = os.environ.get("CONFORMANCE_HOME") or os.path.dirname(__file__)
+HERE = os.path.dirname(__file__)
 SCRIPTS = os.environ.get("AUDIT_SCRIPTS") or os.path.join(
     HERE, "..",
     "amino-deliverability-audit", "skills", "amino-deliverability-audit", "scripts",
