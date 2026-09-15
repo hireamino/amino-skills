@@ -103,6 +103,7 @@ _resolver_backend = resolver._BACKEND
 _audit_dns_bindings = (
     audit.dig, audit.query_fresh, audit.confirm_txt, audit.dns_meta,
 )
+_audit_policy_fetch = audit._fetch_mta_sts_policy
 
 
 def _dig_reply(status=None, name="lookup.invalid", rrtype="TXT", answers=()):
@@ -148,10 +149,20 @@ try:
         resolver.normalized_meta("SERVFAIL"), resolver.normalized_meta(2))
     chk("WHI-125 dig and DoH NXDOMAIN normalize identically",
         resolver.normalized_meta("NXDOMAIN"), resolver.normalized_meta(3))
+    resolver.cache_clear()
+    resolver.record_meta("_mta-sts.record-meta.invalid", "TXT", 2, False)
+    chk("WHI-125 record_meta normalizes numeric DoH failure",
+        resolver.meta("_mta-sts.record-meta.invalid", "TXT"),
+        {"status": 2, "ad": False, "error": True})
+    resolver.record_meta("_mta-sts.record-meta.invalid", "TXT", "NXDOMAIN", False)
+    chk("WHI-125 record_meta normalizes named authoritative absence",
+        resolver.meta("_mta-sts.record-meta.invalid", "TXT"),
+        {"status": 3, "ad": False, "error": False})
 
     def _shipping_lookup(status):
         domain = "whi125-resolver.invalid"
         lookup_calls = []
+        policy_fetches = []
 
         def _stub_run(args, **_kwargs):
             rrtype, name = args[-2:]
@@ -171,14 +182,17 @@ try:
         audit.query_fresh = resolver.query_fresh
         audit.confirm_txt = _SHIPPING_CONFIRM_TXT
         audit.dns_meta = resolver.meta
+        audit._fetch_mta_sts_policy = lambda _domain: (
+            policy_fetches.append(_domain) or ("checked", "unexpected policy")
+        )
         findings, observations = [], {}
         audit.check_mta_sts(domain, findings, observations)
         check_lookup_calls = len(lookup_calls)
         buckets, _note = batch_score.score(domain)
-        return findings, observations, buckets, check_lookup_calls
+        return findings, observations, buckets, check_lookup_calls, policy_fetches
 
     (_failed_findings, _failed_observations, _failed_buckets,
-     _failed_lookup_calls) = _shipping_lookup("SERVFAIL")
+     _failed_lookup_calls, _failed_policy_fetches) = _shipping_lookup("SERVFAIL")
     _failed_finding = next((finding for finding in _failed_findings
                             if finding["area"] == "MTA-STS"), None)
     chk("WHI-125 real SERVFAIL finding area",
@@ -205,9 +219,11 @@ try:
         _failed_buckets["MTA_STS"], None)
     chk("WHI-125 real SERVFAIL exhausts backend and confirmation retries",
         _failed_lookup_calls, 9)
+    chk("WHI-125 real SERVFAIL does not fetch the policy",
+        _failed_policy_fetches, [])
 
     (_absent_findings, _absent_observations, _absent_buckets,
-     _absent_lookup_calls) = _shipping_lookup("NXDOMAIN")
+     _absent_lookup_calls, _absent_policy_fetches) = _shipping_lookup("NXDOMAIN")
     _absent_finding = next((finding for finding in _absent_findings
                             if finding["area"] == "MTA-STS"), None)
     chk("WHI-125 real NXDOMAIN finding title",
@@ -218,11 +234,14 @@ try:
         _absent_buckets["MTA_STS"], False)
     chk("WHI-125 real NXDOMAIN completes all confirmation queries",
         _absent_lookup_calls, 3)
+    chk("WHI-125 real NXDOMAIN does not fetch the policy",
+        _absent_policy_fetches, [])
 finally:
     resolver.subprocess.run = _resolver_run
     resolver.time.sleep = _resolver_sleep
     resolver.set_backend(_resolver_backend)
     audit.dig, audit.query_fresh, audit.confirm_txt, audit.dns_meta = _audit_dns_bindings
+    audit._fetch_mta_sts_policy = _audit_policy_fetch
 
 # WHI-10 — brand/optional findings never occupy a high-value quadrant.
 chk("WHI-10 No BIMI priority", audit.priority({
