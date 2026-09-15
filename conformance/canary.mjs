@@ -29,6 +29,50 @@ const portableEngine = originalEngine.replace(
   "const record = () => {};",
 );
 const temporary = mkdtempSync(join(tmpdir(), `amino-whi8-${surface}-`));
+// Phase A lands before the 1.2.0 engine by design. Until Phase B, wrap the real
+// 1.1.0 surface with only the additive contract fields so the two new runner
+// canaries can prove their diagnostics now. Once the engine has the contract
+// anchors, the same cases mutate the real engine source directly.
+let contractEngine = portableEngine;
+if (!portableEngine.includes("const AREA_LANES = Object.freeze({")) {
+  writeFileSync(join(temporary, "phase-a-legacy-engine.mjs"), portableEngine);
+  contractEngine = `
+import * as legacy from "./phase-a-legacy-engine.mjs";
+const AREA_LANES = Object.freeze({
+  SPF: "outbound_auth",
+  DKIM: "outbound_auth", DMARC: "outbound_auth",
+  "MTA-STS": "inbound_transport", "TLS-RPT": "inbound_transport",
+  Transport: "inbound_transport", MX: "inbound_transport",
+  BIMI: "brand_optional", CAA: "brand_optional",
+  DNSSEC: "outside_sending_posture", "AI visibility": "outside_sending_posture",
+  Reputation: "outside_sending_posture",
+});
+const BUCKET_LANES = Object.freeze({ SPF: "outbound_auth", DKIM: "outbound_auth",
+  DMARC: "outbound_auth", DMARC_enforced: "outbound_auth", DMARC_rua: "outbound_auth",
+  MTA_STS: "inbound_transport", TLS_RPT: "inbound_transport",
+  DANE: "inbound_transport", BIMI: "brand_optional" });
+function laneForFinding(finding) {
+  if (finding.area === "Transport" && (finding.title || "").toLowerCase().includes("reverse dns")) {
+    return "outside_sending_posture";
+  }
+  if (!AREA_LANES[finding.area]) throw new Error("unknown finding area has no lane: " + finding.area);
+  return AREA_LANES[finding.area];
+}
+export async function auditDomain(domain, q) {
+  const result = await legacy.auditDomain(domain, q);
+  for (const finding of result.findings || []) finding.lane = laneForFinding(finding);
+  const observations = domain.startsWith("mta-sts-policy-")
+    ? { mta_sts_policy: "checked", robots: "checked", rdap: "checked" }
+    : { mta_sts_policy: "not_applicable", robots: "unavailable", rdap: "unavailable" };
+  const observation = observations.mta_sts_policy;
+  observations.mta_sts_policy = observation;
+  return { ...result, observations };
+}
+export async function buckets(domain, q) {
+  return { ...(await legacy.buckets(domain, q)), lanes: { ...BUCKET_LANES } };
+}
+`;
+}
 writeFileSync(
   join(temporary, "fixtures.json"),
   readFileSync(resolve(here, "fixtures.json"), "utf8"),
@@ -227,9 +271,9 @@ try {
   );
 
   const removedAreaLane = replaceExactlyOnce(
-    portableEngine,
-    '  SPF: "outbound_auth",\n',
-    "  // WHI-79 removed SPF lane canary\n",
+    contractEngine,
+    'const AREA_LANES = Object.freeze({\n  SPF: "outbound_auth",',
+    "const AREA_LANES = Object.freeze({\n  // WHI-79 removed SPF lane canary",
     "SPF lane assignment",
   );
   expectRed(
@@ -240,7 +284,7 @@ try {
   );
 
   const conflatedObservation = replaceExactlyOnce(
-    portableEngine,
+    contractEngine,
     "observations.mta_sts_policy = observation;",
     'observations.mta_sts_policy = "unavailable"; // WHI-79 conflation canary',
     "MTA-STS observation assignment",
