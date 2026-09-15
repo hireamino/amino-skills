@@ -30,9 +30,11 @@ DNS_TIMEOUT = 8  # seconds, per dig invocation
 # dig's rcode and retries the transient failures (SERVFAIL/REFUSED/timeout) while trusting
 # a real NOERROR/NXDOMAIN empty. (No effect on the DoH edge backend, which bypasses this.)
 _DIG_SEM = threading.BoundedSemaphore(4)
-_TRANSIENT = {"SERVFAIL", "REFUSED", None}  # rcodes worth a retry (None = no status seen)
+_STATUS_CODES = {"NOERROR": 0, "SERVFAIL": 2, "NXDOMAIN": 3, "REFUSED": 5}
+_TRANSIENT = {2, 5, None}  # rcodes worth a retry (None = no status seen)
 
-# DNSSEC/rcode meta side-channel: (name, rrtype) -> {"status": str|None, "ad": bool}.
+# DNSSEC/rcode meta side-channel:
+# (name, rrtype) -> {"status": int|None, "ad": bool, "error": bool}.
 # Populated by the dig backend (+dnssec, parses the header AD flag) or record_meta() for
 # alternate backends. Read via meta(); the DANE/DNSSEC/reliability checks use it, and the
 # plain query() contract stays list[str] so every other check is unchanged.
@@ -41,15 +43,40 @@ _META_LOCK = threading.Lock()
 
 
 def meta(name, rrtype):
-    """DNSSEC/rcode meta for the last lookup of (name, rrtype): {'status', 'ad'} or {}."""
+    """DNSSEC/rcode meta for the last lookup, including terminal lookup failure."""
     with _META_LOCK:
         return dict(_META.get((name, rrtype), {}))
 
 
-def record_meta(name, rrtype, status, ad):
+def normalize_status(status):
+    """Normalize dig names and DoH/fixture numbers to one DNS RCODE representation."""
+    if status is None:
+        return None
+    if isinstance(status, int) and not isinstance(status, bool):
+        return status
+    if isinstance(status, str):
+        value = status.strip().upper()
+        if value in _STATUS_CODES:
+            return _STATUS_CODES[value]
+        if value.isdigit():
+            return int(value)
+    return None
+
+
+def normalized_meta(status, ad=False, error=False):
+    """Return the shared metadata shape used by dig, DoH, and fixture backends."""
+    code = normalize_status(status)
+    return {
+        "status": code,
+        "ad": bool(ad),
+        "error": bool(error or code in _TRANSIENT),
+    }
+
+
+def record_meta(name, rrtype, status, ad, error=False):
     """For alternate backends (e.g. DoH) to surface Status/AD into the meta channel."""
     with _META_LOCK:
-        _META[(name, rrtype)] = {"status": status, "ad": bool(ad)}
+        _META[(name, rrtype)] = normalized_meta(status, ad, error)
 
 
 def _parse_answer(out, rrtype):
@@ -80,6 +107,7 @@ def _dig_backend(name, rrtype):
     # Reject anything that isn't a clean DNS name before it becomes an argv element.
     if not name or name[0] == "-" or not _NAME_RE.fullmatch(name):
         return []
+    terminal_status = None
     for attempt in range(3):
         try:
             with _DIG_SEM:
@@ -88,10 +116,12 @@ def _dig_backend(name, rrtype):
                     capture_output=True, text=True, timeout=DNS_TIMEOUT,
                 ).stdout
         except Exception:
+            terminal_status = None
             time.sleep(0.15 * (attempt + 1))
             continue  # spawn/timeout error → transient, retry
         m = re.search(r"status:\s*(\w+)", out)
-        status = m.group(1) if m else None
+        status = normalize_status(m.group(1) if m else None)
+        terminal_status = status
         if status in _TRANSIENT:
             time.sleep(0.15 * (attempt + 1))
             continue  # SERVFAIL/REFUSED under load → retry (don't trust the empty)
@@ -99,9 +129,9 @@ def _dig_backend(name, rrtype):
         # DNSSEC chain. Record it (+ rcode) for the DANE/DNSSEC checks.
         fm = re.search(r"flags:\s*([a-z ]+);", out)
         ad = bool(fm and "ad" in fm.group(1).split())
-        with _META_LOCK:
-            _META[(name, rrtype)] = {"status": status, "ad": ad}
+        record_meta(name, rrtype, status, ad)
         return _parse_answer(out, rrtype)  # NOERROR/NXDOMAIN → authoritative
+    record_meta(name, rrtype, terminal_status, False, error=True)
     return []
 
 
@@ -114,7 +144,7 @@ def set_backend(fn):
     Clears the cache so a backend swap can't serve stale results."""
     global _BACKEND
     _BACKEND = fn
-    query.cache_clear()
+    cache_clear()
 
 
 @lru_cache(maxsize=8192)
@@ -144,3 +174,5 @@ def query_fresh(name, rrtype):
 
 def cache_clear():
     query.cache_clear()
+    with _META_LOCK:
+        _META.clear()

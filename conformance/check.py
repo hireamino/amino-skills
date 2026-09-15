@@ -19,7 +19,10 @@ SCRIPTS = os.environ.get("AUDIT_SCRIPTS") or os.path.join(
 sys.path.insert(0, os.path.abspath(SCRIPTS))
 import audit  # noqa: E402
 import batch_score  # noqa: E402
+import resolver  # noqa: E402
 import verify  # noqa: E402
+
+_SHIPPING_CONFIRM_TXT = audit.confirm_txt
 
 ok = True
 
@@ -90,6 +93,136 @@ try:
         (False, False, False))
 finally:
     verify.doh, verify.txt_starting = _verify_doh, _verify_txt
+
+# WHI-125 — exercise the shipping dig backend, metadata side channel, finding,
+# observation, and scorer. The subprocess seam is stubbed; no alternate classifier
+# is introduced in the checker. Cache and metadata state are cleared between cases.
+_resolver_run = resolver.subprocess.run
+_resolver_sleep = resolver.time.sleep
+_resolver_backend = resolver._BACKEND
+_audit_dns_bindings = (
+    audit.dig, audit.query_fresh, audit.confirm_txt, audit.dns_meta,
+)
+
+
+def _dig_reply(status=None, name="lookup.invalid", rrtype="TXT", answers=()):
+    header = "" if status is None else (
+        f";; ->>HEADER<<- opcode: QUERY, status: {status}, id: 1\n"
+        ";; flags: qr rd ra; QUERY: 1, ANSWER: 0, AUTHORITY: 0, ADDITIONAL: 0\n"
+    )
+    if not answers:
+        return header
+    rows = "\n".join(f"{name}. 60 IN {rrtype} {answer}" for answer in answers)
+    return header + f";; ANSWER SECTION:\n{rows}\n\n"
+
+
+def _result(stdout):
+    return type("DigResult", (), {"stdout": stdout})()
+
+
+try:
+    resolver.time.sleep = lambda _seconds: None
+    _terminal_rows = (
+        ("SERVFAIL", "SERVFAIL", {"status": 2, "ad": False, "error": True}),
+        ("REFUSED", "REFUSED", {"status": 5, "ad": False, "error": True}),
+        ("no status", None, {"status": None, "ad": False, "error": True}),
+        ("timeout", "timeout", {"status": None, "ad": False, "error": True}),
+        ("NXDOMAIN", "NXDOMAIN", {"status": 3, "ad": False, "error": False}),
+        ("NOERROR empty", "NOERROR", {"status": 0, "ad": False, "error": False}),
+    )
+    for _label, _status, _expected_meta in _terminal_rows:
+        resolver.cache_clear()
+        if _status == "timeout":
+            def _stub_run(*_args, **_kwargs):
+                raise resolver.subprocess.TimeoutExpired("dig", resolver.DNS_TIMEOUT)
+        else:
+            def _stub_run(*_args, _status=_status, **_kwargs):
+                return _result(_dig_reply(_status))
+        resolver.subprocess.run = _stub_run
+        chk(f"WHI-125 resolver terminal {_label} answers", resolver._dig_backend(
+            "_mta-sts.lookup.invalid", "TXT"), [])
+        chk(f"WHI-125 resolver terminal {_label} meta", resolver.meta(
+            "_mta-sts.lookup.invalid", "TXT"), _expected_meta)
+
+    chk("WHI-125 dig and DoH SERVFAIL normalize identically",
+        resolver.normalized_meta("SERVFAIL"), resolver.normalized_meta(2))
+    chk("WHI-125 dig and DoH NXDOMAIN normalize identically",
+        resolver.normalized_meta("NXDOMAIN"), resolver.normalized_meta(3))
+
+    def _shipping_lookup(status):
+        domain = "whi125-resolver.invalid"
+        lookup_calls = []
+
+        def _stub_run(args, **_kwargs):
+            rrtype, name = args[-2:]
+            if (name, rrtype) == (domain, "MX"):
+                return _result(_dig_reply(
+                    "NOERROR", domain, "MX", ("10 mx.whi125-resolver.invalid.",),
+                ))
+            if (name, rrtype) == (f"_mta-sts.{domain}", "TXT"):
+                lookup_calls.append(status)
+                return _result(_dig_reply(status, name, rrtype))
+            return _result(_dig_reply("NOERROR", name, rrtype))
+
+        resolver.cache_clear()
+        resolver.subprocess.run = _stub_run
+        resolver.set_backend(resolver._dig_backend)
+        audit.dig = resolver.query
+        audit.query_fresh = resolver.query_fresh
+        audit.confirm_txt = _SHIPPING_CONFIRM_TXT
+        audit.dns_meta = resolver.meta
+        findings, observations = [], {}
+        audit.check_mta_sts(domain, findings, observations)
+        check_lookup_calls = len(lookup_calls)
+        buckets, _note = batch_score.score(domain)
+        return findings, observations, buckets, check_lookup_calls
+
+    (_failed_findings, _failed_observations, _failed_buckets,
+     _failed_lookup_calls) = _shipping_lookup("SERVFAIL")
+    _failed_finding = next((finding for finding in _failed_findings
+                            if finding["area"] == "MTA-STS"), None)
+    chk("WHI-125 real SERVFAIL finding area",
+        _failed_finding and _failed_finding.get("area"), "MTA-STS")
+    chk("WHI-125 real SERVFAIL finding severity",
+        _failed_finding and _failed_finding.get("severity"), "low")
+    chk("WHI-125 real SERVFAIL finding title",
+        _failed_finding and _failed_finding.get("title"),
+        "Unable to confirm MTA-STS policy")
+    chk("WHI-125 real SERVFAIL finding detail",
+        _failed_finding and _failed_finding.get("detail"),
+        "The DNS lookup for the _mta-sts record failed, so we could not tell whether an MTA-STS policy is published. This is not a finding that the policy is missing.")
+    chk("WHI-125 real SERVFAIL finding fix",
+        _failed_finding and _failed_finding.get("fix"),
+        "Re-run the check. If it keeps failing, confirm your DNS provider answers TXT queries for _mta-sts.<domain>.")
+    chk("WHI-125 real SERVFAIL finding action",
+        _failed_finding and audit.action(_failed_finding),
+        "Re-check the MTA-STS DNS record")
+    chk("WHI-125 real SERVFAIL finding priority",
+        _failed_finding and audit.priority(_failed_finding), ("high", "low"))
+    chk("WHI-125 real SERVFAIL observation",
+        _failed_observations.get("mta_sts_policy"), "unavailable")
+    chk("WHI-125 real SERVFAIL score excludes MTA-STS",
+        _failed_buckets["MTA_STS"], None)
+    chk("WHI-125 real SERVFAIL exhausts backend and confirmation retries",
+        _failed_lookup_calls, 9)
+
+    (_absent_findings, _absent_observations, _absent_buckets,
+     _absent_lookup_calls) = _shipping_lookup("NXDOMAIN")
+    _absent_finding = next((finding for finding in _absent_findings
+                            if finding["area"] == "MTA-STS"), None)
+    chk("WHI-125 real NXDOMAIN finding title",
+        _absent_finding and _absent_finding.get("title"), "No MTA-STS policy")
+    chk("WHI-125 real NXDOMAIN observation",
+        _absent_observations.get("mta_sts_policy"), "not_applicable")
+    chk("WHI-125 real NXDOMAIN score remains a gap",
+        _absent_buckets["MTA_STS"], False)
+    chk("WHI-125 real NXDOMAIN completes all confirmation queries",
+        _absent_lookup_calls, 3)
+finally:
+    resolver.subprocess.run = _resolver_run
+    resolver.time.sleep = _resolver_sleep
+    resolver.set_backend(_resolver_backend)
+    audit.dig, audit.query_fresh, audit.confirm_txt, audit.dns_meta = _audit_dns_bindings
 
 # WHI-10 — brand/optional findings never occupy a high-value quadrant.
 chk("WHI-10 No BIMI priority", audit.priority({
@@ -433,6 +566,19 @@ chk("docs: one-click unsubscribe is scoped, not blanket",
 
 # BSI TR-03108, not NIS2, is what actually specifies secure email transport.
 chk("docs: MTA-STS compliance cites BSI TR-03108", "TR-03108" in _ALL, True)
+
+# WHI-125 — every user/contributor-facing document preserves the evidence boundary:
+# resolver failure is unavailable, while only authoritative absence means missing.
+chk("WHI-125 README distinguishes MTA-STS lookup failure",
+    "A failed `_mta-sts` TXT lookup is reported as **“Unable to confirm MTA-STS policy”** and excluded from the gap" in _DOCS["README.md"], True)
+chk("WHI-125 FAQ distinguishes MTA-STS lookup failure",
+    "A resolver failure is not evidence that the policy is missing; re-run the check before changing DNS." in _DOCS["FAQ.md"], True)
+chk("WHI-125 CONTRIBUTING forbids failure-as-absence",
+    "Never turn resolver failure into an absent-record finding." in _DOCS["CONTRIBUTING.md"], True)
+chk("WHI-125 SKILL treats the finding as unavailable evidence",
+    "Treat **“Unable to confirm MTA-STS policy”** as unavailable evidence, not as a missing policy" in _DOCS["SKILL.md"], True)
+chk("WHI-125 docs do not call resolver failure a missing policy",
+    "resolver failure means the mta-sts policy is missing" in _ALL.lower(), False)
 
 # and the coupling: every doc asserted above must be in the workflow's path filter
 _PATHS = {"FAQ.md": "- 'FAQ.md'", "README.md": "- 'README.md'",

@@ -118,6 +118,11 @@ they're increasingly **required** in regulated, government, and security-conscio
 contexts, and they're table stakes for a "we take trust seriously" posture. Treat them
 as hardening: do them when the requirement (or the buyer) calls for it.
 
+If the `_mta-sts` TXT lookup fails, the audit reports **“Unable to confirm MTA-STS
+policy”** and excludes that bucket from the gap. It reports **“No MTA-STS policy”**
+only after an authoritative NXDOMAIN or NOERROR-empty answer. A resolver failure is
+not evidence that the policy is missing; re-run the check before changing DNS.
+
 ### What is BIMI and is it worth it?
 
 **BIMI** (Brand Indicators for Message Identification) shows your verified logo next to

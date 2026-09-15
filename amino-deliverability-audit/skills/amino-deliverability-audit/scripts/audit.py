@@ -286,6 +286,14 @@ def confirm_txt(name, prefix):
     return None
 
 
+def mta_sts_txt_lookup(domain):
+    """Return (STSv1 TXT, lookup_failed) without conflating failure with absence."""
+    name = f"_mta-sts.{domain}"
+    txt = confirm_txt(name, "v=stsv1")
+    lookup_failed = bool(txt is None and dns_meta(name, "TXT").get("error"))
+    return txt, lookup_failed
+
+
 # A pragmatic subset of the Public Suffix List: registry suffixes where the registrable
 # domain is the last THREE labels, not two. Not exhaustive (the full PSL is a ~200 KB data
 # dependency); it fixes the cases that matter for same-org checks — e.g. good.co.uk and
@@ -734,7 +742,18 @@ def check_mta_sts(domain, F, observations=None):
             fix=None,
         ))
         return
-    txt = confirm_txt(f"_mta-sts.{domain}", "v=stsv1")
+    txt, lookup_failed = mta_sts_txt_lookup(domain)
+    if lookup_failed:
+        if observations is not None:
+            observations["mta_sts_policy"] = "unavailable"
+        F.append(dict(
+            area="MTA-STS",
+            severity="low",
+            title="Unable to confirm MTA-STS policy",
+            detail="The DNS lookup for the _mta-sts record failed, so we could not tell whether an MTA-STS policy is published. This is not a finding that the policy is missing.",
+            fix="Re-run the check. If it keeps failing, confirm your DNS provider answers TXT queries for _mta-sts.<domain>.",
+        ))
+        return
     if not txt:
         if observations is not None:
             observations["mta_sts_policy"] = "not_applicable"
@@ -1245,6 +1264,8 @@ def action(f):
             return "Turn on DMARC reporting (rua) — needed before you enforce"
         return "Strengthen the DMARC policy"
     if a == "MTA-STS":
+        if "unable to confirm" in t:
+            return "Re-check the MTA-STS DNS record"
         if "does not cover all mx" in t:
             return "Fix MTA-STS mx: entries to match your MX"
         if "max_age" in t:

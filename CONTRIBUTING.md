@@ -35,6 +35,10 @@ contributions:
 - **Verify against real resolvers.** Changes to detection logic should be checked
   against Google (`8.8.8.8`) and Cloudflare (`1.1.1.1`) — `scripts/verify.py` runs a
   golden-set cross-check. Include before/after for any domain whose score changes.
+- **Keep DNS failure distinct from absence.** A failed `_mta-sts` TXT lookup is
+  “Unable to confirm MTA-STS policy” and excluded from the gap; only authoritative
+  NXDOMAIN or NOERROR-empty means “No MTA-STS policy.” Never turn resolver failure
+  into an absent-record finding.
 - **Cite sources for any standards claim.** No claim about a spec, a date, or a
   provider rule without a link to the primary source.
 - **Keep it fast.** A single-domain scan targets ~3–5s (checks run concurrently). Don't add
