@@ -25,12 +25,17 @@ on:
 
 jobs:
   conformance:
+    name: conformance (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.12', '3.14']
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
       - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b  # v5
         with:
-          python-version: '3.12'
+          python-version: ${{ matrix.python-version }}
       - name: Pure-function conformance checks
         run: python3 conformance/check.py
       - name: Fixtures-driven conformance runner (shared corpus)

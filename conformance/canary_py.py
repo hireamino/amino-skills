@@ -46,14 +46,14 @@ def execute(extra_env=None, runner=RUNNER):
     )
 
 
-def execute_check(extra_env=None):
+def execute_check(extra_env=None, checker=CHECK):
     env = {
         **os.environ,
         "PYTHONDONTWRITEBYTECODE": "1",
         **(extra_env or {}),
     }
     return subprocess.run(
-        [sys.executable, str(CHECK)],
+        [sys.executable, str(checker)],
         text=True,
         capture_output=True,
         env=env,
@@ -73,6 +73,28 @@ def expect_red(name, result, expected):
         FAILED += 1
 
 
+def prove_detector_required(name, scripts, expected, detector_id):
+    """Delete one named assertion and prove the mutation canary predicate then fails."""
+    source = CHECK.read_text(encoding="utf-8")
+    begin = f"# CANARY-DETECTOR-BEGIN: {detector_id}\n"
+    end = f"# CANARY-DETECTOR-END: {detector_id}\n"
+    if source.count(begin) != 1 or source.count(end) != 1:
+        raise AssertionError(f"{name}: detector anchors must each occur exactly once")
+    prefix, remainder = source.split(begin, 1)
+    _removed, suffix = remainder.split(end, 1)
+    with tempfile.TemporaryDirectory(prefix="amino-whi79-detector-") as temporary:
+        checker = Path(temporary) / "check.py"
+        checker.write_text(prefix + suffix, encoding="utf-8")
+        result = execute_check({
+            "AUDIT_SCRIPTS": str(scripts),
+            "CONFORMANCE_HOME": str(HERE),
+        }, checker=checker)
+    output = result.stdout + result.stderr
+    if result.returncode != 0 and expected in output:
+        raise AssertionError(f"{name}: canary still passed after its named assertion was deleted")
+    print(f"PASS    detector-of-detector {name} — deleted assertion rejects canary predicate")
+
+
 def remove_fixture_address(corpus, fixture_id, host):
     matches = [fixture for fixture in corpus["fixtures"] if fixture["id"] == fixture_id]
     if len(matches) != 1:
@@ -83,6 +105,18 @@ def remove_fixture_address(corpus, fixture_id, host):
     if not isinstance(entry, dict) or entry.get("A") != ["93.184.216.34"]:
         raise AssertionError(f"{fixture_id}: expected the reviewed public-address anchor")
     del entry["A"]
+
+
+def replace_fixture_addresses(corpus, fixture_id, host, expected, replacement):
+    matches = [fixture for fixture in corpus["fixtures"] if fixture["id"] == fixture_id]
+    if len(matches) != 1:
+        raise AssertionError(
+            f"{fixture_id}: fixture mutation anchor must occur exactly once, found {len(matches)}"
+        )
+    entry = matches[0]["input"]["dns"].get(host)
+    if not isinstance(entry, dict) or entry.get("A") != expected:
+        raise AssertionError(f"{fixture_id}: expected the reviewed address-list anchor")
+    entry["A"] = replacement
 
 
 try:
@@ -389,12 +423,189 @@ try:
             "'robots': 'checked', 'rdap': 'checked'}, got {'mta_sts_policy': 'unavailable', "
             "'robots': 'checked', 'rdap': 'checked'}",
         )
+
+    # WHI-79 Phase A.2 — mutate each shipping guard independently. Each expected
+    # diagnostic belongs to a dedicated assertion in check.py; removing that assertion
+    # makes the canary predicate fail, proving exceptions or adjacent checks are not the
+    # verdict source.
+    with tempfile.TemporaryDirectory(prefix="amino-whi79-http-guard-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py", "verify.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '        ips = host_public_ips(host)\n'
+            '        if not ips:\n'
+            '            return None, None  # SSRF guard: refuse private/loopback/link-local/reserved\n',
+            '        ips = dig(host, "A") + dig(host, "AAAA")  # WHI-79 deleted HTTP guard canary\n'
+            '        if not ips:\n'
+            '            return None, None\n',
+            "_http_get shipping address guard",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        diagnostic = "FAIL WHI-79 detector _http_get blocks a private address"
+        expect_red("T deleted _http_get address guard", execute_check({"AUDIT_SCRIPTS": str(target)}), diagnostic)
+        prove_detector_required("T _http_get", target, diagnostic, "http-get-guard")
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi79-mta-guard-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py", "verify.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '        ips = host_public_ips(mhost)\n'
+            '        if not ips:\n'
+            '            raise OSError("mta-sts host does not resolve to a public IP")  # SSRF guard\n',
+            '        ips = dig(mhost, "A") + dig(mhost, "AAAA")  # WHI-79 deleted MTA-STS guard canary\n'
+            '        if not ips:\n'
+            '            raise OSError("mta-sts host does not resolve")\n',
+            "MTA-STS shipping address guard",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        diagnostic = "FAIL WHI-79 detector MTA-STS blocks a private address"
+        expect_red("U deleted MTA-STS address guard", execute_check({"AUDIT_SCRIPTS": str(target)}), diagnostic)
+        prove_detector_required("U MTA-STS", target, diagnostic, "mta-sts-guard")
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi79-mx-guard-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py", "verify.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '        ips = host_public_ips(host)\n'
+            '        if not ips:\n'
+            '            raise OSError("MX does not resolve to a public IP")  # SSRF guard\n',
+            '        ips = dig(host, "A") + dig(host, "AAAA")  # WHI-79 deleted MX guard canary\n'
+            '        if not ips:\n'
+            '            raise OSError("MX does not resolve")\n',
+            "MX shipping address guard",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        diagnostic = "FAIL WHI-79 detector MX STARTTLS blocks a private address"
+        expect_red("V deleted MX STARTTLS address guard", execute_check({"AUDIT_SCRIPTS": str(target)}), diagnostic)
+        prove_detector_required("V MX STARTTLS", target, diagnostic, "mx-guard")
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi79-whole-host-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py", "verify.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '        if any(candidate.version == network.version and candidate in network\n'
+            '               for network in _CONTRACT_NON_PUBLIC_NETWORKS):\n'
+            '            return []\n',
+            '        if any(candidate.version == network.version and candidate in network\n'
+            '               for network in _CONTRACT_NON_PUBLIC_NETWORKS):\n'
+            '            continue  # WHI-79 public-subset canary\n',
+            "whole-host refusal",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        diagnostic = "FAIL WHI-79 detector mixed address refuses whole host"
+        expect_red("W kept the public subset", execute_check({"AUDIT_SCRIPTS": str(target)}), diagnostic)
+        prove_detector_required("W public subset", target, diagnostic, "public-subset")
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi79-shared-space-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py", "verify.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '    ipaddress.ip_network("100.64.0.0/10"),\n',
+            '    # WHI-79 removed shared-address range canary\n',
+            "100.64.0.0/10 contract range",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        diagnostic = "FAIL WHI-79 detector 100.64 shared address refuses host"
+        expect_red("X removed 100.64.0.0/10", execute_check({"AUDIT_SCRIPTS": str(target)}), diagnostic)
+        prove_detector_required("X shared space", target, diagnostic, "shared-space")
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi79-mapped-address-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py", "verify.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '        candidate = (address.ipv4_mapped\n'
+            '                     if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped\n'
+            '                     else address)\n',
+            '        candidate = address  # WHI-79 removed IPv4-mapped unwrap canary\n',
+            "IPv4-mapped address unwrap",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        diagnostic = "FAIL WHI-79 detector mapped 100.64 address refuses host"
+        expect_red("Y removed IPv4-mapped unwrap", execute_check({"AUDIT_SCRIPTS": str(target)}), diagnostic)
+        prove_detector_required("Y mapped address", target, diagnostic, "mapped-address")
+
+    # Corpus reachability canaries: make each configured response reachable and require
+    # the closed-world observation comparison to expose the change.
+    _reachability_cases = (
+        (
+            "Z removed private address from mixed robots fixture",
+            "robots-mixed-address-refused",
+            "robots-mixed-address-refused.invalid",
+            ["93.184.216.34", "10.0.0.5"],
+            ["93.184.216.34"],
+            "robots-mixed-address-refused.observations: expected {'mta_sts_policy': "
+            "'not_applicable', 'robots': 'unavailable', 'rdap': 'checked'}, got "
+            "{'mta_sts_policy': 'not_applicable', 'robots': 'checked', 'rdap': 'checked'}",
+        ),
+        (
+            "AA removed shared address from robots fixture",
+            "robots-shared-address-refused",
+            "robots-shared-address-refused.invalid",
+            ["100.64.0.1"],
+            [],
+            "robots-shared-address-refused.observations: expected {'mta_sts_policy': "
+            "'not_applicable', 'robots': 'unavailable', 'rdap': 'checked'}, got "
+            "{'mta_sts_policy': 'not_applicable', 'robots': 'checked', 'rdap': 'checked'}",
+        ),
+        (
+            "AB removed private address from mixed MTA-STS fixture",
+            "mta-sts-host-mixed-address-refused",
+            "mta-sts.mta-sts-host-mixed-address-refused.invalid",
+            ["93.184.216.34", "10.0.0.5"],
+            ["93.184.216.34"],
+            "mta-sts-host-mixed-address-refused.observations: expected {'mta_sts_policy': "
+            "'unavailable', 'robots': 'checked', 'rdap': 'checked'}, got "
+            "{'mta_sts_policy': 'checked', 'robots': 'checked', 'rdap': 'checked'}",
+        ),
+    )
+    for name, fixture_id, host, expected_addresses, replacement, diagnostic in _reachability_cases:
+        with tempfile.TemporaryDirectory(prefix="amino-whi79-address-fixture-") as temporary:
+            target = Path(temporary)
+            runner = target / "run_py.py"
+            shutil.copyfile(RUNNER, runner)
+            corpus = json.loads((HERE / "fixtures.json").read_text(encoding="utf-8"))
+            replace_fixture_addresses(corpus, fixture_id, host, expected_addresses, replacement)
+            (target / "fixtures.json").write_text(
+                json.dumps(corpus, indent=2) + "\n", encoding="utf-8"
+            )
+            expect_red(
+                name,
+                execute({
+                    "AUDIT_SCRIPTS": str(SCRIPTS),
+                    "CONFORMANCE_FIXTURE": fixture_id,
+                }, runner=runner),
+                diagnostic,
+            )
 except Exception as error:
     print(f"FAIL  canary setup — {error}")
     FAILED += 1
 
-print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 14 cases.")
-if PASSED + FAILED != 14:
-    print(f"FAIL  canary count: expected 14, got {PASSED + FAILED}", file=sys.stderr)
+print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 23 cases.")
+if PASSED + FAILED != 23:
+    print(f"FAIL  canary count: expected 23, got {PASSED + FAILED}", file=sys.stderr)
     sys.exit(1)
 sys.exit(1 if FAILED else 0)

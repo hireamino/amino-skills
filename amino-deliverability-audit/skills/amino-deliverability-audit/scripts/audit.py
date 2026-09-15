@@ -77,20 +77,49 @@ def safe_domain(raw):
     return d if d and len(d) <= 253 and DOMAIN_RE.match(d) else None
 
 
+_CONTRACT_NON_PUBLIC_NETWORKS = (
+    ipaddress.ip_network("0.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("::/128"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+)
+
+
 def host_public_ips(host):
-    """Public IPs a host resolves to, excluding private/loopback/link-local/reserved/
-    multicast ranges. SSRF guard for the socket probes: a malicious domain can point its
-    MX or mta-sts host at an internal IP (e.g. 169.254.169.254, 127.0.0.1, 10.x) — we must
-    never open a connection to those, especially from a server/edge context."""
+    """Return all resolved addresses only when every answer is safe to connect to.
+
+    The explicit contract ranges stay stable across Python releases. Python additionally
+    refuses its private, loopback, link-local, reserved, multicast, and unspecified ranges;
+    that implementation-stricter policy keeps non-routable documentation/benchmark space
+    out of local socket probes.
+    """
+    addresses = dig(host, "A") + dig(host, "AAAA")
+    if not addresses:
+        return []
     out = []
-    for ip in dig(host, "A") + dig(host, "AAAA"):
+    for raw in addresses:
+        text = raw.strip()
         try:
-            a = ipaddress.ip_address(ip.strip())
+            address = ipaddress.ip_address(text)
         except ValueError:
-            continue
-        if not (a.is_private or a.is_loopback or a.is_link_local or a.is_reserved
-                or a.is_multicast or a.is_unspecified):
-            out.append(ip.strip())
+            return []
+        candidate = (address.ipv4_mapped
+                     if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped
+                     else address)
+        if any(candidate.version == network.version and candidate in network
+               for network in _CONTRACT_NON_PUBLIC_NETWORKS):
+            return []
+        if (candidate.is_private or candidate.is_loopback or candidate.is_link_local
+                or candidate.is_reserved or candidate.is_multicast or candidate.is_unspecified):
+            return []
+        out.append(text)
     return out
 
 SOCK_TIMEOUT = 3   # raw socket probes (STARTTLS:25, MTA-STS HTTPS) — these hit

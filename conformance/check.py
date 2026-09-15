@@ -11,8 +11,9 @@ import json
 import os
 import sys
 
+HERE = os.environ.get("CONFORMANCE_HOME") or os.path.dirname(__file__)
 SCRIPTS = os.environ.get("AUDIT_SCRIPTS") or os.path.join(
-    os.path.dirname(__file__), "..",
+    HERE, "..",
     "amino-deliverability-audit", "skills", "amino-deliverability-audit", "scripts",
 )
 sys.path.insert(0, os.path.abspath(SCRIPTS))
@@ -137,9 +138,168 @@ except ValueError:
     _unknown_area_rejected = True
 chk("WHI-79 unknown finding area is rejected", _unknown_area_rejected, True)
 
+# WHI-79 Phase A.2 — the Python socket guard uses the same explicit public-address
+# contract as the canonical engine. DNS and sockets are stubbed at their lowest seams;
+# these checks therefore exercise the shipping helper and all three shipping call sites.
+_audit_dig = audit.dig
+
+
+def _guarded_addresses(ipv4=(), ipv6=()):
+    audit.dig = lambda _host, rrtype: list(ipv4 if rrtype == "A" else ipv6 if rrtype == "AAAA" else ())
+    return audit.host_public_ips("guard.invalid")
+
+
+_address_rows = (
+    ("9.255.255.255", True), ("10.0.0.0", False),
+    ("10.255.255.255", False), ("11.0.0.0", True),
+    ("172.15.255.255", True), ("172.16.0.0", False),
+    ("172.31.255.255", False), ("172.32.0.0", True),
+    ("192.167.255.255", True), ("192.168.0.0", False),
+    ("192.169.0.0", True), ("169.253.255.255", True),
+    ("169.254.0.0", False), ("169.255.0.0", True),
+    ("100.63.255.255", True), ("100.64.0.0", False),
+    ("100.127.255.255", False), ("100.128.0.0", True),
+    ("126.255.255.255", True), ("127.0.0.1", False),
+    ("128.0.0.0", True), ("0.0.0.0", False), ("1.0.0.1", True),
+)
+for _address, _allowed in _address_rows:
+    chk(f"WHI-79 address boundary {_address}",
+        _guarded_addresses((_address,)), [_address] if _allowed else [])
+
+_ipv6_rows = (
+    ("2606:4700::1111", True), ("::1", False), ("::", False),
+    ("fc00::1", False), ("fdff::1", False),
+    ("fe80::1", False), ("febf::1", False),
+    ("::ffff:127.0.0.1", False), ("::ffff:7f00:1", False),
+    ("::ffff:93.184.216.34", True),
+)
+for _address, _allowed in _ipv6_rows:
+    chk(f"WHI-79 address boundary {_address}",
+        _guarded_addresses((), (_address,)), [_address] if _allowed else [])
+
+chk("WHI-79 address list mixed public/private refuses host",
+    _guarded_addresses(("93.184.216.34", "10.0.0.5")), [])
+chk("WHI-79 address list public AAAA/link-local refuses host",
+    _guarded_addresses((), ("2606:4700::1111", "fe80::1")), [])
+chk("WHI-79 address list unparseable refuses host",
+    _guarded_addresses(("93.184.216.34", "not-an-ip")), [])
+chk("WHI-79 address list empty refuses host", _guarded_addresses(), [])
+chk("WHI-79 address list two public returns both",
+    _guarded_addresses(("93.184.216.34", "1.1.1.1")),
+    ["93.184.216.34", "1.1.1.1"])
+# CANARY-DETECTOR-BEGIN: public-subset
+chk("WHI-79 detector mixed address refuses whole host",
+    _guarded_addresses(("93.184.216.34", "10.0.0.5")), [])
+# CANARY-DETECTOR-END: public-subset
+# CANARY-DETECTOR-BEGIN: shared-space
+chk("WHI-79 detector 100.64 shared address refuses host",
+    _guarded_addresses(("100.64.0.1",)), [])
+# CANARY-DETECTOR-END: shared-space
+# CANARY-DETECTOR-BEGIN: mapped-address
+chk("WHI-79 detector mapped 100.64 address refuses host",
+    _guarded_addresses((), ("::ffff:100.64.0.1",)), [])
+# CANARY-DETECTOR-END: mapped-address
+audit.dig = _audit_dig
+
+
+def _connection_recorder():
+    attempts = []
+
+    def connect(endpoint, _timeout):
+        attempts.append(endpoint)
+        raise OSError("WHI-79 deliberate socket stop")
+
+    return attempts, connect
+
+
+def _http_guard_probe(addresses):
+    old_dig, old_connect = audit.dig, audit.socket.create_connection
+    attempts, connect = _connection_recorder()
+    try:
+        audit.dig = lambda _host, rrtype: list(addresses if rrtype == "A" else ())
+        audit.socket.create_connection = connect
+        result = audit._http_get("guard.invalid", "/robots.txt")
+        return result, attempts
+    finally:
+        audit.dig, audit.socket.create_connection = old_dig, old_connect
+
+
+def _mta_sts_guard_probe(addresses):
+    old_dig, old_connect = audit.dig, audit.socket.create_connection
+    attempts, connect = _connection_recorder()
+    try:
+        audit.dig = lambda _host, rrtype: list(addresses if rrtype == "A" else ())
+        audit.socket.create_connection = connect
+        result = audit._fetch_mta_sts_policy("guard.invalid")
+        return result, attempts
+    finally:
+        audit.dig, audit.socket.create_connection = old_dig, old_connect
+
+
+def _mx_guard_probe(addresses):
+    old_dig, old_meta, old_connect = audit.dig, audit.dns_meta, audit.socket.create_connection
+    attempts, connect = _connection_recorder()
+    findings = []
+    try:
+        def fixture_dig(host, rrtype):
+            if (host, rrtype) == ("guard.invalid", "MX"):
+                return ["10 mx.guard.invalid."]
+            if (host, rrtype) == ("mx.guard.invalid", "A"):
+                return list(addresses)
+            return []
+
+        audit.dig = fixture_dig
+        audit.dns_meta = lambda *_args, **_kwargs: {}
+        audit.socket.create_connection = connect
+        audit.check_transport("guard.invalid", findings)
+        unavailable = any(finding["title"] == "Could not establish STARTTLS to primary MX"
+                          for finding in findings)
+        return unavailable, attempts
+    finally:
+        audit.dig, audit.dns_meta, audit.socket.create_connection = old_dig, old_meta, old_connect
+
+
+_refused_hosts = (
+    ("none", ()),
+    ("private", ("10.0.0.5",)),
+    ("mixed", ("93.184.216.34", "10.0.0.5")),
+    ("shared", ("100.64.0.1",)),
+)
+_expected_http = [
+    (name, ((None, None), [])) for name, _addresses in _refused_hosts
+] + [("allowed", ((None, None), [("93.184.216.34", 443)]))]
+_expected_mta = [
+    (name, (("unavailable", None), [])) for name, _addresses in _refused_hosts
+] + [("allowed", (("unavailable", None), [("93.184.216.34", 443)]))]
+_expected_mx = [
+    (name, (True, [])) for name, _addresses in _refused_hosts
+] + [("allowed", (True, [("93.184.216.34", 25)]))]
+_probe_inputs = list(_refused_hosts) + [("allowed", ("93.184.216.34",))]
+chk("WHI-79 shipping _http_get address guard",
+    [(name, _http_guard_probe(addresses)) for name, addresses in _probe_inputs],
+    _expected_http)
+chk("WHI-79 shipping MTA-STS address guard",
+    [(name, _mta_sts_guard_probe(addresses)) for name, addresses in _probe_inputs],
+    _expected_mta)
+chk("WHI-79 shipping MX STARTTLS address guard",
+    [(name, _mx_guard_probe(addresses)) for name, addresses in _probe_inputs],
+    _expected_mx)
+# CANARY-DETECTOR-BEGIN: http-get-guard
+chk("WHI-79 detector _http_get blocks a private address",
+    _http_guard_probe(("10.0.0.5",)), ((None, None), []))
+# CANARY-DETECTOR-END: http-get-guard
+# CANARY-DETECTOR-BEGIN: mta-sts-guard
+chk("WHI-79 detector MTA-STS blocks a private address",
+    _mta_sts_guard_probe(("10.0.0.5",)), (("unavailable", None), []))
+# CANARY-DETECTOR-END: mta-sts-guard
+# CANARY-DETECTOR-BEGIN: mx-guard
+chk("WHI-79 detector MX STARTTLS blocks a private address",
+    _mx_guard_probe(("10.0.0.5",)), (True, []))
+# CANARY-DETECTOR-END: mx-guard
+
 # A non-pass fixture with no remediation would let /audit render an action in its
 # plan and "no action needed" in its evidence row for the same finding.
-with open(os.path.join(os.path.dirname(__file__), "fixtures.json"), encoding="utf-8") as _handle:
+with open(os.path.join(HERE, "fixtures.json"), encoding="utf-8") as _handle:
     _FIXTURES = json.load(_handle)["fixtures"]
 _NON_PASS_WITHOUT_FIX = [
     f"{_fixture['id']}:{_finding['area']}|{_finding['title']}"
@@ -177,7 +337,7 @@ chk("t=y is offered in place of the removed pct", "use t=y to test an enforcemen
 # guarded by an assertion that reads engine source — so it survived in FAQ.md, the
 # public front door of this skill, for three weeks. A claim guard that only inspects
 # code cannot see the docs shipped beside it.
-_ROOT = os.path.join(os.path.dirname(__file__), "..")
+_ROOT = os.path.join(HERE, "..")
 _FAQ = open(os.path.join(_ROOT, "FAQ.md"), encoding="utf-8").read()
 _SKILL = open(os.path.join(
     _ROOT, "amino-deliverability-audit", "skills", "amino-deliverability-audit", "SKILL.md"
@@ -211,6 +371,15 @@ chk("WHI-79 CI runs for corpus/spec/runner changes", "- 'conformance/**'" in _WF
 chk("WHI-79 CI runs for Python engine/scorer changes",
     "amino-deliverability-audit/skills/amino-deliverability-audit/scripts/**" in _WF,
     True)
+chk("WHI-79 CI includes Python 3.12", "python-version: ['3.12', '3.14']" in _WF, True)
+chk("WHI-79 CI includes Python 3.14", "python-version: ['3.12', '3.14']" in _WF, True)
+_RUNNER = open(os.path.join(HERE, "run_py.py"), encoding="utf-8").read()
+chk("WHI-79 runner routes MTA-STS through shipping address helper",
+    'audit.host_public_ips(f"mta-sts.{domain}")' in _RUNNER, True)
+chk("WHI-79 runner routes robots through shipping address helper",
+    'host != "rdap.org" and not audit.host_public_ips(host)' in _RUNNER, True)
+chk("WHI-79 runner keeps fixed rdap.org host exempt",
+    'name = "rdap" if host == "rdap.org" else "robots"' in _RUNNER, True)
 
 # ── the OTHER claims corrected in the engines on 2026-07-30 ────────────────
 # Same lesson as the np= one directly above: each of these was fixed in audit.py and
