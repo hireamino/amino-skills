@@ -30,7 +30,20 @@ DNS_TIMEOUT = 8  # seconds, per dig invocation
 # dig's rcode and retries the transient failures (SERVFAIL/REFUSED/timeout) while trusting
 # a real NOERROR/NXDOMAIN empty. (No effect on the DoH edge backend, which bypasses this.)
 _DIG_SEM = threading.BoundedSemaphore(4)
-_STATUS_CODES = {"NOERROR": 0, "SERVFAIL": 2, "NXDOMAIN": 3, "REFUSED": 5}
+_STATUS_CODES = {
+    "NOERROR": 0,
+    "FORMERR": 1,
+    "SERVFAIL": 2,
+    "NXDOMAIN": 3,
+    "NOTIMP": 4,
+    "REFUSED": 5,
+    "YXDOMAIN": 6,
+    "YXRRSET": 7,
+    "NXRRSET": 8,
+    "NOTAUTH": 9,
+    "NOTZONE": 10,
+}
+_AUTHORITATIVE = {0, 3}  # only NOERROR and NXDOMAIN establish presence/absence
 _TRANSIENT = {2, 5, None}  # rcodes worth a retry (None = no status seen)
 
 # DNSSEC/rcode meta side-channel:
@@ -69,7 +82,7 @@ def normalized_meta(status, ad=False, error=False):
     return {
         "status": code,
         "ad": bool(ad),
-        "error": bool(error or code in _TRANSIENT),
+        "error": bool(error or code not in _AUTHORITATIVE),
     }
 
 
@@ -130,7 +143,9 @@ def _dig_backend(name, rrtype):
         fm = re.search(r"flags:\s*([a-z ]+);", out)
         ad = bool(fm and "ad" in fm.group(1).split())
         record_meta(name, rrtype, status, ad)
-        return _parse_answer(out, rrtype)  # NOERROR/NXDOMAIN → authoritative
+        # A non-retry RCODE is final. Metadata marks only NOERROR/NXDOMAIN as
+        # authoritative; every other final code remains a lookup failure.
+        return _parse_answer(out, rrtype)
     record_meta(name, rrtype, terminal_status, False, error=True)
     return []
 

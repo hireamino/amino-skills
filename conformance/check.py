@@ -145,10 +145,35 @@ try:
         chk(f"WHI-125 resolver terminal {_label} meta", resolver.meta(
             "_mta-sts.lookup.invalid", "TXT"), _expected_meta)
 
-    chk("WHI-125 dig and DoH SERVFAIL normalize identically",
-        resolver.normalized_meta("SERVFAIL"), resolver.normalized_meta(2))
-    chk("WHI-125 dig and DoH NXDOMAIN normalize identically",
-        resolver.normalized_meta("NXDOMAIN"), resolver.normalized_meta(3))
+    _rcode_rows = (
+        ("NOERROR", 0),
+        ("FORMERR", 1),
+        ("SERVFAIL", 2),
+        ("NXDOMAIN", 3),
+        ("NOTIMP", 4),
+        ("REFUSED", 5),
+        ("YXDOMAIN", 6),
+        ("YXRRSET", 7),
+        ("NXRRSET", 8),
+        ("NOTAUTH", 9),
+        ("NOTZONE", 10),
+    )
+    for _rcode_name, _rcode_number in _rcode_rows:
+        chk(f"WHI-125 RCODE {_rcode_name} name and number normalize identically",
+            resolver.normalized_meta(_rcode_name),
+            resolver.normalized_meta(_rcode_number))
+    chk("WHI-125 unknown RCODE name normalizes to None",
+        resolver.normalize_status("UNKNOWN_RCODE"), None)
+    for _label, _status in (
+        ("FORMERR name", "FORMERR"),
+        ("FORMERR number", 1),
+        ("NOTIMP name", "NOTIMP"),
+        ("NOTIMP number", 4),
+        ("unknown name", "UNKNOWN_RCODE"),
+        ("unknown number", 99),
+    ):
+        chk(f"WHI-125 RCODE {_label} is a failure",
+            resolver.normalized_meta(_status)["error"], True)
     resolver.cache_clear()
     resolver.record_meta("_mta-sts.record-meta.invalid", "TXT", 2, False)
     chk("WHI-125 record_meta normalizes numeric DoH failure",

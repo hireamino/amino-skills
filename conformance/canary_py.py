@@ -822,6 +822,26 @@ try:
             "FAIL WHI-125 resolver terminal SERVFAIL meta",
         )
 
+    require_green("AC6 complete RCODE normalization table", execute_check())
+    with tempfile.TemporaryDirectory(prefix="amino-whi125-formerr-map-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py", "verify.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        resolver_path = target / "resolver.py"
+        source = resolver_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '    "FORMERR": 1,\n',
+            "",
+            "FORMERR RCODE mapping",
+        )
+        resolver_path.write_text(source, encoding="utf-8")
+        expect_red_comparison(
+            "AC6 removed FORMERR RCODE mapping",
+            execute_check({"AUDIT_SCRIPTS": str(target)}),
+            "FAIL WHI-125 RCODE FORMERR name and number normalize identically",
+        )
+
     require_green("AC4 SERVFAIL score fixture", execute(_servfail_env))
     with tempfile.TemporaryDirectory(prefix="amino-whi125-failure-score-") as temporary:
         target = Path(temporary)
@@ -867,8 +887,8 @@ except Exception as error:
     print(f"FAIL  canary setup — {error}")
     FAILED += 1
 
-print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 29 cases.")
-if PASSED + FAILED != 29:
-    print(f"FAIL  canary count: expected 29, got {PASSED + FAILED}", file=sys.stderr)
+print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 30 cases.")
+if PASSED + FAILED != 30:
+    print(f"FAIL  canary count: expected 30, got {PASSED + FAILED}", file=sys.stderr)
     sys.exit(1)
 sys.exit(1 if FAILED else 0)
