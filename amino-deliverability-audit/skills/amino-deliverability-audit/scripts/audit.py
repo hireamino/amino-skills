@@ -19,6 +19,7 @@ import socket
 import ssl
 import base64
 import ipaddress
+from pathlib import Path
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 
@@ -77,29 +78,26 @@ def safe_domain(raw):
     return d if d and len(d) <= 253 and DOMAIN_RE.match(d) else None
 
 
-_CONTRACT_NON_PUBLIC_NETWORKS = (
-    ipaddress.ip_network("0.0.0.0/8"),
-    ipaddress.ip_network("10.0.0.0/8"),
-    ipaddress.ip_network("100.64.0.0/10"),
-    ipaddress.ip_network("127.0.0.0/8"),
-    ipaddress.ip_network("169.254.0.0/16"),
-    ipaddress.ip_network("172.16.0.0/12"),
-    ipaddress.ip_network("192.168.0.0/16"),
-    ipaddress.ip_network("::/128"),
-    ipaddress.ip_network("::1/128"),
-    ipaddress.ip_network("fc00::/7"),
-    ipaddress.ip_network("fe80::/10"),
+_ADDRESS_CONTRACT_PATH = Path(__file__).with_name("address-contract.json")
+with _ADDRESS_CONTRACT_PATH.open(encoding="utf-8") as _contract_handle:
+    _ADDRESS_CONTRACT = json.load(_contract_handle)
+_IPV4_NON_PUBLIC_NETWORKS = tuple(
+    ipaddress.ip_network(value) for value in _ADDRESS_CONTRACT["ipv4NonPublic"]
+)
+_IPV6_PUBLIC_NETWORKS = tuple(
+    ipaddress.ip_network(value) for value in _ADDRESS_CONTRACT["ipv6PublicWithin"]
+)
+_IPV6_NON_PUBLIC_NETWORKS = tuple(
+    ipaddress.ip_network(value)
+    for value in _ADDRESS_CONTRACT["ipv6NonPublicWithinPublic"]
+)
+_IPV4_MAPPED_NETWORKS = tuple(
+    ipaddress.ip_network(value) for value in _ADDRESS_CONTRACT["ipv4MappedWithin"]
 )
 
 
 def host_public_ips(host):
-    """Return all resolved addresses only when every answer is safe to connect to.
-
-    The explicit contract ranges stay stable across Python releases. Python additionally
-    refuses its private, loopback, link-local, reserved, multicast, and unspecified ranges;
-    that implementation-stricter policy keeps non-routable documentation/benchmark space
-    out of local socket probes.
-    """
+    """Return all resolved addresses only when every answer satisfies the table contract."""
     addresses = dig(host, "A") + dig(host, "AAAA")
     if not addresses:
         return []
@@ -110,14 +108,23 @@ def host_public_ips(host):
             address = ipaddress.ip_address(text)
         except ValueError:
             return []
-        candidate = (address.ipv4_mapped
-                     if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped
-                     else address)
-        if any(candidate.version == network.version and candidate in network
-               for network in _CONTRACT_NON_PUBLIC_NETWORKS):
-            return []
-        if (candidate.is_private or candidate.is_loopback or candidate.is_link_local
-                or candidate.is_reserved or candidate.is_multicast or candidate.is_unspecified):
+        if address.version == 6 and any(
+                address in network for network in _IPV4_MAPPED_NETWORKS):
+            candidate = ipaddress.ip_address(address.packed[-4:])
+        else:
+            candidate = address
+        if candidate.version == 4:
+            allowed = not any(
+                candidate in network for network in _IPV4_NON_PUBLIC_NETWORKS
+            )
+        else:
+            allowed = (
+                any(candidate in network for network in _IPV6_PUBLIC_NETWORKS)
+                and not any(
+                    candidate in network for network in _IPV6_NON_PUBLIC_NETWORKS
+                )
+            )
+        if not allowed:
             return []
         out.append(text)
     return out

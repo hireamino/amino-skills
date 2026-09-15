@@ -33,11 +33,17 @@ jobs:
         python-version: ['3.12', '3.14']
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b  # v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Pure-function conformance checks
         run: python3 conformance/check.py
+      - name: Address contract differential against reviewed base
+        run: python3 conformance/address_differential.py
+      - name: Existing-fixture output preservation
+        run: python3 conformance/preservation.py
       - name: Fixtures-driven conformance runner (shared corpus)
         run: python3 conformance/run_py.py
       - name: Mutation canaries (material contract + network kill switch)

@@ -112,6 +112,50 @@ def copy_repository_tree(destination):
     )
 
 
+def execute_in_repository(extra_env=None, scripts=None, conformance=None, check=False):
+    """Run a mutation only after applying it inside a complete repository copy."""
+    with tempfile.TemporaryDirectory(prefix="amino-canary-repository-") as temporary:
+        repository = Path(temporary) / "repository"
+        copy_repository_tree(repository)
+        if scripts is not None:
+            copied_scripts = (
+                repository
+                / "amino-deliverability-audit"
+                / "skills"
+                / "amino-deliverability-audit"
+                / "scripts"
+            )
+            for source in Path(scripts).iterdir():
+                if source.is_file():
+                    shutil.copyfile(source, copied_scripts / source.name)
+        if conformance is not None:
+            copied_conformance = repository / "conformance"
+            for source in Path(conformance).iterdir():
+                if source.is_file():
+                    shutil.copyfile(source, copied_conformance / source.name)
+        if check:
+            return execute_check(
+                extra_env,
+                checker=repository / "conformance" / "check.py",
+            )
+        return execute(
+            extra_env,
+            runner=repository / "conformance" / "run_py.py",
+        )
+
+
+def execute_with_scripts(scripts, extra_env=None):
+    return execute_in_repository(extra_env, scripts=scripts)
+
+
+def execute_check_with_scripts(scripts, extra_env=None):
+    return execute_in_repository(extra_env, scripts=scripts, check=True)
+
+
+def execute_with_conformance(conformance, extra_env=None):
+    return execute_in_repository(extra_env, conformance=conformance)
+
+
 def detector_deletion_is_proven(result, expected, companion=None):
     """Accept only a normally completed checker that lost the deleted verdict source."""
     output = result.stdout + result.stderr
@@ -148,8 +192,9 @@ def prove_detector_required(name, scripts, expected, detector_id, companion=None
             / "amino-deliverability-audit"
             / "scripts"
         )
-        for filename in ("audit.py", "batch_score.py", "resolver.py", "verify.py"):
-            shutil.copyfile(scripts / filename, copied_scripts / filename)
+        for source in Path(scripts).iterdir():
+            if source.is_file():
+                shutil.copyfile(source, copied_scripts / source.name)
         result = execute_check(checker=checker)
     if not detector_deletion_is_proven(result, expected, companion):
         output = result.stdout + result.stderr
@@ -237,16 +282,16 @@ def remove_fixture_address(corpus, fixture_id, host):
     del entry["A"]
 
 
-def replace_fixture_addresses(corpus, fixture_id, host, expected, replacement):
+def replace_fixture_addresses(corpus, fixture_id, host, rrtype, expected, replacement):
     matches = [fixture for fixture in corpus["fixtures"] if fixture["id"] == fixture_id]
     if len(matches) != 1:
         raise AssertionError(
             f"{fixture_id}: fixture mutation anchor must occur exactly once, found {len(matches)}"
         )
     entry = matches[0]["input"]["dns"].get(host)
-    if not isinstance(entry, dict) or entry.get("A") != expected:
+    if not isinstance(entry, dict) or entry.get(rrtype) != expected:
         raise AssertionError(f"{fixture_id}: expected the reviewed address-list anchor")
-    entry["A"] = replacement
+    entry[rrtype] = replacement
 
 
 try:
@@ -265,7 +310,7 @@ try:
         audit_path.write_text(source, encoding="utf-8")
         expect_red(
             "A high→low severity",
-            execute({"AUDIT_SCRIPTS": str(target)}),
+            execute_with_scripts(target),
             "dkim-revoked-empty-p.findings[SPF|No SPF record].severity: "
             "expected 'high', got 'low'",
         )
@@ -292,8 +337,7 @@ try:
         score_path.write_text(source, encoding="utf-8")
         expect_red(
             "H removed null-MX score exemption",
-            execute({
-                "AUDIT_SCRIPTS": str(target),
+            execute_with_scripts(target, {
                 "CONFORMANCE_FIXTURE": "null-mx-not-applicable",
             }),
             "null-mx-not-applicable.score.MTA_STS: expected None, got False",
@@ -314,7 +358,7 @@ try:
         verify_path.write_text(source, encoding="utf-8")
         expect_red(
             "I removed independent-verifier wiring",
-            execute_check({"AUDIT_SCRIPTS": str(target)}),
+            execute_check_with_scripts(target),
             "WHI-50 verifier wires null MX into N/A buckets -> "
             "(False, False, False) (exp (None, None, None))",
         )
@@ -334,8 +378,7 @@ try:
         audit_path.write_text(source, encoding="utf-8")
         expect_red(
             "J reverted null-MX detail",
-            execute({
-                "AUDIT_SCRIPTS": str(target),
+            execute_with_scripts(target, {
                 "CONFORMANCE_FIXTURE": "null-mx-not-applicable",
             }),
             "null-mx-not-applicable.findings[Transport|Null MX (RFC 7505) — domain declares no mail].detail: "
@@ -358,8 +401,7 @@ try:
         audit_path.write_text(source, encoding="utf-8")
         expect_red(
             "K restored STARTTLS action",
-            execute({
-                "AUDIT_SCRIPTS": str(target),
+            execute_with_scripts(target, {
                 "CONFORMANCE_FIXTURE": "no-mx-not-exempt",
             }),
             "no-mx-not-exempt.findings[Transport|No MX records].action: "
@@ -386,10 +428,9 @@ try:
         (target / "fixtures.json").write_text(json.dumps(corpus), encoding="utf-8")
         expect_red(
             "L restored null No-MX corpus fix",
-            execute({
-                "AUDIT_SCRIPTS": str(SCRIPTS),
+            execute_with_conformance(target, {
                 "CONFORMANCE_FIXTURE": "no-mx-not-exempt",
-            }, runner=runner),
+            }),
             "no-mx-not-exempt.findings[Transport|No MX records].fix: "
             "non-pass finding must declare a non-null fixIncludes",
         )
@@ -409,8 +450,7 @@ try:
         audit_path.write_text(source, encoding="utf-8")
         expect_red(
             "M restored BIMI high value",
-            execute({
-                "AUDIT_SCRIPTS": str(target),
+            execute_with_scripts(target, {
                 "CONFORMANCE_FIXTURE": "bimi-present-without-vmc",
             }),
             "bimi-present-without-vmc.findings[BIMI|BIMI present without a VMC].value: "
@@ -432,8 +472,7 @@ try:
         audit_path.write_text(source, encoding="utf-8")
         expect_red(
             "N reverted No-MX detail",
-            execute({
-                "AUDIT_SCRIPTS": str(target),
+            execute_with_scripts(target, {
                 "CONFORMANCE_FIXTURE": "no-mx-not-exempt",
             }),
             "no-mx-not-exempt.findings[Transport|No MX records].detail: "
@@ -456,8 +495,7 @@ try:
         audit_path.write_text(source, encoding="utf-8")
         expect_red(
             "O removed one area lane",
-            execute({
-                "AUDIT_SCRIPTS": str(target),
+            execute_with_scripts(target, {
                 "CONFORMANCE_FIXTURE": "dkim-revoked-empty-p",
             }),
             "dkim-revoked-empty-p.execution: threw unknown finding area has no lane: SPF",
@@ -478,8 +516,7 @@ try:
         audit_path.write_text(source, encoding="utf-8")
         expect_red(
             "Q valid wrong lane reaches runner comparison",
-            execute({
-                "AUDIT_SCRIPTS": str(target),
+            execute_with_scripts(target, {
                 "CONFORMANCE_FIXTURE": "dkim-revoked-empty-p",
             }),
             "dkim-revoked-empty-p.findings[SPF|No SPF record].lane: "
@@ -501,8 +538,7 @@ try:
         audit_path.write_text(source, encoding="utf-8")
         expect_red(
             "P conflated absent with unavailable",
-            execute({
-                "AUDIT_SCRIPTS": str(target),
+            execute_with_scripts(target, {
                 "CONFORMANCE_FIXTURE": "mta-sts-policy-absent",
             }),
             "mta-sts-policy-absent.observations: expected {'mta_sts_policy': 'checked', "
@@ -521,10 +557,9 @@ try:
         )
         expect_red(
             "R removed robots fixture public address",
-            execute({
-                "AUDIT_SCRIPTS": str(SCRIPTS),
+            execute_with_conformance(target, {
                 "CONFORMANCE_FIXTURE": "robots-absent",
-            }, runner=runner),
+            }),
             "robots-absent.observations: expected {'mta_sts_policy': 'not_applicable', "
             "'robots': 'checked', 'rdap': 'checked'}, got {'mta_sts_policy': "
             "'not_applicable', 'robots': 'unavailable', 'rdap': 'checked'}",
@@ -545,10 +580,9 @@ try:
         )
         expect_red(
             "S removed MTA-STS fixture public address",
-            execute({
-                "AUDIT_SCRIPTS": str(SCRIPTS),
+            execute_with_conformance(target, {
                 "CONFORMANCE_FIXTURE": "mta-sts-policy-absent",
-            }, runner=runner),
+            }),
             "mta-sts-policy-absent.observations: expected {'mta_sts_policy': 'checked', "
             "'robots': 'checked', 'rdap': 'checked'}, got {'mta_sts_policy': 'unavailable', "
             "'robots': 'checked', 'rdap': 'checked'}",
@@ -576,7 +610,7 @@ try:
         )
         audit_path.write_text(source, encoding="utf-8")
         diagnostic = "FAIL WHI-79 detector _http_get blocks a private address"
-        expect_red("T deleted _http_get address guard", execute_check({"AUDIT_SCRIPTS": str(target)}), diagnostic)
+        expect_red("T deleted _http_get address guard", execute_check_with_scripts(target), diagnostic)
         prove_detector_required(
             "T _http_get",
             target,
@@ -603,7 +637,7 @@ try:
         )
         audit_path.write_text(source, encoding="utf-8")
         diagnostic = "FAIL WHI-79 detector MTA-STS blocks a private address"
-        expect_red("U deleted MTA-STS address guard", execute_check({"AUDIT_SCRIPTS": str(target)}), diagnostic)
+        expect_red("U deleted MTA-STS address guard", execute_check_with_scripts(target), diagnostic)
         prove_detector_required(
             "U MTA-STS",
             target,
@@ -630,7 +664,7 @@ try:
         )
         audit_path.write_text(source, encoding="utf-8")
         diagnostic = "FAIL WHI-79 detector MX STARTTLS blocks a private address"
-        expect_red("V deleted MX STARTTLS address guard", execute_check({"AUDIT_SCRIPTS": str(target)}), diagnostic)
+        expect_red("V deleted MX STARTTLS address guard", execute_check_with_scripts(target), diagnostic)
         prove_detector_required(
             "V MX STARTTLS",
             target,
@@ -647,35 +681,40 @@ try:
         source = audit_path.read_text(encoding="utf-8")
         source = replace_exactly_once(
             source,
-            '        if any(candidate.version == network.version and candidate in network\n'
-            '               for network in _CONTRACT_NON_PUBLIC_NETWORKS):\n'
+            '        if not allowed:\n'
             '            return []\n',
-            '        if any(candidate.version == network.version and candidate in network\n'
-            '               for network in _CONTRACT_NON_PUBLIC_NETWORKS):\n'
-            '            continue  # WHI-79 public-subset canary\n',
+            '        if not allowed:\n'
+            '            continue  # WHI-127 public-subset canary\n',
             "whole-host refusal",
         )
         audit_path.write_text(source, encoding="utf-8")
         diagnostic = "FAIL WHI-79 detector mixed address refuses whole host"
-        expect_red("W kept the public subset", execute_check({"AUDIT_SCRIPTS": str(target)}), diagnostic)
-        prove_detector_required("W public subset", target, diagnostic, "public-subset")
+        expect_red("W kept the public subset", execute_check_with_scripts(target), diagnostic)
+        prove_detector_required(
+            "W public subset", target, diagnostic, "public-subset",
+            "FAIL WHI-79 shipping _http_get address guard",
+        )
 
     with tempfile.TemporaryDirectory(prefix="amino-whi79-shared-space-") as temporary:
         target = Path(temporary)
         for filename in ("audit.py", "batch_score.py", "resolver.py", "verify.py"):
             shutil.copyfile(SCRIPTS / filename, target / filename)
-        audit_path = target / "audit.py"
-        source = audit_path.read_text(encoding="utf-8")
+        contract_path = target / "address-contract.json"
+        shutil.copyfile(SCRIPTS / "address-contract.json", contract_path)
+        source = contract_path.read_text(encoding="utf-8")
         source = replace_exactly_once(
             source,
-            '    ipaddress.ip_network("100.64.0.0/10"),\n',
-            '    # WHI-79 removed shared-address range canary\n',
+            '    "100.64.0.0/10",\n',
+            '',
             "100.64.0.0/10 contract range",
         )
-        audit_path.write_text(source, encoding="utf-8")
+        contract_path.write_text(source, encoding="utf-8")
         diagnostic = "FAIL WHI-79 detector 100.64 shared address refuses host"
-        expect_red("X removed 100.64.0.0/10", execute_check({"AUDIT_SCRIPTS": str(target)}), diagnostic)
-        prove_detector_required("X shared space", target, diagnostic, "shared-space")
+        expect_red("X removed 100.64.0.0/10", execute_check_with_scripts(target), diagnostic)
+        prove_detector_required(
+            "X shared space", target, diagnostic, "shared-space",
+            "FAIL WHI-79 shipping _http_get address guard",
+        )
 
     with tempfile.TemporaryDirectory(prefix="amino-whi79-mapped-address-") as temporary:
         target = Path(temporary)
@@ -685,16 +724,19 @@ try:
         source = audit_path.read_text(encoding="utf-8")
         source = replace_exactly_once(
             source,
-            '        candidate = (address.ipv4_mapped\n'
-            '                     if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped\n'
-            '                     else address)\n',
-            '        candidate = address  # WHI-79 removed IPv4-mapped unwrap canary\n',
+            '        if address.version == 6 and any(\n'
+            '                address in network for network in _IPV4_MAPPED_NETWORKS):\n',
+            '        if False and any(  # WHI-127 removed IPv4-mapped unwrap canary\n'
+            '                address in network for network in _IPV4_MAPPED_NETWORKS):\n',
             "IPv4-mapped address unwrap",
         )
         audit_path.write_text(source, encoding="utf-8")
-        diagnostic = "FAIL WHI-79 detector mapped 100.64 address refuses host"
-        expect_red("Y removed IPv4-mapped unwrap", execute_check({"AUDIT_SCRIPTS": str(target)}), diagnostic)
-        prove_detector_required("Y mapped address", target, diagnostic, "mapped-address")
+        diagnostic = "FAIL WHI-79 detector mapped public address uses embedded IPv4"
+        expect_red("Y removed IPv4-mapped unwrap", execute_check_with_scripts(target), diagnostic)
+        prove_detector_required(
+            "Y mapped address", target, diagnostic, "mapped-address",
+            "FAIL WHI-79 shipping _http_get address guard",
+        )
 
     # Corpus reachability canaries: make each configured response reachable and require
     # the closed-world observation comparison to expose the change.
@@ -703,6 +745,7 @@ try:
             "Z removed private address from mixed robots fixture",
             "robots-mixed-address-refused",
             "robots-mixed-address-refused.invalid",
+            "A",
             ["93.184.216.34", "10.0.0.5"],
             ["93.184.216.34"],
             "robots-mixed-address-refused.observations: expected {'mta_sts_policy': "
@@ -713,6 +756,7 @@ try:
             "AA removed shared address from robots fixture",
             "robots-shared-address-refused",
             "robots-shared-address-refused.invalid",
+            "A",
             ["100.64.0.1"],
             [],
             "robots-shared-address-refused.observations: expected {'mta_sts_policy': "
@@ -723,31 +767,87 @@ try:
             "AB removed private address from mixed MTA-STS fixture",
             "mta-sts-host-mixed-address-refused",
             "mta-sts.mta-sts-host-mixed-address-refused.invalid",
+            "A",
             ["93.184.216.34", "10.0.0.5"],
             ["93.184.216.34"],
             "mta-sts-host-mixed-address-refused.observations: expected {'mta_sts_policy': "
             "'unavailable', 'robots': 'checked', 'rdap': 'checked'}, got "
             "{'mta_sts_policy': 'checked', 'robots': 'checked', 'rdap': 'checked'}",
         ),
+        (
+            "AC made multicast robots fixture reachable",
+            "robots-multicast-address-refused",
+            "robots-multicast-address-refused.invalid",
+            "A",
+            ["224.0.0.1"],
+            ["93.184.216.34"],
+            "robots-multicast-address-refused.observations: expected {'mta_sts_policy': "
+            "'not_applicable', 'robots': 'unavailable', 'rdap': 'checked'}, got "
+            "{'mta_sts_policy': 'not_applicable', 'robots': 'checked', 'rdap': 'checked'}",
+        ),
+        (
+            "AD made NAT64-loopback robots fixture reachable",
+            "robots-nat64-loopback-refused",
+            "robots-nat64-loopback-refused.invalid",
+            "AAAA",
+            ["64:ff9b::7f00:1"],
+            ["2606:4700::1111"],
+            "robots-nat64-loopback-refused.observations: expected {'mta_sts_policy': "
+            "'not_applicable', 'robots': 'unavailable', 'rdap': 'checked'}, got "
+            "{'mta_sts_policy': 'not_applicable', 'robots': 'checked', 'rdap': 'checked'}",
+        ),
+        (
+            "AE made expanded-mapped-loopback robots fixture reachable",
+            "robots-expanded-mapped-loopback-refused",
+            "robots-expanded-mapped-loopback-refused.invalid",
+            "AAAA",
+            ["0:0:0:0:0:ffff:7f00:1"],
+            ["2606:4700::1111"],
+            "robots-expanded-mapped-loopback-refused.observations: expected {'mta_sts_policy': "
+            "'not_applicable', 'robots': 'unavailable', 'rdap': 'checked'}, got "
+            "{'mta_sts_policy': 'not_applicable', 'robots': 'checked', 'rdap': 'checked'}",
+        ),
     )
-    for name, fixture_id, host, expected_addresses, replacement, diagnostic in _reachability_cases:
+    for (name, fixture_id, host, rrtype, expected_addresses,
+         replacement, diagnostic) in _reachability_cases:
         with tempfile.TemporaryDirectory(prefix="amino-whi79-address-fixture-") as temporary:
             target = Path(temporary)
             runner = target / "run_py.py"
             shutil.copyfile(RUNNER, runner)
             corpus = json.loads((HERE / "fixtures.json").read_text(encoding="utf-8"))
-            replace_fixture_addresses(corpus, fixture_id, host, expected_addresses, replacement)
+            replace_fixture_addresses(
+                corpus, fixture_id, host, rrtype, expected_addresses, replacement,
+            )
             (target / "fixtures.json").write_text(
                 json.dumps(corpus, indent=2) + "\n", encoding="utf-8"
             )
             expect_red(
                 name,
-                execute({
-                    "AUDIT_SCRIPTS": str(SCRIPTS),
+                execute_with_conformance(target, {
                     "CONFORMANCE_FIXTURE": fixture_id,
-                }, runner=runner),
+                }),
                 diagnostic,
             )
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi127-runner-host-map-") as temporary:
+        target = Path(temporary)
+        runner = target / "run_py.py"
+        shutil.copyfile(RUNNER, runner)
+        source = runner.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '        else:\n            return None, None\n'
+            '        HTTP_CALLS[name] = HTTP_CALLS.get(name, 0) + 1\n',
+            '        else:\n            name = "robots"  # WHI-127 unexpected-host canary\n'
+            '        HTTP_CALLS[name] = HTTP_CALLS.get(name, 0) + 1\n',
+            "runner unexpected-host refusal",
+        )
+        runner.write_text(source, encoding="utf-8")
+        expect_red(
+            "AF runner refuses an unexpected HTTP host",
+            execute_with_conformance(target),
+            "FAIL runner HTTP host map refuses unexpected host",
+        )
 
     # WHI-125 — lookup failure and authoritative absence are different contract
     # outcomes. Every mutation starts with the corresponding healthy target and
@@ -772,7 +872,7 @@ try:
         audit_path.write_text(source, encoding="utf-8")
         expect_red_comparison(
             "AC1 treated SERVFAIL as absence",
-            execute({**_servfail_env, "AUDIT_SCRIPTS": str(target)}),
+            execute_with_scripts(target, _servfail_env),
             (
                 "mta-sts-lookup-servfail.findings[MTA-STS|Unable to confirm MTA-STS policy].identity: expected finding, got missing",
                 "mta-sts-lookup-servfail.observations: expected {'mta_sts_policy': 'unavailable', 'robots': 'unavailable', 'rdap': 'unavailable'}, got {'mta_sts_policy': 'not_applicable', 'robots': 'unavailable', 'rdap': 'unavailable'}",
@@ -795,7 +895,7 @@ try:
         audit_path.write_text(source, encoding="utf-8")
         expect_red_comparison(
             "AC2 treated NXDOMAIN as failure",
-            execute({**_nxdomain_env, "AUDIT_SCRIPTS": str(target)}),
+            execute_with_scripts(target, _nxdomain_env),
             (
                 "mta-sts-lookup-nxdomain-control.findings[MTA-STS|No MTA-STS policy].identity: expected finding, got missing",
                 "mta-sts-lookup-nxdomain-control.observations: expected {'mta_sts_policy': 'not_applicable', 'robots': 'unavailable', 'rdap': 'unavailable'}, got {'mta_sts_policy': 'unavailable', 'robots': 'unavailable', 'rdap': 'unavailable'}",
@@ -818,7 +918,7 @@ try:
         resolver_path.write_text(source, encoding="utf-8")
         expect_red_comparison(
             "AC3 removed terminal failure metadata",
-            execute_check({"AUDIT_SCRIPTS": str(target)}),
+            execute_check_with_scripts(target),
             "FAIL WHI-125 resolver terminal SERVFAIL meta",
         )
 
@@ -838,7 +938,7 @@ try:
         resolver_path.write_text(source, encoding="utf-8")
         expect_red_comparison(
             "AC6 removed FORMERR RCODE mapping",
-            execute_check({"AUDIT_SCRIPTS": str(target)}),
+            execute_check_with_scripts(target),
             "FAIL WHI-125 RCODE FORMERR name and number normalize identically",
         )
 
@@ -858,7 +958,7 @@ try:
         score_path.write_text(source, encoding="utf-8")
         expect_red_comparison(
             "AC4 counted failed lookup as a gap",
-            execute({**_servfail_env, "AUDIT_SCRIPTS": str(target)}),
+            execute_with_scripts(target, _servfail_env),
             "mta-sts-lookup-servfail.score.MTA_STS: expected None, got False",
         )
 
@@ -878,7 +978,7 @@ try:
         audit_path.write_text(source, encoding="utf-8")
         expect_red_comparison(
             "AC5 removed null-MX precedence",
-            execute({**_null_env, "AUDIT_SCRIPTS": str(target)}),
+            execute_with_scripts(target, _null_env),
             "mta-sts-lookup-servfail-null-mx.findings[MTA-STS|MTA-STS not applicable — domain receives no mail].identity: expected finding, got missing",
         )
 
@@ -887,8 +987,8 @@ except Exception as error:
     print(f"FAIL  canary setup — {error}")
     FAILED += 1
 
-print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 30 cases.")
-if PASSED + FAILED != 30:
-    print(f"FAIL  canary count: expected 30, got {PASSED + FAILED}", file=sys.stderr)
+print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 34 cases.")
+if PASSED + FAILED != 34:
+    print(f"FAIL  canary count: expected 34, got {PASSED + FAILED}", file=sys.stderr)
     sys.exit(1)
 sys.exit(1 if FAILED else 0)

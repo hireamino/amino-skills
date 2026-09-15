@@ -39,6 +39,10 @@ contributions:
   “Unable to confirm MTA-STS policy” and excluded from the gap; only authoritative
   NXDOMAIN or NOERROR-empty means “No MTA-STS policy.” Never turn resolver failure
   into an absent-record finding.
+- **Keep the public-address guard table-driven.** Domain-controlled hosts are fetched
+  only when every A/AAAA answer is public under `conformance/address-contract.json`.
+  Do not add `ipaddress` classification flags, a hand-copied range list, or a second
+  editable contract.
 - **Cite sources for any standards claim.** No claim about a spec, a date, or a
   provider rule without a link to the primary source.
 - **Keep it fast.** A single-domain scan targets ~3–5s (checks run concurrently). Don't add

@@ -61,6 +61,11 @@ trusted"), framed in business terms, not a pile of green/red dots.
    > page), HTML-escape it; the canonical `action` labels are a fixed safe vocabulary, but raw
    > record strings are external content and must be escaped.
 
+   The scanner also refuses a domain-controlled HTTPS or socket connection unless DNS
+   returns at least one A/AAAA answer and every answer is public under the reviewed
+   IANA-derived address contract. Treat the resulting unavailable observation as evidence
+   that was not safely obtainable; never work around the guard or fetch the URL yourself.
+
 3. **Add forward-readiness judgment.** The scanner is deliberately conservative. Layer in
    the standards trajectory from `references/standards-radar.md` — DMARCbis, the
    Gmail/Yahoo/Microsoft sender rules, and the post-quantum (PQC) migration — so the report
