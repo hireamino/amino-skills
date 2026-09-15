@@ -29,6 +29,70 @@ const portableEngine = originalEngine.replace(
   "const record = () => {};",
 );
 const temporary = mkdtempSync(join(tmpdir(), `amino-whi8-${surface}-`));
+// Phase A lands before the 1.2.0 engine by design. Until Phase B, wrap the real
+// 1.1.0 surface with only the additive contract fields so the two new runner
+// canaries can prove their diagnostics now. Once the engine has the contract
+// anchors, the same cases mutate the real engine source directly.
+let contractEngine = portableEngine;
+const versionMatch = portableEngine.match(/export const contractVersion = "([^"]+)";/);
+if (!versionMatch) {
+  console.error("FAIL  WHI-79 staged wrapper selection — engine must declare export const contractVersion");
+  rmSync(temporary, { recursive: true, force: true });
+  process.exit(2);
+}
+const declaredContractVersion = versionMatch[1];
+if (declaredContractVersion === "1.1.0") {
+  writeFileSync(join(temporary, "phase-a-legacy-engine.mjs"), portableEngine);
+  contractEngine = `
+import * as legacy from "./phase-a-legacy-engine.mjs";
+const AREA_LANES = Object.freeze({
+  SPF: "outbound_auth",
+  DKIM: "outbound_auth", DMARC: "outbound_auth",
+  "MTA-STS": "inbound_transport", "TLS-RPT": "inbound_transport",
+  Transport: "inbound_transport", MX: "inbound_transport",
+  BIMI: "brand_optional", CAA: "brand_optional",
+  DNSSEC: "outside_sending_posture", "AI visibility": "outside_sending_posture",
+  Reputation: "outside_sending_posture",
+});
+const BUCKET_LANES = Object.freeze({ SPF: "outbound_auth", DKIM: "outbound_auth",
+  DMARC: "outbound_auth", DMARC_enforced: "outbound_auth", DMARC_rua: "outbound_auth",
+  MTA_STS: "inbound_transport", TLS_RPT: "inbound_transport",
+  DANE: "inbound_transport", BIMI: "brand_optional" });
+function laneForFinding(finding) {
+  if (finding.area === "Transport" && (finding.title || "").toLowerCase().includes("reverse dns")) {
+    return "outside_sending_posture";
+  }
+  if (!AREA_LANES[finding.area]) throw new Error("unknown finding area has no lane: " + finding.area);
+  return AREA_LANES[finding.area];
+}
+export async function auditDomain(domain, q) {
+  const result = await legacy.auditDomain(domain, q);
+  for (const finding of result.findings || []) finding.lane = laneForFinding(finding);
+  const observations = domain.startsWith("mta-sts-policy-")
+    ? { mta_sts_policy: "checked", robots: "checked", rdap: "checked" }
+    : { mta_sts_policy: "not_applicable", robots: "unavailable", rdap: "unavailable" };
+  const observation = observations.mta_sts_policy;
+  observations.mta_sts_policy = observation;
+  return { ...result, observations };
+}
+export async function buckets(domain, q) {
+  return { ...(await legacy.buckets(domain, q)), lanes: { ...BUCKET_LANES } };
+}
+`;
+} else {
+  const requiredAnchors = [
+    'const AREA_LANES = Object.freeze({\n  SPF: "outbound_auth",',
+    "observations.mta_sts_policy = observation;",
+  ];
+  const missingAnchors = requiredAnchors.filter((anchor) => !portableEngine.includes(anchor));
+  if (missingAnchors.length) {
+    console.error(
+      `FAIL  WHI-79 staged wrapper selection — contract ${declaredContractVersion} must expose real lane and observation anchors; refusing legacy wrapper`,
+    );
+    rmSync(temporary, { recursive: true, force: true });
+    process.exit(2);
+  }
+}
 writeFileSync(
   join(temporary, "fixtures.json"),
   readFileSync(resolve(here, "fixtures.json"), "utf8"),
@@ -226,10 +290,49 @@ try {
     'no-mx-not-exempt.findings[Transport|No MX records].detail: expected "No MX record is published. SMTP then treats the domain as if it had an implicit MX pointing to itself and resolves that host\'s address records, so this does not show that the domain receives no mail — a null MX (0 .) is what says that explicitly. This may be intentional for a send-only or parked domain.", got "No inbound mail servers (may be intentional for a send-only/parked domain)."',
   );
 
+  const removedAreaLane = replaceExactlyOnce(
+    contractEngine,
+    'const AREA_LANES = Object.freeze({\n  SPF: "outbound_auth",',
+    "const AREA_LANES = Object.freeze({\n  // WHI-79 removed SPF lane canary",
+    "SPF lane assignment",
+  );
+  expectRed(
+    "O removed one area lane",
+    removedAreaLane,
+    "dkim-revoked-empty-p",
+    "dkim-revoked-empty-p.execution: threw unknown finding area has no lane: SPF",
+  );
+
+  const mislabelledAreaLane = replaceExactlyOnce(
+    contractEngine,
+    'const AREA_LANES = Object.freeze({\n  SPF: "outbound_auth",',
+    'const AREA_LANES = Object.freeze({\n  SPF: "inbound_transport",',
+    "SPF valid wrong lane",
+  );
+  expectRed(
+    "Q valid wrong lane reaches runner comparison",
+    mislabelledAreaLane,
+    "dkim-revoked-empty-p",
+    'dkim-revoked-empty-p.findings[SPF|No SPF record].lane: expected "outbound_auth", got "inbound_transport"',
+  );
+
+  const conflatedObservation = replaceExactlyOnce(
+    contractEngine,
+    "observations.mta_sts_policy = observation;",
+    'observations.mta_sts_policy = "unavailable"; // WHI-79 conflation canary',
+    "MTA-STS observation assignment",
+  );
+  expectRed(
+    "P conflated absent with unavailable",
+    conflatedObservation,
+    "mta-sts-policy-absent",
+    'mta-sts-policy-absent.observations: expected {"mta_sts_policy":"checked","robots":"checked","rdap":"checked"}, got {"mta_sts_policy":"unavailable","robots":"checked","rdap":"checked"}',
+  );
+
   const originalRunner = readFileSync(runner, "utf8");
   const stubbedRunner = replaceExactlyOnce(
     originalRunner,
-    "    ...compareContract(fx, findings, score, SURFACE, ledger),",
+    "    ...compareContract(fx, result, score, SURFACE, ledger),",
     "    // WHI-8 canary: contract comparison stubbed out.",
     "runner stub",
   );
@@ -249,9 +352,9 @@ try {
   rmSync(temporary, { recursive: true, force: true });
 }
 
-console.log(`\nCanaries (${surface}): ${passed} passed, ${failed} failed; expected 12 cases.`);
-if (passed + failed !== 12) {
-  console.error(`FAIL  canary count: expected 12, got ${passed + failed}`);
+console.log(`\nCanaries (${surface}): ${passed} passed, ${failed} failed; expected 15 cases.`);
+if (passed + failed !== 15) {
+  console.error(`FAIL  canary count: expected 15, got ${passed + failed}`);
   process.exit(1);
 }
 process.exit(failed ? 1 : 0);

@@ -27,11 +27,22 @@ BOOL_BUCKETS = ["SPF", "DMARC", "DMARC_enforced", "DMARC_rua",
 OUT_ORDER = ["SPF", "DKIM", "DMARC", "DMARC_enforced", "DMARC_rua",
              "MTA_STS", "TLS_RPT", "DANE", "BIMI"]
 BUCKETS = OUT_ORDER  # back-compat alias (verify.py imports this)
+BUCKET_LANES = {
+    "SPF": "outbound_auth",
+    "DKIM": "outbound_auth",
+    "DMARC": "outbound_auth",
+    "DMARC_enforced": "outbound_auth",
+    "DMARC_rua": "outbound_auth",
+    "MTA_STS": "inbound_transport",
+    "TLS_RPT": "inbound_transport",
+    "DANE": "inbound_transport",
+    "BIMI": "brand_optional",
+}
 
 
 def score(domain):
     """Return (r, note). r has the 8 BOOL_BUCKETS plus r['DKIM'] as a 3-state
-    string ('good' | 'weak' | 'unknown')."""
+    string ('good' | 'weak' | 'unknown') and the closed scored-bucket lane map."""
     r = {b: False for b in BOOL_BUCKETS}
     note = []
 
@@ -86,6 +97,7 @@ def score(domain):
         note.append(f"mixed MX ({len(provs)} providers)")
     r["BIMI"] = bool(first_txt(f"default._bimi.{domain}", "v=bimi1"))
 
+    r["lanes"] = dict(BUCKET_LANES)
     return r, "; ".join(note) if note else "clean"
 
 

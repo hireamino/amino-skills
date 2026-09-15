@@ -31,6 +31,45 @@ from resolver import meta as dns_meta  # DNSSEC/rcode side-channel (AD bit) for 
 # Rejects whitespace, control chars, and leading '-' (dig flag/argument injection).
 DOMAIN_RE = re.compile(r"^(?=.{1,253}$)(?!-)[a-z0-9-]{1,63}(?<!-)(?:\.(?!-)[a-z0-9-]{1,63}(?<!-))+$")
 
+# Output-contract enums. Consumers must read finding lanes from the engine/skill
+# output instead of maintaining their own area map. The map is intentionally
+# closed: a new area requires an explicit contract decision.
+LANES = (
+    "outbound_auth", "inbound_transport", "brand_optional",
+    "outside_sending_posture",
+)
+AREA_LANES = {
+    "SPF": "outbound_auth",
+    "DKIM": "outbound_auth",
+    "DMARC": "outbound_auth",
+    "MTA-STS": "inbound_transport",
+    "TLS-RPT": "inbound_transport",
+    "Transport": "inbound_transport",
+    "MX": "inbound_transport",
+    "BIMI": "brand_optional",
+    "CAA": "brand_optional",
+    "DNSSEC": "outside_sending_posture",
+    "AI visibility": "outside_sending_posture",
+    "Reputation": "outside_sending_posture",
+}
+OBSERVATION_STATES = ("checked", "unavailable", "not_applicable")
+
+
+def lane_for_area(area):
+    """Return the contract lane for a known finding area; fail on drift."""
+    if area not in AREA_LANES:
+        raise ValueError(f"unknown finding area has no lane: {area}")
+    return AREA_LANES[area]
+
+
+def lane_for_finding(finding):
+    """Resolve the lane, including the ratified reverse-DNS title exception."""
+    area = finding.get("area")
+    title = finding.get("title", "").lower()
+    if area == "Transport" and "reverse dns" in title:
+        return "outside_sending_posture"
+    return lane_for_area(area)
+
 
 def safe_domain(raw):
     """Normalize + validate the input domain; return a clean hostname or None."""
@@ -621,18 +660,8 @@ def mta_sts_policy_problems(policy):
     return problems, mode, max_age, pol_mx
 
 
-def check_mta_sts(domain, F):
-    if is_null_mx(dig(domain, "MX")):
-        F.append(dict(
-            area="MTA-STS",
-            severity="pass",
-            title="MTA-STS not applicable — domain receives no mail",
-            detail="MTA-STS tells sending servers to require TLS when delivering TO this domain. This domain publishes a null MX, so there is no inbound delivery for a policy to protect. Not a gap.",
-            fix=None,
-        ))
-        return
-    txt = confirm_txt(f"_mta-sts.{domain}", "v=stsv1")
-    policy = None
+def _fetch_mta_sts_policy(domain):
+    """Return (observation, usable-policy-or-None) for the policy HTTPS read."""
     mhost = f"mta-sts.{domain}"
     try:
         ips = host_public_ips(mhost)
@@ -654,16 +683,39 @@ def check_mta_sts(domain, F):
         head, _, body = raw.partition("\r\n\r\n")
         status_line = head.split("\r\n", 1)[0]
         # RFC 8461 §3.3: the policy MUST be HTTP 200 with Content-Type text/plain.
-        status_ok = re.match(r"HTTP/\d\.\d\s+200\b", status_line) is not None
+        status_match = re.match(r"HTTP/\d\.\d\s+(\d{3})\b", status_line)
+        if status_match is None:
+            return "unavailable", None
+        status_ok = int(status_match.group(1)) == 200
         ctype_ok = re.search(r"^content-type:\s*text/plain", head, re.I | re.M) is not None
-        policy = body[:8192] if (status_ok and ctype_ok) else None
+        return "checked", body[:8192] if (status_ok and ctype_ok) else None
     except Exception:
-        policy = None
+        return "unavailable", None
+
+
+def check_mta_sts(domain, F, observations=None):
+    if is_null_mx(dig(domain, "MX")):
+        if observations is not None:
+            observations["mta_sts_policy"] = "not_applicable"
+        F.append(dict(
+            area="MTA-STS",
+            severity="pass",
+            title="MTA-STS not applicable — domain receives no mail",
+            detail="MTA-STS tells sending servers to require TLS when delivering TO this domain. This domain publishes a null MX, so there is no inbound delivery for a policy to protect. Not a gap.",
+            fix=None,
+        ))
+        return
+    txt = confirm_txt(f"_mta-sts.{domain}", "v=stsv1")
     if not txt:
+        if observations is not None:
+            observations["mta_sts_policy"] = "not_applicable"
         F.append(dict(area="MTA-STS", severity="medium", title="No MTA-STS policy",
                       detail="MTA-STS lets you require TLS for inbound SMTP and is part of a modern transport posture (and increasingly asked for in EU procurement, and specified in BSI's guidance for secure email transport (TR-03108)). Absent it, downgrade attacks on mail-in-transit are possible.",
                       fix="Publish _mta-sts TXT (v=STSv1; id=...) and host https://mta-sts.<domain>/.well-known/mta-sts.txt. Stage it: publish TLS-RPT first so you get failure reports, start at mode: testing, confirm every production AND backup MX passes TLS, then switch to mode: enforce (RFC 8461 provides testing mode for exactly this)."))
         return
+    observation, policy = _fetch_mta_sts_policy(domain)
+    if observations is not None:
+        observations["mta_sts_policy"] = observation
     if not policy:
         F.append(dict(area="MTA-STS", severity="medium", title="MTA-STS TXT present but policy file not retrievable",
                       detail=f"The _mta-sts TXT record advertises a policy, but https://mta-sts.{domain}/.well-known/mta-sts.txt did not return a valid policy (RFC 8461 requires HTTP 200 with Content-Type text/plain). Senders can't fetch it, so MTA-STS isn't actually enforced.",
@@ -918,11 +970,13 @@ def check_dnssec(domain, F):
 
 # ── Domain age / expiry via RDAP (modern WHOIS over HTTPS/JSON) ──────────────
 
-def check_domain_age(domain, F):
+def check_domain_age(domain, F, observations=None):
     """rdap.org is the IANA bootstrap redirector → it 30x's to the authoritative RDAP
     server for the TLD, so we follow (each hop re-validated through the SSRF guard).
     Fail-open: no RDAP for the TLD / any error → no finding."""
     status, body = _http_get("rdap.org", "/domain/" + domain, follow=3, cap=131072)
+    if observations is not None:
+        observations["rdap"] = "checked" if status is not None else "unavailable"
     if status != 200 or not body:
         return
     try:
@@ -999,8 +1053,10 @@ def _robots_blocks_ai_bots(txt):
     return blocked
 
 
-def check_ai_bots(domain, F):
+def check_ai_bots(domain, F, observations=None):
     status, body = _http_get(domain, "/robots.txt", follow=0, cap=20000)
+    if observations is not None:
+        observations["robots"] = "checked" if status is not None else "unavailable"
     if status != 200 or not body:
         return  # no robots / unreadable / redirect → nothing is blocked → no finding
     blocked = _robots_blocks_ai_bots(body)
@@ -1213,9 +1269,16 @@ def main():
         ("simple", check_simple), ("mx", check_mx_hygiene),
         ("dnssec", check_dnssec), ("rdns", check_reverse_dns), ("caa", check_caa),
     ]
+    observations = {
+        "mta_sts_policy": "not_applicable",
+        "robots": "not_applicable",
+        "rdap": "not_applicable",
+    }
     socket_checks = [
-        ("mta_sts", check_mta_sts), ("transport", check_transport),
-        ("reputation", check_domain_age), ("aibots", check_ai_bots),
+        ("mta_sts", lambda d, f: check_mta_sts(d, f, observations)),
+        ("transport", check_transport),
+        ("reputation", lambda d, f: check_domain_age(d, f, observations)),
+        ("aibots", lambda d, f: check_ai_bots(d, f, observations)),
     ]
 
     def _run(item):
@@ -1245,6 +1308,7 @@ def main():
     order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "pass": 4}
     F.sort(key=lambda x: order.get(x["severity"], 5))
     for f in F:
+        f["lane"] = lane_for_finding(f)
         f["effort"], f["value"] = priority(f)
         if f["effort"]:
             f["quadrant"] = QUADRANT[(f["effort"], f["value"])]
@@ -1256,6 +1320,7 @@ def main():
         "primary_mx": mx_host,
         "summary": summary,
         "findings": F,
+        "observations": observations,
         "notes": "Read-only scan. DKIM is best-effort (common selectors only). "
                  "PQC transport readiness is inferred from TLS version; ML-KEM negotiation "
                  "is not directly probed by this scanner. DMARCbis = RFC 9989 (published May 2026).",

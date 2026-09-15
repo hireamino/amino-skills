@@ -264,12 +264,81 @@ try:
             'expected "No MX record is published. SMTP then treats the domain as if it had an implicit MX pointing to itself and resolves that host\'s address records, so this does not show that the domain receives no mail — a null MX (0 .) is what says that explicitly. This may be intentional for a send-only or parked domain.", '
             "got 'No inbound mail servers (may be intentional for a send-only/parked domain).'",
         )
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi79-lane-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '    "SPF": "outbound_auth",\n',
+            "    # WHI-79 removed SPF lane canary\n",
+            "SPF lane assignment",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red(
+            "O removed one area lane",
+            execute({
+                "AUDIT_SCRIPTS": str(target),
+                "CONFORMANCE_FIXTURE": "dkim-revoked-empty-p",
+            }),
+            "dkim-revoked-empty-p.execution: threw unknown finding area has no lane: SPF",
+        )
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi79-lane-compare-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '    "SPF": "outbound_auth",\n',
+            '    "SPF": "inbound_transport",  # WHI-79 valid-wrong-lane canary\n',
+            "SPF valid wrong lane",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red(
+            "Q valid wrong lane reaches runner comparison",
+            execute({
+                "AUDIT_SCRIPTS": str(target),
+                "CONFORMANCE_FIXTURE": "dkim-revoked-empty-p",
+            }),
+            "dkim-revoked-empty-p.findings[SPF|No SPF record].lane: "
+            "expected 'outbound_auth', got 'inbound_transport'",
+        )
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi79-observation-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '        observations["mta_sts_policy"] = observation\n',
+            '        observations["mta_sts_policy"] = "unavailable"  # WHI-79 conflation canary\n',
+            "MTA-STS observation assignment",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red(
+            "P conflated absent with unavailable",
+            execute({
+                "AUDIT_SCRIPTS": str(target),
+                "CONFORMANCE_FIXTURE": "mta-sts-policy-absent",
+            }),
+            "mta-sts-policy-absent.observations: expected {'mta_sts_policy': 'checked', "
+            "'robots': 'checked', 'rdap': 'checked'}, got {'mta_sts_policy': 'unavailable', "
+            "'robots': 'checked', 'rdap': 'checked'}",
+        )
 except Exception as error:
     print(f"FAIL  canary setup — {error}")
     FAILED += 1
 
-print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 9 cases.")
-if PASSED + FAILED != 9:
-    print(f"FAIL  canary count: expected 9, got {PASSED + FAILED}", file=sys.stderr)
+print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 12 cases.")
+if PASSED + FAILED != 12:
+    print(f"FAIL  canary count: expected 12, got {PASSED + FAILED}", file=sys.stderr)
     sys.exit(1)
 sys.exit(1 if FAILED else 0)

@@ -33,6 +33,10 @@ if (typeof engine.auditDomain !== "function" || typeof engine.buckets !== "funct
   process.exit(2);
 }
 let { fixtures } = JSON.parse(readFileSync(resolve(here, "fixtures.json"), "utf8"));
+const CONTRACT_MODES = new Set(["dns-engine", "http-observation"]);
+const LANES = new Set(["outbound_auth", "inbound_transport", "brand_optional", "outside_sending_posture"]);
+const OBSERVATION_KEYS = ["mta_sts_policy", "rdap", "robots"];
+const OBSERVATION_STATES = new Set(["checked", "unavailable", "not_applicable"]);
 const onlyFixture = process.env.CONFORMANCE_FIXTURE;
 if (onlyFixture) {
   fixtures = fixtures.filter((fixture) => fixture.id === onlyFixture);
@@ -42,7 +46,7 @@ if (onlyFixture) {
   }
 }
 
-function mockQ(dns) {
+function mockQ(dns, http = {}, nowMs = 1767225600000) {
   const norm = (name) => name.replace(/\.+$/, "").toLowerCase();
   const map = {};
   for (const [name, records] of Object.entries(dns || {})) map[norm(name)] = records;
@@ -60,6 +64,14 @@ function mockQ(dns) {
     const entry = map[norm(name)] || {};
     return { status: entry.status !== undefined ? entry.status : 0, ad: !!entry.ad, error: false };
   };
+  const response = (name) => http[name] === "unavailable" || http[name] === undefined
+    ? null : structuredClone(http[name]);
+  q.http = {
+    mtaSts: async () => response("mta_sts_policy"),
+    robots: async () => response("robots"),
+    rdap: async () => response("rdap"),
+  };
+  q.clock = { nowMs: () => nowMs };
   return q;
 }
 
@@ -75,8 +87,11 @@ function expectedFindings(fx, surface) {
   const expected = [];
   let notApplicable = 0;
   for (const finding of fx.expect.findings) {
-    for (const field of ["area", "title", "severity", "action", "fixIncludes"]) {
+    for (const field of ["area", "title", "severity", "lane", "action", "fixIncludes"]) {
       if (!own(finding, field)) throw new Error(`${fx.id}.expect.findings missing ${field}`);
+    }
+    if (!LANES.has(finding.lane)) {
+      throw new Error(`${fx.id}.findings[${findingLabel(finding)}].lane: unknown contract value ${shown(finding.lane)}`);
     }
     if (finding.severity !== "pass" && finding.fixIncludes === null) {
       throw new Error(`${fx.id}.findings[${findingLabel(finding)}].fix: non-pass finding must declare a non-null fixIncludes`);
@@ -119,8 +134,9 @@ function compareLegacy(fx, findings) {
   return problems;
 }
 
-function compareContract(fx, findings, score, surface, ledger) {
+function compareContract(fx, result, score, surface, ledger) {
   const problems = [];
+  const findings = result.findings || [];
   const { expected } = expectedFindings(fx, surface);
   const actualByKey = new Map();
   for (const actual of findings) {
@@ -138,6 +154,7 @@ function compareContract(fx, findings, score, surface, ledger) {
     ledger.severity++;
     ledger.action++;
     ledger.fix++;
+    ledger.lane++;
     const key = findingKey(wanted);
     if (expectedKeys.has(key)) {
       problems.push(`findings[${findingLabel(wanted)}].identity: duplicate expectation`);
@@ -151,6 +168,9 @@ function compareContract(fx, findings, score, surface, ledger) {
     }
     if (actual.severity !== wanted.severity) {
       problems.push(`findings[${findingLabel(wanted)}].severity: expected ${shown(wanted.severity)}, got ${shown(actual.severity)}`);
+    }
+    if (actual.lane !== wanted.lane) {
+      problems.push(`findings[${findingLabel(wanted)}].lane: expected ${shown(wanted.lane)}, got ${shown(actual.lane)}`);
     }
     if (own(wanted, "detail")) {
       ledger.detail++;
@@ -200,26 +220,37 @@ function compareContract(fx, findings, score, surface, ledger) {
     problems.push(`score.keys: expected ${shown(wantedScoreKeys)}, got ${shown(actualScoreKeys)}`);
   }
   for (const field of wantedScoreKeys) {
-    if (score?.[field] !== fx.expect.score[field]) {
+    if (shown(score?.[field]) !== shown(fx.expect.score[field])) {
       problems.push(`score.${field}: expected ${shown(fx.expect.score[field])}, got ${shown(score?.[field])}`);
     }
+  }
+  ledger.observations++;
+  const wantedObservationKeys = Object.keys(fx.expect.observations || {}).sort();
+  if (shown(wantedObservationKeys) !== shown(OBSERVATION_KEYS)
+      || !Object.values(fx.expect.observations || {}).every((state) => OBSERVATION_STATES.has(state))) {
+    problems.push("observations: expected the closed mta_sts_policy/robots/rdap map and enum values");
+  }
+  if (shown(result.observations) !== shown(fx.expect.observations)) {
+    problems.push(`observations: expected ${shown(fx.expect.observations)}, got ${shown(result.observations)}`);
   }
   return problems;
 }
 
 function assertionPlan(surface) {
-  const plan = { identity: 0, severity: 0, action: 0, fix: 0, detail: 0, effort: 0, value: 0, scoreFields: 0, closedWorld: 0 };
-  for (const fx of fixtures.filter((fixture) => fixture.mode === "dns-engine")) {
+  const plan = { identity: 0, severity: 0, action: 0, fix: 0, lane: 0, detail: 0, effort: 0, value: 0, scoreFields: 0, closedWorld: 0, observations: 0 };
+  for (const fx of fixtures.filter((fixture) => CONTRACT_MODES.has(fixture.mode))) {
     const { expected } = expectedFindings(fx, surface);
     plan.identity += expected.length;
     plan.severity += expected.length;
     plan.action += expected.length;
     plan.fix += expected.length;
+    plan.lane += expected.length;
     plan.detail += expected.filter((finding) => own(finding, "detail")).length;
     plan.effort += expected.filter((finding) => own(finding, "effort")).length;
     plan.value += expected.filter((finding) => own(finding, "value")).length;
     plan.scoreFields += Object.keys(fx.expect.score || {}).length;
     plan.closedWorld++;
+    plan.observations++;
   }
   return plan;
 }
@@ -229,20 +260,22 @@ let fail = 0;
 let skip = 0;
 let notApplicable = 0;
 const failures = [];
-const ledger = { identity: 0, severity: 0, action: 0, fix: 0, detail: 0, effort: 0, value: 0, scoreFields: 0, closedWorld: 0 };
+const ledger = { identity: 0, severity: 0, action: 0, fix: 0, lane: 0, detail: 0, effort: 0, value: 0, scoreFields: 0, closedWorld: 0, observations: 0 };
 
 for (const fx of fixtures) {
-  if (fx.mode !== "dns-engine") {
+  if (!CONTRACT_MODES.has(fx.mode)) {
     skip++;
     console.log(`  SKIP  ${fx.id} (${fx.invariant}) — ${fx.skip_reason || fx.mode}`);
     continue;
   }
 
+  let result;
   let findings;
   let score;
   try {
-    const q = mockQ(fx.input.dns);
-    findings = (await engine.auditDomain(fx.input.domain, q)).findings || [];
+    const q = mockQ(fx.input.dns, fx.input.http, fx.input.nowMs);
+    result = await engine.auditDomain(fx.input.domain, q);
+    findings = result.findings || [];
     score = await engine.buckets(fx.input.domain, q);
     notApplicable += expectedFindings(fx, SURFACE).notApplicable;
   } catch (error) {
@@ -255,7 +288,7 @@ for (const fx of fixtures) {
 
   const problems = [
     ...compareLegacy(fx, findings),
-    ...compareContract(fx, findings, score, SURFACE, ledger),
+    ...compareContract(fx, result, score, SURFACE, ledger),
   ];
   if (problems.length) {
     fail++;

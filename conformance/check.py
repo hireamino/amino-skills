@@ -101,6 +101,42 @@ chk("WHI-10 No CAA priority", audit.priority({
     "area": "CAA", "severity": "low", "title": "No CAA records",
 }), ("low", "low"))
 
+# WHI-79 — lanes and HTTP observation states are closed output-contract enums.
+_EXPECTED_AREA_LANES = {
+    "SPF": "outbound_auth", "DKIM": "outbound_auth", "DMARC": "outbound_auth",
+    "MTA-STS": "inbound_transport", "TLS-RPT": "inbound_transport",
+    "Transport": "inbound_transport", "MX": "inbound_transport",
+    "BIMI": "brand_optional", "CAA": "brand_optional",
+    "DNSSEC": "outside_sending_posture",
+    "AI visibility": "outside_sending_posture",
+    "Reputation": "outside_sending_posture",
+}
+_EXPECTED_BUCKET_LANES = {
+    "SPF": "outbound_auth", "DKIM": "outbound_auth", "DMARC": "outbound_auth",
+    "DMARC_enforced": "outbound_auth", "DMARC_rua": "outbound_auth",
+    "MTA_STS": "inbound_transport", "TLS_RPT": "inbound_transport",
+    "DANE": "inbound_transport", "BIMI": "brand_optional",
+}
+chk("WHI-79 lane enum is closed", audit.LANES,
+    ("outbound_auth", "inbound_transport", "brand_optional", "outside_sending_posture"))
+chk("WHI-79 all 12 finding areas have one lane", audit.AREA_LANES, _EXPECTED_AREA_LANES)
+chk("WHI-79 reverse-DNS Transport finding is outside sending posture",
+    audit.lane_for_finding({"area": "Transport", "title": "Mail server has no reverse DNS (PTR)"}),
+    "outside_sending_posture")
+chk("WHI-79 DANE Transport finding stays inbound",
+    audit.lane_for_finding({"area": "Transport", "title": "No DANE/TLSA"}),
+    "inbound_transport")
+chk("WHI-79 every scored bucket has one lane", batch_score.BUCKET_LANES,
+    _EXPECTED_BUCKET_LANES)
+chk("WHI-79 observation enum is closed", audit.OBSERVATION_STATES,
+    ("checked", "unavailable", "not_applicable"))
+try:
+    audit.lane_for_area("Unknown future area")
+    _unknown_area_rejected = False
+except ValueError:
+    _unknown_area_rejected = True
+chk("WHI-79 unknown finding area is rejected", _unknown_area_rejected, True)
+
 # A non-pass fixture with no remediation would let /audit render an action in its
 # plan and "no action needed" in its evidence row for the same finding.
 with open(os.path.join(os.path.dirname(__file__), "fixtures.json"), encoding="utf-8") as _handle:
@@ -171,6 +207,10 @@ _WF = open(os.path.join(_ROOT, ".github", "workflows", "conformance.yml"), encod
 chk("CI would run this file when FAQ.md alone changes", "- 'FAQ.md'" in _WF, True)
 chk("CI would run this file when SKILL.md alone changes",
     "amino-deliverability-audit/SKILL.md'" in _WF, True)
+chk("WHI-79 CI runs for corpus/spec/runner changes", "- 'conformance/**'" in _WF, True)
+chk("WHI-79 CI runs for Python engine/scorer changes",
+    "amino-deliverability-audit/skills/amino-deliverability-audit/scripts/**" in _WF,
+    True)
 
 # ── the OTHER claims corrected in the engines on 2026-07-30 ────────────────
 # Same lesson as the np= one directly above: each of these was fixed in audit.py and

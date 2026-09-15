@@ -33,35 +33,40 @@
             "title": "No DMARC record",
             "severity": "critical",
             "action": "Publish a DMARC policy",
-            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to"
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to",
+            "lane": "outbound_auth"
           },
           {
             "area": "SPF",
             "title": "No SPF record",
             "severity": "high",
             "action": "Publish an SPF record",
-            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with"
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with",
+            "lane": "outbound_auth"
           },
           {
             "area": "DKIM",
             "title": "DKIM key is revoked or malformed",
             "severity": "high",
             "action": "Confirm or enable DKIM signing",
-            "fixIncludes": "Publish a valid key at this selector (RSA >=2048 or Ed25519), or remove the dead record"
+            "fixIncludes": "Publish a valid key at this selector (RSA >=2048 or Ed25519), or remove the dead record",
+            "lane": "outbound_auth"
           },
           {
             "area": "MTA-STS",
             "title": "No MTA-STS policy",
             "severity": "medium",
             "action": "Publish an MTA-STS policy",
-            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
           },
           {
             "area": "TLS-RPT",
             "title": "No TLS-RPT",
             "severity": "low",
             "action": "Add a TLS-RPT record",
-            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
           },
           {
             "area": "BIMI",
@@ -70,21 +75,24 @@
             "effort": "high",
             "value": "low",
             "action": "Get a VMC, then publish BIMI",
-            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
           },
           {
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
             "action": "Confirm whether this domain should receive mail",
-            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
           },
           {
             "area": "DNSSEC",
             "title": "DNSSEC not enabled",
             "severity": "low",
             "action": "Enable DNSSEC",
-            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "outside_sending_posture"
           },
           {
             "area": "CAA",
@@ -93,7 +101,8 @@
             "effort": "low",
             "value": "low",
             "action": "Add a CAA record",
-            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
           }
         ],
         "score": {
@@ -107,7 +116,23 @@
           "BIMI": false,
           "DKIM": "invalid",
           "gap": 8,
-          "note": "no SPF; DKIM selector1 revoked (empty p=); no DMARC"
+          "note": "no SPF; DKIM selector1 revoked (empty p=); no DMARC",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "unavailable",
+          "rdap": "unavailable"
         }
       }
     },
@@ -142,63 +167,72 @@
             "title": "No DMARC record",
             "severity": "critical",
             "action": "Publish a DMARC policy",
-            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to"
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to",
+            "lane": "outbound_auth"
           },
           {
             "area": "SPF",
             "title": "No SPF record",
             "severity": "high",
             "action": "Publish an SPF record",
-            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with"
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with",
+            "lane": "outbound_auth"
           },
           {
             "area": "DKIM",
             "title": "DKIM key is revoked or malformed",
             "severity": "high",
             "action": "Confirm or enable DKIM signing",
-            "fixIncludes": "Publish a valid key at this selector (RSA >=2048 or Ed25519), or remove the dead record"
+            "fixIncludes": "Publish a valid key at this selector (RSA >=2048 or Ed25519), or remove the dead record",
+            "lane": "outbound_auth"
           },
           {
             "area": "MTA-STS",
             "title": "No MTA-STS policy",
             "severity": "medium",
             "action": "Publish an MTA-STS policy",
-            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
           },
           {
             "area": "TLS-RPT",
             "title": "No TLS-RPT",
             "severity": "low",
             "action": "Add a TLS-RPT record",
-            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
           },
           {
             "area": "BIMI",
             "title": "No BIMI",
             "severity": "low",
             "action": "Get a VMC, then publish BIMI",
-            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
           },
           {
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
             "action": "Confirm whether this domain should receive mail",
-            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
           },
           {
             "area": "DNSSEC",
             "title": "DNSSEC not enabled",
             "severity": "low",
             "action": "Enable DNSSEC",
-            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "outside_sending_posture"
           },
           {
             "area": "CAA",
             "title": "No CAA records",
             "severity": "low",
             "action": "Add a CAA record",
-            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
           }
         ],
         "score": {
@@ -212,7 +246,23 @@
           "BIMI": false,
           "DKIM": "invalid",
           "gap": 8,
-          "note": "no SPF; DKIM selector1 malformed (malformed-ed25519); no DMARC"
+          "note": "no SPF; DKIM selector1 malformed (malformed-ed25519); no DMARC",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "unavailable",
+          "rdap": "unavailable"
         }
       }
     },
@@ -247,63 +297,72 @@
             "title": "No DMARC record",
             "severity": "critical",
             "action": "Publish a DMARC policy",
-            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to"
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to",
+            "lane": "outbound_auth"
           },
           {
             "area": "SPF",
             "title": "No SPF record",
             "severity": "high",
             "action": "Publish an SPF record",
-            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with"
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with",
+            "lane": "outbound_auth"
           },
           {
             "area": "MTA-STS",
             "title": "No MTA-STS policy",
             "severity": "medium",
             "action": "Publish an MTA-STS policy",
-            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
           },
           {
             "area": "TLS-RPT",
             "title": "No TLS-RPT",
             "severity": "low",
             "action": "Add a TLS-RPT record",
-            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
           },
           {
             "area": "BIMI",
             "title": "No BIMI",
             "severity": "low",
             "action": "Get a VMC, then publish BIMI",
-            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
           },
           {
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
             "action": "Confirm whether this domain should receive mail",
-            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
           },
           {
             "area": "DNSSEC",
             "title": "DNSSEC not enabled",
             "severity": "low",
             "action": "Enable DNSSEC",
-            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "outside_sending_posture"
           },
           {
             "area": "CAA",
             "title": "No CAA records",
             "severity": "low",
             "action": "Add a CAA record",
-            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
           },
           {
             "area": "DKIM",
             "title": "DKIM present (DKIM selector1 (RSA-2048))",
             "severity": "pass",
             "action": null,
-            "fixIncludes": null
+            "fixIncludes": null,
+            "lane": "outbound_auth"
           }
         ],
         "score": {
@@ -317,7 +376,23 @@
           "BIMI": false,
           "DKIM": "good",
           "gap": 8,
-          "note": "no SPF; no DMARC"
+          "note": "no SPF; no DMARC",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "unavailable",
+          "rdap": "unavailable"
         }
       }
     },
@@ -352,63 +427,72 @@
             "title": "No DMARC record",
             "severity": "critical",
             "action": "Publish a DMARC policy",
-            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to"
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to",
+            "lane": "outbound_auth"
           },
           {
             "area": "SPF",
             "title": "No SPF record",
             "severity": "high",
             "action": "Publish an SPF record",
-            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with"
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with",
+            "lane": "outbound_auth"
           },
           {
             "area": "DKIM",
             "title": "DKIM key is RSA-1024 (legacy)",
             "severity": "high",
             "action": "Rotate DKIM to a 2048-bit key",
-            "fixIncludes": "Rotate the selector to RSA-2048 (or Ed25519): publish the new key, let it propagate,"
+            "fixIncludes": "Rotate the selector to RSA-2048 (or Ed25519): publish the new key, let it propagate,",
+            "lane": "outbound_auth"
           },
           {
             "area": "MTA-STS",
             "title": "No MTA-STS policy",
             "severity": "medium",
             "action": "Publish an MTA-STS policy",
-            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
           },
           {
             "area": "TLS-RPT",
             "title": "No TLS-RPT",
             "severity": "low",
             "action": "Add a TLS-RPT record",
-            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
           },
           {
             "area": "BIMI",
             "title": "No BIMI",
             "severity": "low",
             "action": "Get a VMC, then publish BIMI",
-            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
           },
           {
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
             "action": "Confirm whether this domain should receive mail",
-            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
           },
           {
             "area": "DNSSEC",
             "title": "DNSSEC not enabled",
             "severity": "low",
             "action": "Enable DNSSEC",
-            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "outside_sending_posture"
           },
           {
             "area": "CAA",
             "title": "No CAA records",
             "severity": "low",
             "action": "Add a CAA record",
-            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
           }
         ],
         "score": {
@@ -422,7 +506,23 @@
           "BIMI": false,
           "DKIM": "weak",
           "gap": 9,
-          "note": "no SPF; DKIM selector1=RSA-1024; no DMARC"
+          "note": "no SPF; DKIM selector1=RSA-1024; no DMARC",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "unavailable",
+          "rdap": "unavailable"
         }
       }
     },
@@ -457,63 +557,72 @@
             "title": "No SPF record",
             "severity": "high",
             "action": "Publish an SPF record",
-            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with"
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with",
+            "lane": "outbound_auth"
           },
           {
             "area": "DMARC",
             "title": "DMARC policy value is invalid (p=banana)",
             "severity": "high",
             "action": "Strengthen the DMARC policy",
-            "fixIncludes": "Set p= to none (monitor), quarantine, or reject."
+            "fixIncludes": "Set p= to none (monitor), quarantine, or reject.",
+            "lane": "outbound_auth"
           },
           {
             "area": "MTA-STS",
             "title": "No MTA-STS policy",
             "severity": "medium",
             "action": "Publish an MTA-STS policy",
-            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
           },
           {
             "area": "DKIM",
             "title": "DKIM not found at common/provider selectors",
             "severity": "low",
             "action": "Confirm or enable DKIM signing",
-            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
           },
           {
             "area": "TLS-RPT",
             "title": "No TLS-RPT",
             "severity": "low",
             "action": "Add a TLS-RPT record",
-            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
           },
           {
             "area": "BIMI",
             "title": "No BIMI",
             "severity": "low",
             "action": "Get a VMC, then publish BIMI",
-            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
           },
           {
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
             "action": "Confirm whether this domain should receive mail",
-            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
           },
           {
             "area": "DNSSEC",
             "title": "DNSSEC not enabled",
             "severity": "low",
             "action": "Enable DNSSEC",
-            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "outside_sending_posture"
           },
           {
             "area": "CAA",
             "title": "No CAA records",
             "severity": "low",
             "action": "Add a CAA record",
-            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
           }
         ],
         "score": {
@@ -527,7 +636,23 @@
           "BIMI": false,
           "DKIM": "unknown",
           "gap": 6,
-          "note": "no SPF; no DKIM key at common/provider selectors"
+          "note": "no SPF; no DKIM key at common/provider selectors",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "unavailable",
+          "rdap": "unavailable"
         }
       }
     },
@@ -562,63 +687,72 @@
             "title": "No SPF record",
             "severity": "high",
             "action": "Publish an SPF record",
-            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with"
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with",
+            "lane": "outbound_auth"
           },
           {
             "area": "MTA-STS",
             "title": "No MTA-STS policy",
             "severity": "medium",
             "action": "Publish an MTA-STS policy",
-            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
           },
           {
             "area": "DKIM",
             "title": "DKIM not found at common/provider selectors",
             "severity": "low",
             "action": "Confirm or enable DKIM signing",
-            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
           },
           {
             "area": "TLS-RPT",
             "title": "No TLS-RPT",
             "severity": "low",
             "action": "Add a TLS-RPT record",
-            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
           },
           {
             "area": "BIMI",
             "title": "No BIMI",
             "severity": "low",
             "action": "Get a VMC, then publish BIMI",
-            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
           },
           {
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
             "action": "Confirm whether this domain should receive mail",
-            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
           },
           {
             "area": "DNSSEC",
             "title": "DNSSEC not enabled",
             "severity": "low",
             "action": "Enable DNSSEC",
-            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "outside_sending_posture"
           },
           {
             "area": "CAA",
             "title": "No CAA records",
             "severity": "low",
             "action": "Add a CAA record",
-            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
           },
           {
             "area": "DMARC",
             "title": "DMARC enforced (p=reject)",
             "severity": "pass",
             "action": null,
-            "fixIncludes": null
+            "fixIncludes": null,
+            "lane": "outbound_auth"
           }
         ],
         "score": {
@@ -632,7 +766,23 @@
           "BIMI": false,
           "DKIM": "unknown",
           "gap": 7,
-          "note": "no SPF; no DKIM key at common/provider selectors; no rua"
+          "note": "no SPF; no DKIM key at common/provider selectors; no rua",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "unavailable",
+          "rdap": "unavailable"
         }
       }
     },
@@ -667,63 +817,72 @@
             "title": "No SPF record",
             "severity": "high",
             "action": "Publish an SPF record",
-            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with"
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with",
+            "lane": "outbound_auth"
           },
           {
             "area": "DMARC",
             "title": "DMARC policy is p=none (monitor only)",
             "severity": "high",
             "action": "Review DMARC reports, then stage quarantine",
-            "fixIncludes": "Collect and review DMARC aggregate reports before enforcement, and remediate every"
+            "fixIncludes": "Collect and review DMARC aggregate reports before enforcement, and remediate every",
+            "lane": "outbound_auth"
           },
           {
             "area": "MTA-STS",
             "title": "No MTA-STS policy",
             "severity": "medium",
             "action": "Publish an MTA-STS policy",
-            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
           },
           {
             "area": "DKIM",
             "title": "DKIM not found at common/provider selectors",
             "severity": "low",
             "action": "Confirm or enable DKIM signing",
-            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
           },
           {
             "area": "TLS-RPT",
             "title": "No TLS-RPT",
             "severity": "low",
             "action": "Add a TLS-RPT record",
-            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
           },
           {
             "area": "BIMI",
             "title": "No BIMI",
             "severity": "low",
             "action": "Get a VMC, then publish BIMI",
-            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
           },
           {
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
             "action": "Confirm whether this domain should receive mail",
-            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
           },
           {
             "area": "DNSSEC",
             "title": "DNSSEC not enabled",
             "severity": "low",
             "action": "Enable DNSSEC",
-            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "outside_sending_posture"
           },
           {
             "area": "CAA",
             "title": "No CAA records",
             "severity": "low",
             "action": "Add a CAA record",
-            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
           }
         ],
         "score": {
@@ -737,7 +896,23 @@
           "BIMI": false,
           "DKIM": "unknown",
           "gap": 6,
-          "note": "no SPF; no DKIM key at common/provider selectors; DMARC p=none"
+          "note": "no SPF; no DKIM key at common/provider selectors; DMARC p=none",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "unavailable",
+          "rdap": "unavailable"
         }
       }
     },
@@ -770,77 +945,88 @@
             "title": "No SPF record",
             "severity": "high",
             "action": "Publish an SPF record",
-            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with"
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with",
+            "lane": "outbound_auth"
           },
           {
             "area": "DMARC",
             "title": "Multiple DMARC records (invalid)",
             "severity": "high",
             "action": "Merge to a single DMARC record",
-            "fixIncludes": "Keep one DMARC record and remove the rest."
+            "fixIncludes": "Keep one DMARC record and remove the rest.",
+            "lane": "outbound_auth"
           },
           {
             "area": "DMARC",
             "title": "DMARC has no rua (no aggregate reporting)",
             "severity": "medium",
             "action": "Turn on DMARC reporting (rua) — needed before you enforce",
-            "fixIncludes": "Add rua=mailto:dmarc@<domain> to receive daily aggregate XML reports."
+            "fixIncludes": "Add rua=mailto:dmarc@<domain> to receive daily aggregate XML reports.",
+            "lane": "outbound_auth"
           },
           {
             "area": "MTA-STS",
             "title": "No MTA-STS policy",
             "severity": "medium",
             "action": "Publish an MTA-STS policy",
-            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
           },
           {
             "area": "DKIM",
             "title": "DKIM not found at common/provider selectors",
             "severity": "low",
             "action": "Confirm or enable DKIM signing",
-            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
           },
           {
             "area": "TLS-RPT",
             "title": "No TLS-RPT",
             "severity": "low",
             "action": "Add a TLS-RPT record",
-            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
           },
           {
             "area": "BIMI",
             "title": "No BIMI",
             "severity": "low",
             "action": "Get a VMC, then publish BIMI",
-            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
           },
           {
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
             "action": "Confirm whether this domain should receive mail",
-            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
           },
           {
             "area": "DNSSEC",
             "title": "DNSSEC not enabled",
             "severity": "low",
             "action": "Enable DNSSEC",
-            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "outside_sending_posture"
           },
           {
             "area": "CAA",
             "title": "No CAA records",
             "severity": "low",
             "action": "Add a CAA record",
-            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
           },
           {
             "area": "DMARC",
             "title": "DMARC enforced (p=reject)",
             "severity": "pass",
             "action": null,
-            "fixIncludes": null
+            "fixIncludes": null,
+            "lane": "outbound_auth"
           }
         ],
         "score": {
@@ -854,7 +1040,23 @@
           "BIMI": false,
           "DKIM": "unknown",
           "gap": 6,
-          "note": "no SPF; no DKIM key at common/provider selectors; no rua"
+          "note": "no SPF; no DKIM key at common/provider selectors; no rua",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "unavailable",
+          "rdap": "unavailable"
         }
       }
     },
@@ -889,63 +1091,72 @@
             "title": "No SPF record",
             "severity": "high",
             "action": "Publish an SPF record",
-            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with"
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with",
+            "lane": "outbound_auth"
           },
           {
             "area": "MTA-STS",
             "title": "No MTA-STS policy",
             "severity": "medium",
             "action": "Publish an MTA-STS policy",
-            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
           },
           {
             "area": "DKIM",
             "title": "DKIM not found at common/provider selectors",
             "severity": "low",
             "action": "Confirm or enable DKIM signing",
-            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
           },
           {
             "area": "TLS-RPT",
             "title": "No TLS-RPT",
             "severity": "low",
             "action": "Add a TLS-RPT record",
-            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
           },
           {
             "area": "BIMI",
             "title": "No BIMI",
             "severity": "low",
             "action": "Get a VMC, then publish BIMI",
-            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
           },
           {
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
             "action": "Confirm whether this domain should receive mail",
-            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
           },
           {
             "area": "DNSSEC",
             "title": "DNSSEC not enabled",
             "severity": "low",
             "action": "Enable DNSSEC",
-            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "outside_sending_posture"
           },
           {
             "area": "CAA",
             "title": "No CAA records",
             "severity": "low",
             "action": "Add a CAA record",
-            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
           },
           {
             "area": "DMARC",
             "title": "DMARC enforced (inherited p=reject from example.co.uk)",
             "severity": "pass",
             "action": null,
-            "fixIncludes": null
+            "fixIncludes": null,
+            "lane": "outbound_auth"
           }
         ],
         "score": {
@@ -959,7 +1170,23 @@
           "BIMI": false,
           "DKIM": "unknown",
           "gap": 8,
-          "note": "no SPF; no DKIM key at common/provider selectors; no DMARC"
+          "note": "no SPF; no DKIM key at common/provider selectors; no DMARC",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "unavailable",
+          "rdap": "unavailable"
         }
       }
     },
@@ -994,63 +1221,72 @@
             "title": "No DMARC record",
             "severity": "critical",
             "action": "Publish a DMARC policy",
-            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to"
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to",
+            "lane": "outbound_auth"
           },
           {
             "area": "MTA-STS",
             "title": "No MTA-STS policy",
             "severity": "medium",
             "action": "Publish an MTA-STS policy",
-            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
           },
           {
             "area": "DKIM",
             "title": "DKIM not found at common/provider selectors",
             "severity": "low",
             "action": "Confirm or enable DKIM signing",
-            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
           },
           {
             "area": "TLS-RPT",
             "title": "No TLS-RPT",
             "severity": "low",
             "action": "Add a TLS-RPT record",
-            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
           },
           {
             "area": "BIMI",
             "title": "No BIMI",
             "severity": "low",
             "action": "Get a VMC, then publish BIMI",
-            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
           },
           {
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
             "action": "Confirm whether this domain should receive mail",
-            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
           },
           {
             "area": "DNSSEC",
             "title": "DNSSEC not enabled",
             "severity": "low",
             "action": "Enable DNSSEC",
-            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "outside_sending_posture"
           },
           {
             "area": "CAA",
             "title": "No CAA records",
             "severity": "low",
             "action": "Add a CAA record",
-            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
           },
           {
             "area": "SPF",
             "title": "SPF present",
             "severity": "pass",
             "action": null,
-            "fixIncludes": null
+            "fixIncludes": null,
+            "lane": "outbound_auth"
           }
         ],
         "score": {
@@ -1064,7 +1300,23 @@
           "BIMI": false,
           "DKIM": "unknown",
           "gap": 7,
-          "note": "no DKIM key at common/provider selectors; no DMARC"
+          "note": "no DKIM key at common/provider selectors; no DMARC",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "unavailable",
+          "rdap": "unavailable"
         }
       }
     },
@@ -1096,77 +1348,88 @@
             "title": "No DMARC record",
             "severity": "critical",
             "action": "Publish a DMARC policy",
-            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to"
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to",
+            "lane": "outbound_auth"
           },
           {
             "area": "SPF",
             "title": "SPF exceeds 10 DNS lookups (11)",
             "severity": "high",
             "action": "Flatten SPF to under 10 lookups",
-            "fixIncludes": "Flatten or consolidate includes; remove unused senders. Target <=8 to leave headroom."
+            "fixIncludes": "Flatten or consolidate includes; remove unused senders. Target <=8 to leave headroom.",
+            "lane": "outbound_auth"
           },
           {
             "area": "SPF",
             "title": "SPF exceeds the void-lookup limit (11)",
             "severity": "high",
             "action": "Remove dead SPF includes",
-            "fixIncludes": "Find and remove the dead include/redirect/a/mx targets (the ones that no longer"
+            "fixIncludes": "Find and remove the dead include/redirect/a/mx targets (the ones that no longer",
+            "lane": "outbound_auth"
           },
           {
             "area": "MTA-STS",
             "title": "No MTA-STS policy",
             "severity": "medium",
             "action": "Publish an MTA-STS policy",
-            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
           },
           {
             "area": "DKIM",
             "title": "DKIM not found at common/provider selectors",
             "severity": "low",
             "action": "Confirm or enable DKIM signing",
-            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
           },
           {
             "area": "TLS-RPT",
             "title": "No TLS-RPT",
             "severity": "low",
             "action": "Add a TLS-RPT record",
-            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
           },
           {
             "area": "BIMI",
             "title": "No BIMI",
             "severity": "low",
             "action": "Get a VMC, then publish BIMI",
-            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
           },
           {
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
             "action": "Confirm whether this domain should receive mail",
-            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
           },
           {
             "area": "DNSSEC",
             "title": "DNSSEC not enabled",
             "severity": "low",
             "action": "Enable DNSSEC",
-            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "outside_sending_posture"
           },
           {
             "area": "CAA",
             "title": "No CAA records",
             "severity": "low",
             "action": "Add a CAA record",
-            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
           },
           {
             "area": "SPF",
             "title": "SPF present",
             "severity": "pass",
             "action": null,
-            "fixIncludes": null
+            "fixIncludes": null,
+            "lane": "outbound_auth"
           }
         ],
         "score": {
@@ -1180,7 +1443,23 @@
           "BIMI": false,
           "DKIM": "unknown",
           "gap": 8,
-          "note": "SPF 11 lookups; no DKIM key at common/provider selectors; no DMARC"
+          "note": "SPF 11 lookups; no DKIM key at common/provider selectors; no DMARC",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "unavailable",
+          "rdap": "unavailable"
         }
       }
     },
@@ -1237,63 +1516,72 @@
             "title": "No DMARC record",
             "severity": "critical",
             "action": "Publish a DMARC policy",
-            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to"
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to",
+            "lane": "outbound_auth"
           },
           {
             "area": "SPF",
             "title": "No SPF record",
             "severity": "high",
             "action": "Publish an SPF record",
-            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with"
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with",
+            "lane": "outbound_auth"
           },
           {
             "area": "MTA-STS",
             "title": "No MTA-STS policy",
             "severity": "medium",
             "action": "Publish an MTA-STS policy",
-            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
           },
           {
             "area": "Transport",
             "title": "DANE/TLSA present but not DNSSEC-validated",
             "severity": "medium",
             "action": "Publish DANE/TLSA records",
-            "fixIncludes": "Enable DNSSEC on the zone so the TLSA records are cryptographically validated."
+            "fixIncludes": "Enable DNSSEC on the zone so the TLSA records are cryptographically validated.",
+            "lane": "inbound_transport"
           },
           {
             "area": "DKIM",
             "title": "DKIM not found at common/provider selectors",
             "severity": "low",
             "action": "Confirm or enable DKIM signing",
-            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
           },
           {
             "area": "TLS-RPT",
             "title": "No TLS-RPT",
             "severity": "low",
             "action": "Add a TLS-RPT record",
-            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
           },
           {
             "area": "BIMI",
             "title": "No BIMI",
             "severity": "low",
             "action": "Get a VMC, then publish BIMI",
-            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
           },
           {
             "area": "CAA",
             "title": "No CAA records",
             "severity": "low",
             "action": "Add a CAA record",
-            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
           },
           {
             "area": "DNSSEC",
             "title": "DNSSEC enabled",
             "severity": "pass",
             "action": null,
-            "fixIncludes": null
+            "fixIncludes": null,
+            "lane": "outside_sending_posture"
           },
           {
             "area": "Transport",
@@ -1307,7 +1595,8 @@
             "notApplicable": {
               "web": "The edge engine cannot open port 25 for a live STARTTLS probe.",
               "action": "The vendored JS engine intentionally omits live port-25 STARTTLS probing."
-            }
+            },
+            "lane": "inbound_transport"
           }
         ],
         "score": {
@@ -1321,7 +1610,23 @@
           "BIMI": false,
           "DKIM": "unknown",
           "gap": 7,
-          "note": "no SPF; no DKIM key at common/provider selectors; no DMARC"
+          "note": "no SPF; no DKIM key at common/provider selectors; no DMARC",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "unavailable",
+          "rdap": "unavailable"
         }
       }
     },
@@ -1363,63 +1668,72 @@
             "title": "No DMARC record",
             "severity": "critical",
             "action": "Publish a DMARC policy",
-            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to"
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to",
+            "lane": "outbound_auth"
           },
           {
             "area": "SPF",
             "title": "No SPF record",
             "severity": "high",
             "action": "Publish an SPF record",
-            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with"
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with",
+            "lane": "outbound_auth"
           },
           {
             "area": "MTA-STS",
             "title": "No MTA-STS policy",
             "severity": "medium",
             "action": "Publish an MTA-STS policy",
-            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
           },
           {
             "area": "DKIM",
             "title": "DKIM not found at common/provider selectors",
             "severity": "low",
             "action": "Confirm or enable DKIM signing",
-            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
           },
           {
             "area": "TLS-RPT",
             "title": "No TLS-RPT",
             "severity": "low",
             "action": "Add a TLS-RPT record",
-            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
           },
           {
             "area": "BIMI",
             "title": "No BIMI",
             "severity": "low",
             "action": "Get a VMC, then publish BIMI",
-            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
           },
           {
             "area": "CAA",
             "title": "No CAA records",
             "severity": "low",
             "action": "Add a CAA record",
-            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
           },
           {
             "area": "Transport",
             "title": "DANE/TLSA present",
             "severity": "pass",
             "action": null,
-            "fixIncludes": null
+            "fixIncludes": null,
+            "lane": "inbound_transport"
           },
           {
             "area": "DNSSEC",
             "title": "DNSSEC enabled",
             "severity": "pass",
             "action": null,
-            "fixIncludes": null
+            "fixIncludes": null,
+            "lane": "outside_sending_posture"
           },
           {
             "area": "Transport",
@@ -1433,7 +1747,8 @@
             "notApplicable": {
               "web": "The edge engine cannot open port 25 for a live STARTTLS probe.",
               "action": "The vendored JS engine intentionally omits live port-25 STARTTLS probing."
-            }
+            },
+            "lane": "inbound_transport"
           }
         ],
         "score": {
@@ -1447,7 +1762,23 @@
           "BIMI": false,
           "DKIM": "unknown",
           "gap": 7,
-          "note": "no SPF; no DKIM key at common/provider selectors; no DMARC"
+          "note": "no SPF; no DKIM key at common/provider selectors; no DMARC",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "unavailable",
+          "rdap": "unavailable"
         }
       }
     },
@@ -1481,63 +1812,72 @@
             "title": "No DMARC record",
             "severity": "critical",
             "action": "Publish a DMARC policy",
-            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to"
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to",
+            "lane": "outbound_auth"
           },
           {
             "area": "SPF",
             "title": "No SPF record",
             "severity": "high",
             "action": "Publish an SPF record",
-            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with"
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with",
+            "lane": "outbound_auth"
           },
           {
             "area": "MTA-STS",
             "title": "No MTA-STS policy",
             "severity": "medium",
             "action": "Publish an MTA-STS policy",
-            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
           },
           {
             "area": "DKIM",
             "title": "DKIM not found at common/provider selectors",
             "severity": "low",
             "action": "Confirm or enable DKIM signing",
-            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
           },
           {
             "area": "TLS-RPT",
             "title": "No TLS-RPT",
             "severity": "low",
             "action": "Add a TLS-RPT record",
-            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
           },
           {
             "area": "BIMI",
             "title": "No BIMI",
             "severity": "low",
             "action": "Get a VMC, then publish BIMI",
-            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
           },
           {
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
             "action": "Confirm whether this domain should receive mail",
-            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
           },
           {
             "area": "CAA",
             "title": "No CAA records",
             "severity": "low",
             "action": "Add a CAA record",
-            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
           },
           {
             "area": "DNSSEC",
             "title": "DNSSEC enabled",
             "severity": "pass",
             "action": null,
-            "fixIncludes": null
+            "fixIncludes": null,
+            "lane": "outside_sending_posture"
           }
         ],
         "score": {
@@ -1551,7 +1891,23 @@
           "BIMI": false,
           "DKIM": "unknown",
           "gap": 8,
-          "note": "no SPF; no DKIM key at common/provider selectors; no DMARC"
+          "note": "no SPF; no DKIM key at common/provider selectors; no DMARC",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "unavailable",
+          "rdap": "unavailable"
         }
       }
     },
@@ -1585,63 +1941,72 @@
             "title": "No DMARC record",
             "severity": "critical",
             "action": "Publish a DMARC policy",
-            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to"
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to",
+            "lane": "outbound_auth"
           },
           {
             "area": "SPF",
             "title": "No SPF record",
             "severity": "high",
             "action": "Publish an SPF record",
-            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with"
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with",
+            "lane": "outbound_auth"
           },
           {
             "area": "MTA-STS",
             "title": "No MTA-STS policy",
             "severity": "medium",
             "action": "Publish an MTA-STS policy",
-            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
           },
           {
             "area": "DKIM",
             "title": "DKIM not found at common/provider selectors",
             "severity": "low",
             "action": "Confirm or enable DKIM signing",
-            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
           },
           {
             "area": "TLS-RPT",
             "title": "No TLS-RPT",
             "severity": "low",
             "action": "Add a TLS-RPT record",
-            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
           },
           {
             "area": "BIMI",
             "title": "No BIMI",
             "severity": "low",
             "action": "Get a VMC, then publish BIMI",
-            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
           },
           {
             "area": "Transport",
             "title": "No MX records",
             "severity": "low",
             "action": "Confirm whether this domain should receive mail",
-            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
           },
           {
             "area": "DNSSEC",
             "title": "DNSSEC not enabled",
             "severity": "low",
             "action": "Enable DNSSEC",
-            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "outside_sending_posture"
           },
           {
             "area": "CAA",
             "title": "No CAA records",
             "severity": "low",
             "action": "Add a CAA record",
-            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
           }
         ],
         "score": {
@@ -1655,7 +2020,23 @@
           "BIMI": false,
           "DKIM": "unknown",
           "gap": 8,
-          "note": "no SPF; no DKIM key at common/provider selectors; no DMARC"
+          "note": "no SPF; no DKIM key at common/provider selectors; no DMARC",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "unavailable",
+          "rdap": "unavailable"
         }
       }
     },
@@ -1704,56 +2085,64 @@
             "title": "DMARC has no rua (no aggregate reporting)",
             "severity": "medium",
             "action": "Turn on DMARC reporting (rua) — needed before you enforce",
-            "fixIncludes": "Add rua=mailto:dmarc@<domain> to receive daily aggregate XML reports."
+            "fixIncludes": "Add rua=mailto:dmarc@<domain> to receive daily aggregate XML reports.",
+            "lane": "outbound_auth"
           },
           {
             "area": "DKIM",
             "title": "DKIM not found at common/provider selectors",
             "severity": "low",
             "action": "Confirm or enable DKIM signing",
-            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
           },
           {
             "area": "BIMI",
             "title": "No BIMI",
             "severity": "low",
             "action": "Get a VMC, then publish BIMI",
-            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
           },
           {
             "area": "DNSSEC",
             "title": "DNSSEC not enabled",
             "severity": "low",
             "action": "Enable DNSSEC",
-            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "outside_sending_posture"
           },
           {
             "area": "CAA",
             "title": "No CAA records",
             "severity": "low",
             "action": "Add a CAA record",
-            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
           },
           {
             "area": "SPF",
             "title": "SPF present",
             "severity": "pass",
             "action": null,
-            "fixIncludes": null
+            "fixIncludes": null,
+            "lane": "outbound_auth"
           },
           {
             "area": "DMARC",
             "title": "DMARC enforced (p=reject)",
             "severity": "pass",
             "action": null,
-            "fixIncludes": null
+            "fixIncludes": null,
+            "lane": "outbound_auth"
           },
           {
             "area": "MTA-STS",
             "title": "MTA-STS not applicable — domain receives no mail",
             "severity": "pass",
             "action": null,
-            "fixIncludes": null
+            "fixIncludes": null,
+            "lane": "inbound_transport"
           },
           {
             "area": "Transport",
@@ -1761,7 +2150,8 @@
             "severity": "pass",
             "detail": "A null MX (0 .) declares under RFC 7505 that this domain accepts no inbound mail. That is good hygiene for a domain not meant to receive mail. It says nothing about whether the domain sends — outbound authentication is assessed separately.",
             "action": null,
-            "fixIncludes": null
+            "fixIncludes": null,
+            "lane": "inbound_transport"
           }
         ],
         "score": {
@@ -1775,7 +2165,23 @@
           "BIMI": false,
           "DKIM": "unknown",
           "gap": 2,
-          "note": "no DKIM key at common/provider selectors; no rua"
+          "note": "no DKIM key at common/provider selectors; no rua",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "unavailable",
+          "rdap": "unavailable"
         }
       }
     },
@@ -1827,35 +2233,40 @@
             "title": "DMARC has no rua (no aggregate reporting)",
             "severity": "medium",
             "action": "Turn on DMARC reporting (rua) — needed before you enforce",
-            "fixIncludes": "Add rua=mailto:dmarc@<domain> to receive daily aggregate XML reports."
+            "fixIncludes": "Add rua=mailto:dmarc@<domain> to receive daily aggregate XML reports.",
+            "lane": "outbound_auth"
           },
           {
             "area": "MTA-STS",
             "title": "No MTA-STS policy",
             "severity": "medium",
             "action": "Publish an MTA-STS policy",
-            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
           },
           {
             "area": "DKIM",
             "title": "DKIM not found at common/provider selectors",
             "severity": "low",
             "action": "Confirm or enable DKIM signing",
-            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
           },
           {
             "area": "TLS-RPT",
             "title": "No TLS-RPT",
             "severity": "low",
             "action": "Add a TLS-RPT record",
-            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
           },
           {
             "area": "BIMI",
             "title": "No BIMI",
             "severity": "low",
             "action": "Get a VMC, then publish BIMI",
-            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
           },
           {
             "area": "Transport",
@@ -1863,35 +2274,40 @@
             "severity": "low",
             "detail": "No MX record is published. SMTP then treats the domain as if it had an implicit MX pointing to itself and resolves that host's address records, so this does not show that the domain receives no mail — a null MX (0 .) is what says that explicitly. This may be intentional for a send-only or parked domain.",
             "action": "Confirm whether this domain should receive mail",
-            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
           },
           {
             "area": "DNSSEC",
             "title": "DNSSEC not enabled",
             "severity": "low",
             "action": "Enable DNSSEC",
-            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "outside_sending_posture"
           },
           {
             "area": "CAA",
             "title": "No CAA records",
             "severity": "low",
             "action": "Add a CAA record",
-            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
           },
           {
             "area": "SPF",
             "title": "SPF present",
             "severity": "pass",
             "action": null,
-            "fixIncludes": null
+            "fixIncludes": null,
+            "lane": "outbound_auth"
           },
           {
             "area": "DMARC",
             "title": "DMARC enforced (p=reject)",
             "severity": "pass",
             "action": null,
-            "fixIncludes": null
+            "fixIncludes": null,
+            "lane": "outbound_auth"
           }
         ],
         "score": {
@@ -1905,7 +2321,23 @@
           "BIMI": false,
           "DKIM": "unknown",
           "gap": 5,
-          "note": "no DKIM key at common/provider selectors; no rua"
+          "note": "no DKIM key at common/provider selectors; no rua",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "unavailable",
+          "rdap": "unavailable"
         }
       }
     },
@@ -1964,14 +2396,16 @@
             "title": "DMARC has no rua (no aggregate reporting)",
             "severity": "medium",
             "action": "Turn on DMARC reporting (rua) — needed before you enforce",
-            "fixIncludes": "Add rua=mailto:dmarc@<domain> to receive daily aggregate XML reports."
+            "fixIncludes": "Add rua=mailto:dmarc@<domain> to receive daily aggregate XML reports.",
+            "lane": "outbound_auth"
           },
           {
             "area": "DKIM",
             "title": "DKIM not found at common/provider selectors",
             "severity": "low",
             "action": "Confirm or enable DKIM signing",
-            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
           },
           {
             "area": "BIMI",
@@ -1980,49 +2414,56 @@
             "effort": "high",
             "value": "low",
             "action": "Add a VMC to your BIMI record",
-            "fixIncludes": "Obtain a VMC (or a CMC) and add it as a=https://<domain>/path/vmc.pem to the BIMI record."
+            "fixIncludes": "Obtain a VMC (or a CMC) and add it as a=https://<domain>/path/vmc.pem to the BIMI record.",
+            "lane": "brand_optional"
           },
           {
             "area": "DNSSEC",
             "title": "DNSSEC not enabled",
             "severity": "low",
             "action": "Enable DNSSEC",
-            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "outside_sending_posture"
           },
           {
             "area": "CAA",
             "title": "No CAA records",
             "severity": "low",
             "action": "Add a CAA record",
-            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
           },
           {
             "area": "SPF",
             "title": "SPF present",
             "severity": "pass",
             "action": null,
-            "fixIncludes": null
+            "fixIncludes": null,
+            "lane": "outbound_auth"
           },
           {
             "area": "DMARC",
             "title": "DMARC enforced (p=reject)",
             "severity": "pass",
             "action": null,
-            "fixIncludes": null
+            "fixIncludes": null,
+            "lane": "outbound_auth"
           },
           {
             "area": "MTA-STS",
             "title": "MTA-STS not applicable — domain receives no mail",
             "severity": "pass",
             "action": null,
-            "fixIncludes": null
+            "fixIncludes": null,
+            "lane": "inbound_transport"
           },
           {
             "area": "Transport",
             "title": "Null MX (RFC 7505) — domain declares no mail",
             "severity": "pass",
             "action": null,
-            "fixIncludes": null
+            "fixIncludes": null,
+            "lane": "inbound_transport"
           }
         ],
         "score": {
@@ -2036,7 +2477,23 @@
           "BIMI": true,
           "DKIM": "unknown",
           "gap": 1,
-          "note": "no DKIM key at common/provider selectors; no rua"
+          "note": "no DKIM key at common/provider selectors; no rua",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "unavailable",
+          "rdap": "unavailable"
         }
       }
     },
@@ -2089,14 +2546,16 @@
             "title": "DMARC has no rua (no aggregate reporting)",
             "severity": "medium",
             "action": "Turn on DMARC reporting (rua) — needed before you enforce",
-            "fixIncludes": "Add rua=mailto:dmarc@<domain> to receive daily aggregate XML reports."
+            "fixIncludes": "Add rua=mailto:dmarc@<domain> to receive daily aggregate XML reports.",
+            "lane": "outbound_auth"
           },
           {
             "area": "MTA-STS",
             "title": "No MTA-STS policy",
             "severity": "medium",
             "action": "Publish an MTA-STS policy",
-            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host"
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
           },
           {
             "area": "Transport",
@@ -2110,63 +2569,72 @@
             "notApplicable": {
               "web": "The edge engine cannot open port 25 for a live STARTTLS probe.",
               "action": "The vendored JS engine intentionally omits live port-25 STARTTLS probing."
-            }
+            },
+            "lane": "inbound_transport"
           },
           {
             "area": "DKIM",
             "title": "DKIM not found at common/provider selectors",
             "severity": "low",
             "action": "Confirm or enable DKIM signing",
-            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at"
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
           },
           {
             "area": "TLS-RPT",
             "title": "No TLS-RPT",
             "severity": "low",
             "action": "Add a TLS-RPT record",
-            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\"."
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
           },
           {
             "area": "BIMI",
             "title": "No BIMI",
             "severity": "low",
             "action": "Get a VMC, then publish BIMI",
-            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
           },
           {
             "area": "Transport",
             "title": "No DANE/TLSA",
             "severity": "low",
             "action": "Publish DANE/TLSA records",
-            "fixIncludes": "If DNSSEC is enabled, publish TLSA records for the MX; otherwise enable DNSSEC first."
+            "fixIncludes": "If DNSSEC is enabled, publish TLSA records for the MX; otherwise enable DNSSEC first.",
+            "lane": "inbound_transport"
           },
           {
             "area": "DNSSEC",
             "title": "DNSSEC not enabled",
             "severity": "low",
             "action": "Enable DNSSEC",
-            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "outside_sending_posture"
           },
           {
             "area": "CAA",
             "title": "No CAA records",
             "severity": "low",
             "action": "Add a CAA record",
-            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\"."
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
           },
           {
             "area": "SPF",
             "title": "SPF present",
             "severity": "pass",
             "action": null,
-            "fixIncludes": null
+            "fixIncludes": null,
+            "lane": "outbound_auth"
           },
           {
             "area": "DMARC",
             "title": "DMARC enforced (p=reject)",
             "severity": "pass",
             "action": null,
-            "fixIncludes": null
+            "fixIncludes": null,
+            "lane": "outbound_auth"
           }
         ],
         "score": {
@@ -2180,7 +2648,23 @@
           "BIMI": false,
           "DKIM": "unknown",
           "gap": 5,
-          "note": "no DKIM key at common/provider selectors; no rua"
+          "note": "no DKIM key at common/provider selectors; no rua",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "unavailable",
+          "rdap": "unavailable"
         }
       }
     },
@@ -2195,6 +2679,1245 @@
       "invariant": "I20",
       "mode": "wrapper",
       "skip_reason": "Resolver-level transient detection not implemented (v1.3); the engine-exception path is covered by finalize() tests."
+    },
+    {
+      "id": "mta-sts-policy-absent",
+      "invariant": "WHI-79",
+      "mode": "http-observation",
+      "desc": "mta_sts_policy absent after a completed HTTP check is explicit without changing findings or score.",
+      "input": {
+        "domain": "mta-sts-policy-absent.invalid",
+        "dns": {
+          "mta-sts-policy-absent.invalid": {
+            "TXT": [
+              "v=spf1 -all"
+            ],
+            "NS": [
+              "ns.nomx.invalid."
+            ]
+          },
+          "_dmarc.mta-sts-policy-absent.invalid": {
+            "TXT": [
+              "v=DMARC1; p=reject"
+            ]
+          },
+          "_mta-sts.mta-sts-policy-absent.invalid": {
+            "TXT": [
+              "v=STSv1; id=fixture"
+            ]
+          },
+          "mta-sts.mta-sts-policy-absent.invalid": {
+            "A": [
+              "93.184.216.34"
+            ]
+          }
+        },
+        "http": {
+          "mta_sts_policy": {
+            "status": 404,
+            "contentType": "text/plain",
+            "body": ""
+          },
+          "robots": {
+            "status": 404,
+            "body": ""
+          },
+          "rdap": {
+            "status": 404,
+            "body": ""
+          }
+        }
+      },
+      "expect": {
+        "present": [
+          {
+            "area": "Transport",
+            "includes": "No MX records"
+          },
+          {
+            "area": "MTA-STS",
+            "includes": "TXT present but policy file not retrievable"
+          },
+          {
+            "area": "TLS-RPT",
+            "includes": "No TLS-RPT"
+          }
+        ],
+        "absent": [
+          "MTA-STS not applicable",
+          "Null MX"
+        ],
+        "findings": [
+          {
+            "area": "DMARC",
+            "title": "DMARC has no rua (no aggregate reporting)",
+            "severity": "medium",
+            "action": "Turn on DMARC reporting (rua) — needed before you enforce",
+            "fixIncludes": "Add rua=mailto:dmarc@<domain> to receive daily aggregate XML reports.",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "MTA-STS TXT present but policy file not retrievable",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Serve the policy at that URL over HTTPS with status 200 and Content-Type: text/plain.",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "detail": "No MX record is published. SMTP then treats the domain as if it had an implicit MX pointing to itself and resolves that host's address records, so this does not show that the domain receives no mail — a null MX (0 .) is what says that explicitly. This may be intentional for a send-only or parked domain.",
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "outside_sending_posture"
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
+          },
+          {
+            "area": "SPF",
+            "title": "SPF present",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null,
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "DMARC",
+            "title": "DMARC enforced (p=reject)",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null,
+            "lane": "outbound_auth"
+          }
+        ],
+        "score": {
+          "SPF": true,
+          "DMARC": true,
+          "DMARC_enforced": true,
+          "DMARC_rua": false,
+          "MTA_STS": true,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 4,
+          "note": "no DKIM key at common/provider selectors; no rua",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "checked",
+          "robots": "checked",
+          "rdap": "checked"
+        }
+      }
+    },
+    {
+      "id": "mta-sts-policy-unavailable",
+      "invariant": "WHI-79",
+      "mode": "http-observation",
+      "desc": "mta_sts_policy unavailable is explicit without changing findings or score.",
+      "input": {
+        "domain": "mta-sts-policy-unavailable.invalid",
+        "dns": {
+          "mta-sts-policy-unavailable.invalid": {
+            "TXT": [
+              "v=spf1 -all"
+            ],
+            "NS": [
+              "ns.nomx.invalid."
+            ]
+          },
+          "_dmarc.mta-sts-policy-unavailable.invalid": {
+            "TXT": [
+              "v=DMARC1; p=reject"
+            ]
+          },
+          "_mta-sts.mta-sts-policy-unavailable.invalid": {
+            "TXT": [
+              "v=STSv1; id=fixture"
+            ]
+          },
+          "mta-sts.mta-sts-policy-unavailable.invalid": {
+            "A": [
+              "93.184.216.34"
+            ]
+          }
+        },
+        "http": {
+          "mta_sts_policy": "unavailable",
+          "robots": {
+            "status": 404,
+            "body": ""
+          },
+          "rdap": {
+            "status": 404,
+            "body": ""
+          }
+        }
+      },
+      "expect": {
+        "present": [
+          {
+            "area": "Transport",
+            "includes": "No MX records"
+          },
+          {
+            "area": "MTA-STS",
+            "includes": "TXT present but policy file not retrievable"
+          },
+          {
+            "area": "TLS-RPT",
+            "includes": "No TLS-RPT"
+          }
+        ],
+        "absent": [
+          "MTA-STS not applicable",
+          "Null MX"
+        ],
+        "findings": [
+          {
+            "area": "DMARC",
+            "title": "DMARC has no rua (no aggregate reporting)",
+            "severity": "medium",
+            "action": "Turn on DMARC reporting (rua) — needed before you enforce",
+            "fixIncludes": "Add rua=mailto:dmarc@<domain> to receive daily aggregate XML reports.",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "MTA-STS TXT present but policy file not retrievable",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Serve the policy at that URL over HTTPS with status 200 and Content-Type: text/plain.",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "detail": "No MX record is published. SMTP then treats the domain as if it had an implicit MX pointing to itself and resolves that host's address records, so this does not show that the domain receives no mail — a null MX (0 .) is what says that explicitly. This may be intentional for a send-only or parked domain.",
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "outside_sending_posture"
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
+          },
+          {
+            "area": "SPF",
+            "title": "SPF present",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null,
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "DMARC",
+            "title": "DMARC enforced (p=reject)",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null,
+            "lane": "outbound_auth"
+          }
+        ],
+        "score": {
+          "SPF": true,
+          "DMARC": true,
+          "DMARC_enforced": true,
+          "DMARC_rua": false,
+          "MTA_STS": true,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 4,
+          "note": "no DKIM key at common/provider selectors; no rua",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "unavailable",
+          "robots": "checked",
+          "rdap": "checked"
+        }
+      }
+    },
+    {
+      "id": "robots-absent",
+      "invariant": "WHI-79",
+      "mode": "http-observation",
+      "desc": "robots absent after a completed HTTP check is explicit without changing findings or score.",
+      "input": {
+        "domain": "robots-absent.invalid",
+        "dns": {
+          "robots-absent.invalid": {
+            "TXT": [
+              "v=spf1 -all"
+            ],
+            "NS": [
+              "ns.nomx.invalid."
+            ]
+          },
+          "_dmarc.robots-absent.invalid": {
+            "TXT": [
+              "v=DMARC1; p=reject"
+            ]
+          }
+        },
+        "http": {
+          "mta_sts_policy": "unavailable",
+          "robots": {
+            "status": 404,
+            "body": ""
+          },
+          "rdap": {
+            "status": 404,
+            "body": ""
+          }
+        }
+      },
+      "expect": {
+        "present": [
+          {
+            "area": "Transport",
+            "includes": "No MX records"
+          },
+          {
+            "area": "MTA-STS",
+            "includes": "No MTA-STS policy"
+          },
+          {
+            "area": "TLS-RPT",
+            "includes": "No TLS-RPT"
+          }
+        ],
+        "absent": [
+          "MTA-STS not applicable",
+          "Null MX"
+        ],
+        "findings": [
+          {
+            "area": "DMARC",
+            "title": "DMARC has no rua (no aggregate reporting)",
+            "severity": "medium",
+            "action": "Turn on DMARC reporting (rua) — needed before you enforce",
+            "fixIncludes": "Add rua=mailto:dmarc@<domain> to receive daily aggregate XML reports.",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "detail": "No MX record is published. SMTP then treats the domain as if it had an implicit MX pointing to itself and resolves that host's address records, so this does not show that the domain receives no mail — a null MX (0 .) is what says that explicitly. This may be intentional for a send-only or parked domain.",
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "outside_sending_posture"
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
+          },
+          {
+            "area": "SPF",
+            "title": "SPF present",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null,
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "DMARC",
+            "title": "DMARC enforced (p=reject)",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null,
+            "lane": "outbound_auth"
+          }
+        ],
+        "score": {
+          "SPF": true,
+          "DMARC": true,
+          "DMARC_enforced": true,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 5,
+          "note": "no DKIM key at common/provider selectors; no rua",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "checked",
+          "rdap": "checked"
+        }
+      }
+    },
+    {
+      "id": "robots-unavailable",
+      "invariant": "WHI-79",
+      "mode": "http-observation",
+      "desc": "robots unavailable is explicit without changing findings or score.",
+      "input": {
+        "domain": "robots-unavailable.invalid",
+        "dns": {
+          "robots-unavailable.invalid": {
+            "TXT": [
+              "v=spf1 -all"
+            ],
+            "NS": [
+              "ns.nomx.invalid."
+            ]
+          },
+          "_dmarc.robots-unavailable.invalid": {
+            "TXT": [
+              "v=DMARC1; p=reject"
+            ]
+          }
+        },
+        "http": {
+          "mta_sts_policy": "unavailable",
+          "robots": "unavailable",
+          "rdap": {
+            "status": 404,
+            "body": ""
+          }
+        }
+      },
+      "expect": {
+        "present": [
+          {
+            "area": "Transport",
+            "includes": "No MX records"
+          },
+          {
+            "area": "MTA-STS",
+            "includes": "No MTA-STS policy"
+          },
+          {
+            "area": "TLS-RPT",
+            "includes": "No TLS-RPT"
+          }
+        ],
+        "absent": [
+          "MTA-STS not applicable",
+          "Null MX"
+        ],
+        "findings": [
+          {
+            "area": "DMARC",
+            "title": "DMARC has no rua (no aggregate reporting)",
+            "severity": "medium",
+            "action": "Turn on DMARC reporting (rua) — needed before you enforce",
+            "fixIncludes": "Add rua=mailto:dmarc@<domain> to receive daily aggregate XML reports.",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "detail": "No MX record is published. SMTP then treats the domain as if it had an implicit MX pointing to itself and resolves that host's address records, so this does not show that the domain receives no mail — a null MX (0 .) is what says that explicitly. This may be intentional for a send-only or parked domain.",
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "outside_sending_posture"
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
+          },
+          {
+            "area": "SPF",
+            "title": "SPF present",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null,
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "DMARC",
+            "title": "DMARC enforced (p=reject)",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null,
+            "lane": "outbound_auth"
+          }
+        ],
+        "score": {
+          "SPF": true,
+          "DMARC": true,
+          "DMARC_enforced": true,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 5,
+          "note": "no DKIM key at common/provider selectors; no rua",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "unavailable",
+          "rdap": "checked"
+        }
+      }
+    },
+    {
+      "id": "rdap-absent",
+      "invariant": "WHI-79",
+      "mode": "http-observation",
+      "desc": "rdap absent after a completed HTTP check is explicit without changing findings or score.",
+      "input": {
+        "domain": "rdap-absent.invalid",
+        "dns": {
+          "rdap-absent.invalid": {
+            "TXT": [
+              "v=spf1 -all"
+            ],
+            "NS": [
+              "ns.nomx.invalid."
+            ]
+          },
+          "_dmarc.rdap-absent.invalid": {
+            "TXT": [
+              "v=DMARC1; p=reject"
+            ]
+          }
+        },
+        "http": {
+          "mta_sts_policy": "unavailable",
+          "robots": {
+            "status": 404,
+            "body": ""
+          },
+          "rdap": {
+            "status": 404,
+            "body": ""
+          }
+        }
+      },
+      "expect": {
+        "present": [
+          {
+            "area": "Transport",
+            "includes": "No MX records"
+          },
+          {
+            "area": "MTA-STS",
+            "includes": "No MTA-STS policy"
+          },
+          {
+            "area": "TLS-RPT",
+            "includes": "No TLS-RPT"
+          }
+        ],
+        "absent": [
+          "MTA-STS not applicable",
+          "Null MX"
+        ],
+        "findings": [
+          {
+            "area": "DMARC",
+            "title": "DMARC has no rua (no aggregate reporting)",
+            "severity": "medium",
+            "action": "Turn on DMARC reporting (rua) — needed before you enforce",
+            "fixIncludes": "Add rua=mailto:dmarc@<domain> to receive daily aggregate XML reports.",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "detail": "No MX record is published. SMTP then treats the domain as if it had an implicit MX pointing to itself and resolves that host's address records, so this does not show that the domain receives no mail — a null MX (0 .) is what says that explicitly. This may be intentional for a send-only or parked domain.",
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "outside_sending_posture"
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
+          },
+          {
+            "area": "SPF",
+            "title": "SPF present",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null,
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "DMARC",
+            "title": "DMARC enforced (p=reject)",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null,
+            "lane": "outbound_auth"
+          }
+        ],
+        "score": {
+          "SPF": true,
+          "DMARC": true,
+          "DMARC_enforced": true,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 5,
+          "note": "no DKIM key at common/provider selectors; no rua",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "checked",
+          "rdap": "checked"
+        }
+      }
+    },
+    {
+      "id": "rdap-unavailable",
+      "invariant": "WHI-79",
+      "mode": "http-observation",
+      "desc": "rdap unavailable is explicit without changing findings or score.",
+      "input": {
+        "domain": "rdap-unavailable.invalid",
+        "dns": {
+          "rdap-unavailable.invalid": {
+            "TXT": [
+              "v=spf1 -all"
+            ],
+            "NS": [
+              "ns.nomx.invalid."
+            ]
+          },
+          "_dmarc.rdap-unavailable.invalid": {
+            "TXT": [
+              "v=DMARC1; p=reject"
+            ]
+          }
+        },
+        "http": {
+          "mta_sts_policy": "unavailable",
+          "robots": {
+            "status": 404,
+            "body": ""
+          },
+          "rdap": "unavailable"
+        }
+      },
+      "expect": {
+        "present": [
+          {
+            "area": "Transport",
+            "includes": "No MX records"
+          },
+          {
+            "area": "MTA-STS",
+            "includes": "No MTA-STS policy"
+          },
+          {
+            "area": "TLS-RPT",
+            "includes": "No TLS-RPT"
+          }
+        ],
+        "absent": [
+          "MTA-STS not applicable",
+          "Null MX"
+        ],
+        "findings": [
+          {
+            "area": "DMARC",
+            "title": "DMARC has no rua (no aggregate reporting)",
+            "severity": "medium",
+            "action": "Turn on DMARC reporting (rua) — needed before you enforce",
+            "fixIncludes": "Add rua=mailto:dmarc@<domain> to receive daily aggregate XML reports.",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "detail": "No MX record is published. SMTP then treats the domain as if it had an implicit MX pointing to itself and resolves that host's address records, so this does not show that the domain receives no mail — a null MX (0 .) is what says that explicitly. This may be intentional for a send-only or parked domain.",
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "outside_sending_posture"
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
+          },
+          {
+            "area": "SPF",
+            "title": "SPF present",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null,
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "DMARC",
+            "title": "DMARC enforced (p=reject)",
+            "severity": "pass",
+            "action": null,
+            "fixIncludes": null,
+            "lane": "outbound_auth"
+          }
+        ],
+        "score": {
+          "SPF": true,
+          "DMARC": true,
+          "DMARC_enforced": true,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 5,
+          "note": "no DKIM key at common/provider selectors; no rua",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "checked",
+          "rdap": "unavailable"
+        }
+      }
+    },
+    {
+      "id": "lane-closed-world-coverage",
+      "invariant": "WHI-79",
+      "mode": "http-observation",
+      "desc": "The corpus exercises every finding-area lane plus the reverse-DNS title exception with unchanged 1.1.0 behavior.",
+      "input": {
+        "domain": "lane-coverage.example",
+        "nowMs": 1767225600000,
+        "dns": {
+          "lane-coverage.example": {
+            "MX": [
+              "10 mx.primary.example.",
+              "10 backup.other.test."
+            ],
+            "A": [
+              "93.184.216.34"
+            ]
+          },
+          "mx.primary.example": {
+            "A": [
+              "192.0.2.10"
+            ]
+          },
+          "backup.other.test": {
+            "A": [
+              "198.51.100.20"
+            ]
+          }
+        },
+        "http": {
+          "mta_sts_policy": "unavailable",
+          "robots": {
+            "status": 200,
+            "body": "User-agent: *\nDisallow: /"
+          },
+          "rdap": {
+            "status": 200,
+            "body": "{\"events\":[{\"eventAction\":\"registration\",\"eventDate\":\"2025-12-15T00:00:00Z\"}]}",
+            "events": [
+              {
+                "eventAction": "registration",
+                "eventDate": "2025-12-15T00:00:00Z"
+              }
+            ]
+          }
+        }
+      },
+      "expect": {
+        "present": [
+          {
+            "area": "MX",
+            "includes": "Mixed MX providers"
+          },
+          {
+            "area": "Reputation",
+            "includes": "newly registered"
+          },
+          {
+            "area": "AI visibility",
+            "includes": "blocks AI crawlers"
+          },
+          {
+            "area": "Transport",
+            "includes": "reverse DNS"
+          }
+        ],
+        "absent": [],
+        "findings": [
+          {
+            "area": "DMARC",
+            "title": "No DMARC record",
+            "severity": "critical",
+            "action": "Publish a DMARC policy",
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "MX",
+            "title": "Mixed MX providers (2)",
+            "severity": "medium",
+            "action": "Consolidate to one MX provider",
+            "fixIncludes": "Confirm every MX provider is intentional and enforces TLS; remove stale/registrar-default backup MX",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "Reputation",
+            "title": "Domain is newly registered (17 days)",
+            "severity": "medium",
+            "action": "Warm up the domain before scaling sends",
+            "fixIncludes": "Warm up gradually — start low-volume to engaged recipients and ramp over weeks before scaling.",
+            "lane": "outside_sending_posture"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
+          },
+          {
+            "area": "Transport",
+            "title": "No DANE/TLSA",
+            "severity": "low",
+            "action": "Publish DANE/TLSA records",
+            "fixIncludes": "If DNSSEC is enabled, publish TLSA records for the MX; otherwise enable DNSSEC first.",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "outside_sending_posture"
+          },
+          {
+            "area": "AI visibility",
+            "title": "robots.txt blocks AI crawlers",
+            "severity": "low",
+            "action": "Unblock AI crawlers in robots.txt",
+            "fixIncludes": "Allow the AI crawlers you want in robots.txt (or drop the blanket Disallow).",
+            "lane": "outside_sending_posture"
+          },
+          {
+            "area": "Transport",
+            "title": "Mail server has no reverse DNS (PTR)",
+            "severity": "low",
+            "action": "Set reverse DNS (PTR) for your mail server",
+            "fixIncludes": "Have your host set a PTR (reverse DNS) record for the mail server's IP that matches its hostname.",
+            "lane": "outside_sending_posture"
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
+          },
+          {
+            "area": "Transport",
+            "title": "Could not establish STARTTLS to primary MX",
+            "severity": "medium",
+            "action": "Confirm STARTTLS on the mail server",
+            "fixIncludes": "Verify the MX offers STARTTLS with a valid certificate.",
+            "surfaces": [
+              "skill"
+            ],
+            "notApplicable": {
+              "web": "The edge engine cannot open port 25 for a live STARTTLS probe.",
+              "action": "The vendored JS engine intentionally omits live port-25 STARTTLS probing."
+            },
+            "lane": "inbound_transport"
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": false,
+          "DMARC_enforced": false,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 8,
+          "note": "no SPF; no DKIM key at common/provider selectors; no DMARC; mixed MX (2 providers)",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "checked",
+          "rdap": "checked"
+        }
+      }
     }
   ]
 }
