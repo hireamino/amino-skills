@@ -108,7 +108,9 @@ def install_http(http):
         value = spec.get(name, "unavailable")
         return None if value == "unavailable" else value
 
-    def fetch_mta_sts(_domain):
+    def fetch_mta_sts(domain):
+        if not audit.host_public_ips(f"mta-sts.{domain}"):
+            return "unavailable", None
         value = entry("mta_sts_policy")
         if value is None:
             return "unavailable", None
@@ -121,6 +123,10 @@ def install_http(http):
 
     def http_get(host, _path, follow=0, cap=65536):
         del follow
+        # rdap.org is the fixed trusted bootstrap host. Match the engine adapter:
+        # fixture-backed RDAP bypasses the customer-controlled-host SSRF guard.
+        if host != "rdap.org" and not audit.host_public_ips(host):
+            return None, None
         name = "rdap" if host == "rdap.org" else "robots"
         value = entry(name)
         if value is None:
