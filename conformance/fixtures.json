@@ -2689,6 +2689,9 @@
         "domain": "mta-sts-policy-absent.invalid",
         "dns": {
           "mta-sts-policy-absent.invalid": {
+            "A": [
+              "93.184.216.34"
+            ],
             "TXT": [
               "v=spf1 -all"
             ],
@@ -2870,6 +2873,9 @@
         "domain": "mta-sts-policy-unavailable.invalid",
         "dns": {
           "mta-sts-policy-unavailable.invalid": {
+            "A": [
+              "93.184.216.34"
+            ],
             "TXT": [
               "v=spf1 -all"
             ],
@@ -3047,6 +3053,9 @@
         "domain": "robots-absent.invalid",
         "dns": {
           "robots-absent.invalid": {
+            "A": [
+              "93.184.216.34"
+            ],
             "TXT": [
               "v=spf1 -all"
             ],
@@ -3214,6 +3223,9 @@
         "domain": "robots-unavailable.invalid",
         "dns": {
           "robots-unavailable.invalid": {
+            "A": [
+              "93.184.216.34"
+            ],
             "TXT": [
               "v=spf1 -all"
             ],
@@ -3378,6 +3390,9 @@
         "domain": "rdap-absent.invalid",
         "dns": {
           "rdap-absent.invalid": {
+            "A": [
+              "93.184.216.34"
+            ],
             "TXT": [
               "v=spf1 -all"
             ],
@@ -3545,6 +3560,9 @@
         "domain": "rdap-unavailable.invalid",
         "dns": {
           "rdap-unavailable.invalid": {
+            "A": [
+              "93.184.216.34"
+            ],
             "TXT": [
               "v=spf1 -all"
             ],

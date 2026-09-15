@@ -66,8 +66,10 @@ including a response that proves absence such as 404. `unavailable` means no
 trustworthy response was obtained. `not_applicable` means the operation was
 intentionally skipped because its prerequisite does not apply (for example no
 advertised MTA-STS TXT or a true null MX). This metadata does not replace or weaken
-the existing DNS `inconclusive` contract. Six paired fixtures prove that absent and
-unavailable remain distinct without changing findings, scores, or ordering. A separate
+the existing DNS `inconclusive` contract. Robots and the MTA-STS policy fetch run only
+after their host resolves to a public address; no public address means `unavailable`.
+Three absent/unavailable pairs (six fixtures) prove that the states remain distinct
+without changing findings, scores, or ordering. A separate
 closed-world lane fixture exercises all 12 finding areas plus the reverse-DNS title
 exception; a valid-but-wrong lane therefore reaches the runner comparison instead of
 being caught only by the implementation's unknown-area guard.
@@ -214,4 +216,5 @@ pair for MTA-STS policy, robots, and RDAP, plus the closed-world lane-coverage c
 and five explicitly skipped
 pure/HTTP/wrapper cases covered by per-surface tests or later work. Each is
 language-neutral and every harness adapts it to its own resolver/HTTP mock without
-ambient network access.
+ambient network access. The Python runner is guarded by 14 mutation canaries; the
+staged JavaScript runner remains guarded by 15 canaries on each consumer engine.

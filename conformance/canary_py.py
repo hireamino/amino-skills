@@ -73,6 +73,18 @@ def expect_red(name, result, expected):
         FAILED += 1
 
 
+def remove_fixture_address(corpus, fixture_id, host):
+    matches = [fixture for fixture in corpus["fixtures"] if fixture["id"] == fixture_id]
+    if len(matches) != 1:
+        raise AssertionError(
+            f"{fixture_id}: fixture mutation anchor must occur exactly once, found {len(matches)}"
+        )
+    entry = matches[0]["input"]["dns"].get(host)
+    if not isinstance(entry, dict) or entry.get("A") != ["93.184.216.34"]:
+        raise AssertionError(f"{fixture_id}: expected the reviewed public-address anchor")
+    del entry["A"]
+
+
 try:
     with tempfile.TemporaryDirectory(prefix="amino-whi8-skill-") as temporary:
         target = Path(temporary)
@@ -333,12 +345,56 @@ try:
             "'robots': 'checked', 'rdap': 'checked'}, got {'mta_sts_policy': 'unavailable', "
             "'robots': 'checked', 'rdap': 'checked'}",
         )
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi79-robots-reachability-") as temporary:
+        target = Path(temporary)
+        runner = target / "run_py.py"
+        shutil.copyfile(RUNNER, runner)
+        corpus = json.loads((HERE / "fixtures.json").read_text(encoding="utf-8"))
+        remove_fixture_address(corpus, "robots-absent", "robots-absent.invalid")
+        (target / "fixtures.json").write_text(
+            json.dumps(corpus, indent=2) + "\n", encoding="utf-8"
+        )
+        expect_red(
+            "R removed robots fixture public address",
+            execute({
+                "AUDIT_SCRIPTS": str(SCRIPTS),
+                "CONFORMANCE_FIXTURE": "robots-absent",
+            }, runner=runner),
+            "robots-absent.observations: expected {'mta_sts_policy': 'not_applicable', "
+            "'robots': 'checked', 'rdap': 'checked'}, got {'mta_sts_policy': "
+            "'not_applicable', 'robots': 'unavailable', 'rdap': 'checked'}",
+        )
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi79-mta-sts-reachability-") as temporary:
+        target = Path(temporary)
+        runner = target / "run_py.py"
+        shutil.copyfile(RUNNER, runner)
+        corpus = json.loads((HERE / "fixtures.json").read_text(encoding="utf-8"))
+        remove_fixture_address(
+            corpus,
+            "mta-sts-policy-absent",
+            "mta-sts.mta-sts-policy-absent.invalid",
+        )
+        (target / "fixtures.json").write_text(
+            json.dumps(corpus, indent=2) + "\n", encoding="utf-8"
+        )
+        expect_red(
+            "S removed MTA-STS fixture public address",
+            execute({
+                "AUDIT_SCRIPTS": str(SCRIPTS),
+                "CONFORMANCE_FIXTURE": "mta-sts-policy-absent",
+            }, runner=runner),
+            "mta-sts-policy-absent.observations: expected {'mta_sts_policy': 'checked', "
+            "'robots': 'checked', 'rdap': 'checked'}, got {'mta_sts_policy': 'unavailable', "
+            "'robots': 'checked', 'rdap': 'checked'}",
+        )
 except Exception as error:
     print(f"FAIL  canary setup — {error}")
     FAILED += 1
 
-print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 12 cases.")
-if PASSED + FAILED != 12:
-    print(f"FAIL  canary count: expected 12, got {PASSED + FAILED}", file=sys.stderr)
+print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 14 cases.")
+if PASSED + FAILED != 14:
+    print(f"FAIL  canary count: expected 14, got {PASSED + FAILED}", file=sys.stderr)
     sys.exit(1)
 sys.exit(1 if FAILED else 0)
