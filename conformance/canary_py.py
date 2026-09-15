@@ -74,6 +74,35 @@ def expect_red(name, result, expected):
         FAILED += 1
 
 
+def require_green(name, result):
+    """Healthy control for a mutation: stop setup if the unmodified target is not green."""
+    output = result.stdout + result.stderr
+    if result.returncode != 0:
+        raise AssertionError(
+            f"{name}: healthy control failed\nexit={result.returncode}\n{output.strip()}"
+        )
+    print(f"CONTROL {name} — healthy target passes")
+
+
+def expect_red_comparison(name, result, expected):
+    """Require all named comparison diagnostics, never an execution exception."""
+    global PASSED, FAILED
+    output = result.stdout + result.stderr
+    diagnostics = (expected,) if isinstance(expected, str) else tuple(expected)
+    ok = (
+        result.returncode != 0
+        and all(diagnostic in output for diagnostic in diagnostics)
+        and ".execution: threw" not in output
+        and "Traceback (most recent call last)" not in output
+    )
+    if ok:
+        print(f"PASS  {name} — " + " + ".join(diagnostics))
+        PASSED += 1
+    else:
+        print(f"FAIL  {name}\n  exit={result.returncode}\n  {output.strip()}")
+        FAILED += 1
+
+
 def copy_repository_tree(destination):
     """Copy the checked repository without VCS or interpreter-generated state."""
     shutil.copytree(
@@ -720,13 +749,146 @@ try:
                 diagnostic,
             )
 
+    # WHI-125 — lookup failure and authoritative absence are different contract
+    # outcomes. Every mutation starts with the corresponding healthy target and
+    # must reach a named runner/checker comparison rather than raising an exception.
+    _servfail_env = {"CONFORMANCE_FIXTURE": "mta-sts-lookup-servfail"}
+    _nxdomain_env = {"CONFORMANCE_FIXTURE": "mta-sts-lookup-nxdomain-control"}
+    _null_env = {"CONFORMANCE_FIXTURE": "mta-sts-lookup-servfail-null-mx"}
+
+    require_green("AC1 SERVFAIL fixture", execute(_servfail_env))
+    with tempfile.TemporaryDirectory(prefix="amino-whi125-failure-as-absence-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '    lookup_failed = bool(txt is None and dns_meta(name, "TXT").get("error"))\n',
+            '    lookup_failed = False  # WHI-125 failure-as-absence canary\n',
+            "lookup failure classification",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red_comparison(
+            "AC1 treated SERVFAIL as absence",
+            execute({**_servfail_env, "AUDIT_SCRIPTS": str(target)}),
+            (
+                "mta-sts-lookup-servfail.findings[MTA-STS|Unable to confirm MTA-STS policy].identity: expected finding, got missing",
+                "mta-sts-lookup-servfail.observations: expected {'mta_sts_policy': 'unavailable', 'robots': 'unavailable', 'rdap': 'unavailable'}, got {'mta_sts_policy': 'not_applicable', 'robots': 'unavailable', 'rdap': 'unavailable'}",
+            ),
+        )
+
+    require_green("AC2 NXDOMAIN fixture", execute(_nxdomain_env))
+    with tempfile.TemporaryDirectory(prefix="amino-whi125-nxdomain-as-failure-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '    lookup_failed = bool(txt is None and dns_meta(name, "TXT").get("error"))\n',
+            '    lookup_failed = txt is None  # WHI-125 NXDOMAIN-as-failure canary\n',
+            "NXDOMAIN classification",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red_comparison(
+            "AC2 treated NXDOMAIN as failure",
+            execute({**_nxdomain_env, "AUDIT_SCRIPTS": str(target)}),
+            (
+                "mta-sts-lookup-nxdomain-control.findings[MTA-STS|No MTA-STS policy].identity: expected finding, got missing",
+                "mta-sts-lookup-nxdomain-control.observations: expected {'mta_sts_policy': 'not_applicable', 'robots': 'unavailable', 'rdap': 'unavailable'}, got {'mta_sts_policy': 'unavailable', 'robots': 'unavailable', 'rdap': 'unavailable'}",
+            ),
+        )
+
+    require_green("AC3 shipping resolver checker", execute_check())
+    with tempfile.TemporaryDirectory(prefix="amino-whi125-terminal-meta-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py", "verify.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        resolver_path = target / "resolver.py"
+        source = resolver_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '    record_meta(name, rrtype, terminal_status, False, error=True)\n',
+            '    # WHI-125 removed terminal failure metadata canary\n',
+            "terminal failure metadata",
+        )
+        resolver_path.write_text(source, encoding="utf-8")
+        expect_red_comparison(
+            "AC3 removed terminal failure metadata",
+            execute_check({"AUDIT_SCRIPTS": str(target)}),
+            "FAIL WHI-125 resolver terminal SERVFAIL meta",
+        )
+
+    require_green("AC6 complete RCODE normalization table", execute_check())
+    with tempfile.TemporaryDirectory(prefix="amino-whi125-formerr-map-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py", "verify.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        resolver_path = target / "resolver.py"
+        source = resolver_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '    "FORMERR": 1,\n',
+            "",
+            "FORMERR RCODE mapping",
+        )
+        resolver_path.write_text(source, encoding="utf-8")
+        expect_red_comparison(
+            "AC6 removed FORMERR RCODE mapping",
+            execute_check({"AUDIT_SCRIPTS": str(target)}),
+            "FAIL WHI-125 RCODE FORMERR name and number normalize identically",
+        )
+
+    require_green("AC4 SERVFAIL score fixture", execute(_servfail_env))
+    with tempfile.TemporaryDirectory(prefix="amino-whi125-failure-score-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        score_path = target / "batch_score.py"
+        source = score_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '        r["MTA_STS"] = None if mta_sts_lookup_failed else bool(mta_sts_txt)\n',
+            '        r["MTA_STS"] = bool(mta_sts_txt)  # WHI-125 failure-score canary\n',
+            "MTA-STS failed lookup score",
+        )
+        score_path.write_text(source, encoding="utf-8")
+        expect_red_comparison(
+            "AC4 counted failed lookup as a gap",
+            execute({**_servfail_env, "AUDIT_SCRIPTS": str(target)}),
+            "mta-sts-lookup-servfail.score.MTA_STS: expected None, got False",
+        )
+
+    require_green("AC5 null-MX precedence fixture", execute(_null_env))
+    with tempfile.TemporaryDirectory(prefix="amino-whi125-null-precedence-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '    if is_null_mx(dig(domain, "MX")):\n',
+            '    if False:  # WHI-125 removed null-MX precedence canary\n',
+            "MTA-STS null-MX precedence",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red_comparison(
+            "AC5 removed null-MX precedence",
+            execute({**_null_env, "AUDIT_SCRIPTS": str(target)}),
+            "mta-sts-lookup-servfail-null-mx.findings[MTA-STS|MTA-STS not applicable — domain receives no mail].identity: expected finding, got missing",
+        )
+
     prove_crashing_checker_rejected()
 except Exception as error:
     print(f"FAIL  canary setup — {error}")
     FAILED += 1
 
-print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 24 cases.")
-if PASSED + FAILED != 24:
-    print(f"FAIL  canary count: expected 24, got {PASSED + FAILED}", file=sys.stderr)
+print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 30 cases.")
+if PASSED + FAILED != 30:
+    print(f"FAIL  canary count: expected 30, got {PASSED + FAILED}", file=sys.stderr)
     sys.exit(1)
 sys.exit(1 if FAILED else 0)

@@ -55,6 +55,10 @@ The same suite backs the sibling implementations — the [web tool](https://hire
 and the [GitHub Action](https://github.com/hireamino/amino-audit-action) — so all three
 agree on what "pass" means. Add a fixture once and every surface enforces it.
 
+A failed `_mta-sts` TXT lookup is reported as **“Unable to confirm MTA-STS policy”**
+and excluded from the gap; only an authoritative NXDOMAIN or NOERROR-empty answer is
+reported as **“No MTA-STS policy.”** Failure is not evidence that a policy is missing.
+
 ## Contributing
 
 Contributions welcome — new checks, missing DKIM selectors, standards updates, and

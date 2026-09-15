@@ -17,7 +17,8 @@ Notes:
 import re
 import sys
 from audit import (dig, first_txt, count_spf_lookups, effective_terminator,
-                   resolves, dkim_lookup, mx_providers, is_null_mx)
+                   resolves, dkim_lookup, mx_providers, is_null_mx,
+                   mta_sts_txt_lookup)
 
 # Deterministic boolean buckets (DKIM is handled separately as a 3-state). The
 # three inbound-only buckets are None/N/A for a true null-MX domain.
@@ -86,7 +87,8 @@ def score(domain):
         r["TLS_RPT"] = None
         r["DANE"] = None
     else:
-        r["MTA_STS"] = bool(first_txt(f"_mta-sts.{domain}", "v=stsv1"))
+        mta_sts_txt, mta_sts_lookup_failed = mta_sts_txt_lookup(domain)
+        r["MTA_STS"] = None if mta_sts_lookup_failed else bool(mta_sts_txt)
         r["TLS_RPT"] = bool(first_txt(f"_smtp._tls.{domain}", "v=tlsrptv1"))
     real_mx = [row for row in mx if row.split() and row.split()[-1].rstrip(".")]
     if real_mx and not null_mx:

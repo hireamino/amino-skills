@@ -1,4 +1,4 @@
-# Amino Deliverability — Correctness Conformance Spec (v1.8)
+# Amino Deliverability — Correctness Conformance Spec (v1.9)
 
 **Status:** proposed · **Owner:** hireamino · **Canonical home:** `amino-skills/conformance/`
 
@@ -50,6 +50,20 @@ review. The corpus has no expectation regeneration mode; reviewed answers cannot
 replaced by current output.
 
 ## Current status
+
+**v1.9 / WHI-125 Step 1 — MTA-STS DNS lookup failure is not absence:** the
+Python resolver normalizes dig string RCODEs and numeric fixture/DoH RCODEs into one
+metadata shape and records terminal `SERVFAIL`, `REFUSED`, missing-status, and
+subprocess failures with `error: true` after retries. Only `NOERROR` and `NXDOMAIN`
+are authoritative; `NXDOMAIN` and NOERROR-empty remain authoritative absence. One
+`mta_sts_txt_lookup()` helper drives both the
+shipping finding and `batch_score.py`: failure emits **“Unable to confirm MTA-STS
+policy”**, sets `mta_sts_policy: unavailable`, and makes `MTA_STS: null`, while
+confirmed absence retains **“No MTA-STS policy”**, `not_applicable`, and a scored
+`false`. True null MX takes precedence. Four appended closed-world fixtures and six
+new mutation canaries guard the distinction. The Python finding inventory is now 12
+areas / 39 action labels. The JavaScript consumers remain intentionally unchanged
+until engine contract 1.3.0 consumes this reviewed corpus revision.
 
 **v1.8 / WHI-79 Phase A.2 — public-address socket guard:** the Python skill's
 single `host_public_ips()` helper returns addresses only when DNS supplies at least
@@ -228,12 +242,12 @@ The web and Action pin files must name the same full amino-skills commit before 
 
 ## Fixtures
 
-See `fixtures.json`. It contains 34 known-answer cases: 19 closed-world
+See `fixtures.json`. It contains 38 known-answer cases: 23 closed-world
 `dns-engine` cases, ten closed-world `http-observation` cases (an absent/unavailable
 pair for MTA-STS policy, robots, and RDAP, the closed-world lane-coverage case, and
 three public-address-refusal cases),
 and five explicitly skipped
 pure/HTTP/wrapper cases covered by per-surface tests or later work. Each is
 language-neutral and every harness adapts it to its own resolver/HTTP mock without
-ambient network access. The Python runner is guarded by 23 mutation canaries; the
+ambient network access. The Python runner is guarded by 30 mutation canaries; the
 staged JavaScript runner remains guarded by 15 canaries on each consumer engine.
