@@ -226,10 +226,36 @@ try {
     'no-mx-not-exempt.findings[Transport|No MX records].detail: expected "No MX record is published. SMTP then treats the domain as if it had an implicit MX pointing to itself and resolves that host\'s address records, so this does not show that the domain receives no mail — a null MX (0 .) is what says that explicitly. This may be intentional for a send-only or parked domain.", got "No inbound mail servers (may be intentional for a send-only/parked domain)."',
   );
 
+  const removedAreaLane = replaceExactlyOnce(
+    portableEngine,
+    '  SPF: "outbound_auth",\n',
+    "  // WHI-79 removed SPF lane canary\n",
+    "SPF lane assignment",
+  );
+  expectRed(
+    "O removed one area lane",
+    removedAreaLane,
+    "dkim-revoked-empty-p",
+    "dkim-revoked-empty-p.execution: threw unknown finding area has no lane: SPF",
+  );
+
+  const conflatedObservation = replaceExactlyOnce(
+    portableEngine,
+    "observations.mta_sts_policy = observation;",
+    'observations.mta_sts_policy = "unavailable"; // WHI-79 conflation canary',
+    "MTA-STS observation assignment",
+  );
+  expectRed(
+    "P conflated absent with unavailable",
+    conflatedObservation,
+    "mta-sts-policy-absent",
+    'mta-sts-policy-absent.observations: expected {"mta_sts_policy":"checked","robots":"checked","rdap":"checked"}, got {"mta_sts_policy":"unavailable","robots":"checked","rdap":"checked"}',
+  );
+
   const originalRunner = readFileSync(runner, "utf8");
   const stubbedRunner = replaceExactlyOnce(
     originalRunner,
-    "    ...compareContract(fx, findings, score, SURFACE, ledger),",
+    "    ...compareContract(fx, result, score, SURFACE, ledger),",
     "    // WHI-8 canary: contract comparison stubbed out.",
     "runner stub",
   );
@@ -249,9 +275,9 @@ try {
   rmSync(temporary, { recursive: true, force: true });
 }
 
-console.log(`\nCanaries (${surface}): ${passed} passed, ${failed} failed; expected 12 cases.`);
-if (passed + failed !== 12) {
-  console.error(`FAIL  canary count: expected 12, got ${passed + failed}`);
+console.log(`\nCanaries (${surface}): ${passed} passed, ${failed} failed; expected 14 cases.`);
+if (passed + failed !== 14) {
+  console.error(`FAIL  canary count: expected 14, got ${passed + failed}`);
   process.exit(1);
 }
 process.exit(failed ? 1 : 0);

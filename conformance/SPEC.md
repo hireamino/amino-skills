@@ -1,4 +1,4 @@
-# Amino Deliverability — Correctness Conformance Spec (v1.6)
+# Amino Deliverability — Correctness Conformance Spec (v1.7)
 
 **Status:** proposed · **Owner:** hireamino · **Canonical home:** `amino-skills/conformance/`
 
@@ -25,15 +25,19 @@ Each surface ships a thin **conformance harness** that:
 2. emits its findings plus the DNS-only score contract.
 
 The runner checks each surface against a reviewed answer in `expect`, never against
-another surface or a regenerated snapshot. For every `dns-engine` fixture:
+another surface or a regenerated snapshot. For every `dns-engine` or
+`http-observation` fixture:
 
 - `present` and `absent` retain the original positive/negative guards;
 - `findings` is a closed list: missing, duplicate, and additional findings fail;
-- finding identity, severity, action, and fix substring are asserted;
+- finding identity, severity, lane, action, and fix substring are asserted;
 - every non-pass expected finding must declare a non-null fix substring;
 - exact detail and effort+value are asserted only where a fixture declares them, and
   effort and value must be declared together;
-- `score` is exact, including all buckets, DKIM state, gap, and note; and
+- `score` is exact, including all buckets, DKIM state, gap, note, and the scored-bucket
+  `lanes` map;
+- `observations` is an exact result-level map with the keys `mta_sts_policy`, `robots`,
+  and `rdap`; and
 - a surface may omit a finding only through `surfaces` plus a non-empty
   `notApplicable` reason for that surface.
 
@@ -46,6 +50,29 @@ review. The corpus has no expectation regeneration mode; reviewed answers cannot
 replaced by current output.
 
 ## Current status
+
+**v1.7 / WHI-79 Phase A — lane and HTTP observation metadata:** every finding
+carries one lane from the closed enum `outbound_auth | inbound_transport |
+brand_optional | outside_sending_posture`. The current 12 finding areas have an
+explicit mapping; an unknown area is a contract failure. The score object remains
+flat and adds a `lanes` map keyed by all nine scored buckets. Reverse-DNS findings
+currently share the `Transport` area with inbound checks; their titles are the one
+closed exception and map to `outside_sending_posture`, while the other Transport
+findings remain `inbound_transport`.
+
+Every audit result also carries a closed `observations` map for the three
+HTTP-dependent checks. `checked` means an HTTP response was obtained and evaluated,
+including a response that proves absence such as 404. `unavailable` means no
+trustworthy response was obtained. `not_applicable` means the operation was
+intentionally skipped because its prerequisite does not apply (for example no
+advertised MTA-STS TXT or a true null MX). This metadata does not replace or weaken
+the existing DNS `inconclusive` contract. Six paired fixtures prove that absent and
+unavailable remain distinct without changing findings, scores, or ordering.
+
+The Python skill implements this contract independently. The two JavaScript
+consumers remain on engine contract 1.1.0 until the separately reviewed engine 1.2.0
+phase lands; during that staged interval they are expected to fail the new corpus
+fields rather than silently infer them.
 
 **v1.6 / WHI-10 Phase 1 — evidence-boundary fields are enforceable:** selected
 findings can assert exact detail and effort+value placement without making either
@@ -178,7 +205,9 @@ The web and Action pin files must name the same full amino-skills commit before 
 
 ## Fixtures
 
-See `fixtures.json`. It contains 24 known-answer cases: 19 closed-world
-`dns-engine` cases plus five explicitly skipped pure/HTTP/wrapper cases covered by
-per-surface tests or later work. Each is language-neutral and every harness adapts it to
-its own resolver mock.
+See `fixtures.json`. It contains 30 known-answer cases: 19 closed-world
+`dns-engine` cases, six closed-world `http-observation` cases (an absent/unavailable
+pair for MTA-STS policy, robots, and RDAP), and five explicitly skipped
+pure/HTTP/wrapper cases covered by per-surface tests or later work. Each is
+language-neutral and every harness adapts it to its own resolver/HTTP mock without
+ambient network access.

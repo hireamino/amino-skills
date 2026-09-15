@@ -24,6 +24,10 @@ import resolver  # noqa: E402
 
 
 NETWORK_ATTEMPTS = []
+CONTRACT_MODES = {"dns-engine", "http-observation"}
+LANES = {"outbound_auth", "inbound_transport", "brand_optional", "outside_sending_posture"}
+OBSERVATION_KEYS = {"mta_sts_policy", "robots", "rdap"}
+OBSERVATION_STATES = {"checked", "unavailable", "not_applicable"}
 
 
 def _blocked_dns(name, rtype):
@@ -95,6 +99,37 @@ def install_resolver(dns):
     return recs
 
 
+def install_http(http):
+    """Install deterministic HTTP observations; an omitted entry is unavailable."""
+    spec = http or {}
+
+    def entry(name):
+        value = spec.get(name, "unavailable")
+        return None if value == "unavailable" else value
+
+    def fetch_mta_sts(_domain):
+        value = entry("mta_sts_policy")
+        if value is None:
+            return "unavailable", None
+        status = value.get("status")
+        content_type = value.get("contentType", "")
+        policy = value.get("body", "")[:8192] if (
+            status == 200 and content_type.lower().startswith("text/plain")
+        ) else None
+        return "checked", policy
+
+    def http_get(host, _path, follow=0, cap=65536):
+        del follow
+        name = "rdap" if host == "rdap.org" else "robots"
+        value = entry(name)
+        if value is None:
+            return None, None
+        return value.get("status"), value.get("body", "")[:cap]
+
+    audit._fetch_mta_sts_policy = fetch_mta_sts
+    audit._http_get = http_get
+
+
 def run_shipping_audit(domain):
     """Execute audit.main(), capturing its public JSON result."""
     old_argv = sys.argv
@@ -128,9 +163,14 @@ def expected_findings(fx):
     expected = []
     not_applicable = 0
     for finding in findings:
-        for field in ("area", "title", "severity", "action", "fixIncludes"):
+        for field in ("area", "title", "severity", "lane", "action", "fixIncludes"):
             if field not in finding:
                 raise AssertionError(f"{fx['id']}.expect.findings missing {field}")
+        if finding["lane"] not in LANES:
+            raise AssertionError(
+                f"{fx['id']}.findings[{finding_label(finding)}].lane: "
+                f"unknown contract value {finding['lane']!r}"
+            )
         if finding["severity"] != "pass" and finding["fixIncludes"] is None:
             raise AssertionError(
                 f"{fx['id']}.findings[{finding_label(finding)}].fix: "
@@ -178,8 +218,9 @@ def compare_legacy(fx, findings):
     return problems
 
 
-def compare_contract(fx, findings, score, ledger):
+def compare_contract(fx, result, score, ledger):
     problems = []
+    findings = result.get("findings", [])
     expected, _ = expected_findings(fx)
     actual_by_key = {}
     for actual in findings:
@@ -193,7 +234,7 @@ def compare_contract(fx, findings, score, ledger):
 
     expected_keys = set()
     for wanted in expected:
-        for field in ("identity", "severity", "action", "fix"):
+        for field in ("identity", "severity", "action", "fix", "lane"):
             ledger[field] += 1
         key = finding_key(wanted)
         if key in expected_keys:
@@ -212,6 +253,11 @@ def compare_contract(fx, findings, score, ledger):
             problems.append(
                 f"findings[{finding_label(wanted)}].severity: "
                 f"expected {wanted['severity']!r}, got {actual.get('severity')!r}"
+            )
+        if actual.get("lane") != wanted["lane"]:
+            problems.append(
+                f"findings[{finding_label(wanted)}].lane: "
+                f"expected {wanted['lane']!r}, got {actual.get('lane')!r}"
             )
         if "detail" in wanted:
             ledger["detail"] += 1
@@ -273,26 +319,38 @@ def compare_contract(fx, findings, score, ledger):
             problems.append(
                 f"score.{field}: expected {wanted!r}, got {actual!r}"
             )
+    wanted_observations = fx["expect"].get("observations")
+    if not isinstance(wanted_observations, dict) or set(wanted_observations) != OBSERVATION_KEYS:
+        problems.append("observations: expected the closed mta_sts_policy/robots/rdap map")
+    elif any(state not in OBSERVATION_STATES for state in wanted_observations.values()):
+        problems.append("observations: fixture contains an unknown contract state")
+    actual_observations = result.get("observations")
+    ledger["observations"] += 1
+    if actual_observations != wanted_observations:
+        problems.append(
+            f"observations: expected {wanted_observations!r}, got {actual_observations!r}"
+        )
     return problems
 
 
 def assertion_plan(fixtures):
     plan = {
-        "identity": 0, "severity": 0, "action": 0, "fix": 0,
+        "identity": 0, "severity": 0, "action": 0, "fix": 0, "lane": 0,
         "detail": 0, "effort": 0, "value": 0,
-        "scoreFields": 0, "closedWorld": 0,
+        "scoreFields": 0, "closedWorld": 0, "observations": 0,
     }
     for fx in fixtures:
-        if fx.get("mode") != "dns-engine":
+        if fx.get("mode") not in CONTRACT_MODES:
             continue
         expected, _ = expected_findings(fx)
-        for field in ("identity", "severity", "action", "fix"):
+        for field in ("identity", "severity", "action", "fix", "lane"):
             plan[field] += len(expected)
         plan["detail"] += sum("detail" in finding for finding in expected)
         plan["effort"] += sum("effort" in finding for finding in expected)
         plan["value"] += sum("value" in finding for finding in expected)
         plan["scoreFields"] += len(fx.get("expect", {}).get("score", {}))
         plan["closedWorld"] += 1
+        plan["observations"] += 1
     return plan
 
 
@@ -309,13 +367,13 @@ def run():
     passed = failed = skipped = not_applicable = 0
     failures = []
     ledger = {
-        "identity": 0, "severity": 0, "action": 0, "fix": 0,
+        "identity": 0, "severity": 0, "action": 0, "fix": 0, "lane": 0,
         "detail": 0, "effort": 0, "value": 0,
-        "scoreFields": 0, "closedWorld": 0,
+        "scoreFields": 0, "closedWorld": 0, "observations": 0,
     }
 
     for fx in fixtures:
-        if fx.get("mode") != "dns-engine":
+        if fx.get("mode") not in CONTRACT_MODES:
             skipped += 1
             print(
                 f"  SKIP  {fx['id']} ({fx['invariant']}) — "
@@ -325,11 +383,13 @@ def run():
 
         NETWORK_ATTEMPTS.clear()
         install_resolver(fx["input"].get("dns", {}))
+        install_http(fx["input"].get("http", {}))
         if os.environ.get("CONFORMANCE_CANARY_NETWORK_LOOKUP") == "1":
             batch_score.dig = resolver.query
 
         try:
-            findings = run_shipping_audit(fx["input"]["domain"]).get("findings", [])
+            result = run_shipping_audit(fx["input"]["domain"])
+            findings = result.get("findings", [])
             score = run_score(fx["input"]["domain"])
             expected, n_a = expected_findings(fx)
             not_applicable += n_a
@@ -344,7 +404,7 @@ def run():
 
         problems = [
             *compare_legacy(fx, findings),
-            *compare_contract(fx, findings, score, ledger),
+            *compare_contract(fx, result, score, ledger),
         ]
         if problems:
             failed += 1
