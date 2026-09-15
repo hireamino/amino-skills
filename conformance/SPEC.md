@@ -1,4 +1,4 @@
-# Amino Deliverability — Correctness Conformance Spec (v1.7)
+# Amino Deliverability — Correctness Conformance Spec (v1.8)
 
 **Status:** proposed · **Owner:** hireamino · **Canonical home:** `amino-skills/conformance/`
 
@@ -50,6 +50,24 @@ review. The corpus has no expectation regeneration mode; reviewed answers cannot
 replaced by current output.
 
 ## Current status
+
+**v1.8 / WHI-79 Phase A.2 — public-address socket guard:** the Python skill's
+single `host_public_ips()` helper returns addresses only when DNS supplies at least
+one A/AAAA answer and every answer is public. The stable cross-engine non-public
+contract is explicit: IPv4 `0.0.0.0/8`, `10.0.0.0/8`, `100.64.0.0/10`,
+`127.0.0.0/8`, `169.254.0.0/16`, `172.16.0.0/12`, and `192.168.0.0/16`;
+IPv6 `::`, `::1`, `fc00::/7`, and `fe80::/10`. IPv4-mapped IPv6 is judged as
+its embedded IPv4, including hexadecimal mapped notation. One unparseable answer
+refuses the whole host rather than being silently discarded.
+
+Python remains implementation-stricter for ranges that `ipaddress` identifies as
+private, loopback, link-local, reserved, multicast, or unspecified beyond the shared
+contract (including documentation and benchmark space). Those addresses cannot carry
+a public TCP response and are intentionally not encoded in cross-surface fixtures.
+Boundary checks cover the shared contract on Python 3.12 and 3.14. Low-level socket
+checks exercise the shipping robots, MTA-STS-policy, and MX STARTTLS call sites, while
+three new HTTP-observation fixtures prove mixed and shared-space answers remain
+`unavailable` even when a response is configured.
 
 **v1.7 / WHI-79 Phase A — lane and HTTP observation metadata:** every finding
 carries one lane from the closed enum `outbound_auth | inbound_transport |
@@ -210,11 +228,12 @@ The web and Action pin files must name the same full amino-skills commit before 
 
 ## Fixtures
 
-See `fixtures.json`. It contains 31 known-answer cases: 19 closed-world
-`dns-engine` cases, seven closed-world `http-observation` cases (an absent/unavailable
-pair for MTA-STS policy, robots, and RDAP, plus the closed-world lane-coverage case),
+See `fixtures.json`. It contains 34 known-answer cases: 19 closed-world
+`dns-engine` cases, ten closed-world `http-observation` cases (an absent/unavailable
+pair for MTA-STS policy, robots, and RDAP, the closed-world lane-coverage case, and
+three public-address-refusal cases),
 and five explicitly skipped
 pure/HTTP/wrapper cases covered by per-surface tests or later work. Each is
 language-neutral and every harness adapts it to its own resolver/HTTP mock without
-ambient network access. The Python runner is guarded by 14 mutation canaries; the
+ambient network access. The Python runner is guarded by 23 mutation canaries; the
 staged JavaScript runner remains guarded by 15 canaries on each consumer engine.
