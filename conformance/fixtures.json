@@ -3699,6 +3699,225 @@
           "rdap": "unavailable"
         }
       }
+    },
+    {
+      "id": "lane-closed-world-coverage",
+      "invariant": "WHI-79",
+      "mode": "http-observation",
+      "desc": "The corpus exercises every finding-area lane plus the reverse-DNS title exception with unchanged 1.1.0 behavior.",
+      "input": {
+        "domain": "lane-coverage.example",
+        "nowMs": 1767225600000,
+        "dns": {
+          "lane-coverage.example": {
+            "MX": [
+              "10 mx.primary.example.",
+              "10 backup.other.test."
+            ],
+            "A": [
+              "93.184.216.34"
+            ]
+          },
+          "mx.primary.example": {
+            "A": [
+              "192.0.2.10"
+            ]
+          },
+          "backup.other.test": {
+            "A": [
+              "198.51.100.20"
+            ]
+          }
+        },
+        "http": {
+          "mta_sts_policy": "unavailable",
+          "robots": {
+            "status": 200,
+            "body": "User-agent: *\nDisallow: /"
+          },
+          "rdap": {
+            "status": 200,
+            "body": "{\"events\":[{\"eventAction\":\"registration\",\"eventDate\":\"2025-12-15T00:00:00Z\"}]}",
+            "events": [
+              {
+                "eventAction": "registration",
+                "eventDate": "2025-12-15T00:00:00Z"
+              }
+            ]
+          }
+        }
+      },
+      "expect": {
+        "present": [
+          {
+            "area": "MX",
+            "includes": "Mixed MX providers"
+          },
+          {
+            "area": "Reputation",
+            "includes": "newly registered"
+          },
+          {
+            "area": "AI visibility",
+            "includes": "blocks AI crawlers"
+          },
+          {
+            "area": "Transport",
+            "includes": "reverse DNS"
+          }
+        ],
+        "absent": [],
+        "findings": [
+          {
+            "area": "DMARC",
+            "title": "No DMARC record",
+            "severity": "critical",
+            "action": "Publish a DMARC policy",
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "MX",
+            "title": "Mixed MX providers (2)",
+            "severity": "medium",
+            "action": "Consolidate to one MX provider",
+            "fixIncludes": "Confirm every MX provider is intentional and enforces TLS; remove stale/registrar-default backup MX",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "Reputation",
+            "title": "Domain is newly registered (17 days)",
+            "severity": "medium",
+            "action": "Warm up the domain before scaling sends",
+            "fixIncludes": "Warm up gradually — start low-volume to engaged recipients and ramp over weeks before scaling.",
+            "lane": "outside_sending_posture"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
+          },
+          {
+            "area": "Transport",
+            "title": "No DANE/TLSA",
+            "severity": "low",
+            "action": "Publish DANE/TLSA records",
+            "fixIncludes": "If DNSSEC is enabled, publish TLSA records for the MX; otherwise enable DNSSEC first.",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "outside_sending_posture"
+          },
+          {
+            "area": "AI visibility",
+            "title": "robots.txt blocks AI crawlers",
+            "severity": "low",
+            "action": "Unblock AI crawlers in robots.txt",
+            "fixIncludes": "Allow the AI crawlers you want in robots.txt (or drop the blanket Disallow).",
+            "lane": "outside_sending_posture"
+          },
+          {
+            "area": "Transport",
+            "title": "Mail server has no reverse DNS (PTR)",
+            "severity": "low",
+            "action": "Set reverse DNS (PTR) for your mail server",
+            "fixIncludes": "Have your host set a PTR (reverse DNS) record for the mail server's IP that matches its hostname.",
+            "lane": "outside_sending_posture"
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "brand_optional"
+          },
+          {
+            "area": "Transport",
+            "title": "Could not establish STARTTLS to primary MX",
+            "severity": "medium",
+            "action": "Confirm STARTTLS on the mail server",
+            "fixIncludes": "Verify the MX offers STARTTLS with a valid certificate.",
+            "surfaces": [
+              "skill"
+            ],
+            "notApplicable": {
+              "web": "The edge engine cannot open port 25 for a live STARTTLS probe.",
+              "action": "The vendored JS engine intentionally omits live port-25 STARTTLS probing."
+            },
+            "lane": "inbound_transport"
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": false,
+          "DMARC_enforced": false,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 8,
+          "note": "no SPF; no DKIM key at common/provider selectors; no DMARC; mixed MX (2 providers)",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "checked",
+          "rdap": "checked"
+        }
+      }
     }
   ]
 }

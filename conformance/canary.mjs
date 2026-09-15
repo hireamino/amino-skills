@@ -34,7 +34,14 @@ const temporary = mkdtempSync(join(tmpdir(), `amino-whi8-${surface}-`));
 // canaries can prove their diagnostics now. Once the engine has the contract
 // anchors, the same cases mutate the real engine source directly.
 let contractEngine = portableEngine;
-if (!portableEngine.includes("const AREA_LANES = Object.freeze({")) {
+const versionMatch = portableEngine.match(/export const contractVersion = "([^"]+)";/);
+if (!versionMatch) {
+  console.error("FAIL  WHI-79 staged wrapper selection — engine must declare export const contractVersion");
+  rmSync(temporary, { recursive: true, force: true });
+  process.exit(2);
+}
+const declaredContractVersion = versionMatch[1];
+if (declaredContractVersion === "1.1.0") {
   writeFileSync(join(temporary, "phase-a-legacy-engine.mjs"), portableEngine);
   contractEngine = `
 import * as legacy from "./phase-a-legacy-engine.mjs";
@@ -72,6 +79,19 @@ export async function buckets(domain, q) {
   return { ...(await legacy.buckets(domain, q)), lanes: { ...BUCKET_LANES } };
 }
 `;
+} else {
+  const requiredAnchors = [
+    'const AREA_LANES = Object.freeze({\n  SPF: "outbound_auth",',
+    "observations.mta_sts_policy = observation;",
+  ];
+  const missingAnchors = requiredAnchors.filter((anchor) => !portableEngine.includes(anchor));
+  if (missingAnchors.length) {
+    console.error(
+      `FAIL  WHI-79 staged wrapper selection — contract ${declaredContractVersion} must expose real lane and observation anchors; refusing legacy wrapper`,
+    );
+    rmSync(temporary, { recursive: true, force: true });
+    process.exit(2);
+  }
 }
 writeFileSync(
   join(temporary, "fixtures.json"),
@@ -283,6 +303,19 @@ try {
     "dkim-revoked-empty-p.execution: threw unknown finding area has no lane: SPF",
   );
 
+  const mislabelledAreaLane = replaceExactlyOnce(
+    contractEngine,
+    'const AREA_LANES = Object.freeze({\n  SPF: "outbound_auth",',
+    'const AREA_LANES = Object.freeze({\n  SPF: "inbound_transport",',
+    "SPF valid wrong lane",
+  );
+  expectRed(
+    "Q valid wrong lane reaches runner comparison",
+    mislabelledAreaLane,
+    "dkim-revoked-empty-p",
+    'dkim-revoked-empty-p.findings[SPF|No SPF record].lane: expected "outbound_auth", got "inbound_transport"',
+  );
+
   const conflatedObservation = replaceExactlyOnce(
     contractEngine,
     "observations.mta_sts_policy = observation;",
@@ -319,9 +352,9 @@ try {
   rmSync(temporary, { recursive: true, force: true });
 }
 
-console.log(`\nCanaries (${surface}): ${passed} passed, ${failed} failed; expected 14 cases.`);
-if (passed + failed !== 14) {
-  console.error(`FAIL  canary count: expected 14, got ${passed + failed}`);
+console.log(`\nCanaries (${surface}): ${passed} passed, ${failed} failed; expected 15 cases.`);
+if (passed + failed !== 15) {
+  console.error(`FAIL  canary count: expected 15, got ${passed + failed}`);
   process.exit(1);
 }
 process.exit(failed ? 1 : 0);

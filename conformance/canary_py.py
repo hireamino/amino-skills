@@ -287,6 +287,29 @@ try:
             "dkim-revoked-empty-p.execution: threw unknown finding area has no lane: SPF",
         )
 
+    with tempfile.TemporaryDirectory(prefix="amino-whi79-lane-compare-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '    "SPF": "outbound_auth",\n',
+            '    "SPF": "inbound_transport",  # WHI-79 valid-wrong-lane canary\n',
+            "SPF valid wrong lane",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red(
+            "Q valid wrong lane reaches runner comparison",
+            execute({
+                "AUDIT_SCRIPTS": str(target),
+                "CONFORMANCE_FIXTURE": "dkim-revoked-empty-p",
+            }),
+            "dkim-revoked-empty-p.findings[SPF|No SPF record].lane: "
+            "expected 'outbound_auth', got 'inbound_transport'",
+        )
+
     with tempfile.TemporaryDirectory(prefix="amino-whi79-observation-") as temporary:
         target = Path(temporary)
         for filename in ("audit.py", "batch_score.py", "resolver.py"):
@@ -314,8 +337,8 @@ except Exception as error:
     print(f"FAIL  canary setup — {error}")
     FAILED += 1
 
-print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 11 cases.")
-if PASSED + FAILED != 11:
-    print(f"FAIL  canary count: expected 11, got {PASSED + FAILED}", file=sys.stderr)
+print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 12 cases.")
+if PASSED + FAILED != 12:
+    print(f"FAIL  canary count: expected 12, got {PASSED + FAILED}", file=sys.stderr)
     sys.exit(1)
 sys.exit(1 if FAILED else 0)

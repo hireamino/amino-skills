@@ -67,7 +67,10 @@ trustworthy response was obtained. `not_applicable` means the operation was
 intentionally skipped because its prerequisite does not apply (for example no
 advertised MTA-STS TXT or a true null MX). This metadata does not replace or weaken
 the existing DNS `inconclusive` contract. Six paired fixtures prove that absent and
-unavailable remain distinct without changing findings, scores, or ordering.
+unavailable remain distinct without changing findings, scores, or ordering. A separate
+closed-world lane fixture exercises all 12 finding areas plus the reverse-DNS title
+exception; a valid-but-wrong lane therefore reaches the runner comparison instead of
+being caught only by the implementation's unknown-area guard.
 
 The Python skill implements this contract independently. The two JavaScript
 consumers remain on engine contract 1.1.0 until the separately reviewed engine 1.2.0
@@ -205,9 +208,10 @@ The web and Action pin files must name the same full amino-skills commit before 
 
 ## Fixtures
 
-See `fixtures.json`. It contains 30 known-answer cases: 19 closed-world
-`dns-engine` cases, six closed-world `http-observation` cases (an absent/unavailable
-pair for MTA-STS policy, robots, and RDAP), and five explicitly skipped
+See `fixtures.json`. It contains 31 known-answer cases: 19 closed-world
+`dns-engine` cases, seven closed-world `http-observation` cases (an absent/unavailable
+pair for MTA-STS policy, robots, and RDAP, plus the closed-world lane-coverage case),
+and five explicitly skipped
 pure/HTTP/wrapper cases covered by per-surface tests or later work. Each is
 language-neutral and every harness adapts it to its own resolver/HTTP mock without
 ambient network access.

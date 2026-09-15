@@ -49,6 +49,7 @@ resolver.set_backend(_blocked_dns)
 import audit  # noqa: E402
 import batch_score  # noqa: E402
 
+REAL_TIME = audit.time.time
 audit.socket.create_connection = _blocked_socket
 audit.socket.getaddrinfo = _blocked_socket
 audit.socket.gethostbyaddr = _blocked_socket
@@ -384,6 +385,8 @@ def run():
         NETWORK_ATTEMPTS.clear()
         install_resolver(fx["input"].get("dns", {}))
         install_http(fx["input"].get("http", {}))
+        now_ms = fx["input"].get("nowMs")
+        audit.time.time = REAL_TIME if now_ms is None else lambda: now_ms / 1000
         if os.environ.get("CONFORMANCE_CANARY_NETWORK_LOOKUP") == "1":
             batch_score.dig = resolver.query
 
@@ -401,6 +404,8 @@ def run():
             failures.append(message)
             print(f"  FAIL  {fx['id']} ({fx['invariant']}) — {message}")
             continue
+        finally:
+            audit.time.time = REAL_TIME
 
         problems = [
             *compare_legacy(fx, findings),
