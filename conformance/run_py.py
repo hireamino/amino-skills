@@ -17,13 +17,14 @@ DEFAULT_SCRIPTS = os.path.join(
     HERE, "..", "amino-deliverability-audit", "skills",
     "amino-deliverability-audit", "scripts",
 )
-SCRIPTS = os.path.abspath(os.environ.get("AUDIT_SCRIPTS", DEFAULT_SCRIPTS))
+SCRIPTS = os.path.abspath(DEFAULT_SCRIPTS)
 sys.path.insert(0, SCRIPTS)
 
 import resolver  # noqa: E402
 
 
 NETWORK_ATTEMPTS = []
+HTTP_CALLS = {}
 CONTRACT_MODES = {"dns-engine", "http-observation"}
 LANES = {"outbound_auth", "inbound_transport", "brand_optional", "outside_sending_posture"}
 OBSERVATION_KEYS = {"mta_sts_policy", "robots", "rdap"}
@@ -100,7 +101,7 @@ def install_resolver(dns):
     return recs
 
 
-def install_http(http):
+def install_http(domain, http):
     """Install deterministic HTTP observations; an omitted entry is unavailable."""
     spec = http or {}
 
@@ -109,6 +110,7 @@ def install_http(http):
         return None if value == "unavailable" else value
 
     def fetch_mta_sts(domain):
+        HTTP_CALLS["mta_sts_policy"] = HTTP_CALLS.get("mta_sts_policy", 0) + 1
         if not audit.host_public_ips(f"mta-sts.{domain}"):
             return "unavailable", None
         value = entry("mta_sts_policy")
@@ -125,9 +127,15 @@ def install_http(http):
         del follow
         # rdap.org is the fixed trusted bootstrap host. Match the engine adapter:
         # fixture-backed RDAP bypasses the customer-controlled-host SSRF guard.
-        if host != "rdap.org" and not audit.host_public_ips(host):
+        if host == "rdap.org":
+            name = "rdap"
+        elif host == domain:
+            name = "robots"
+        else:
             return None, None
-        name = "rdap" if host == "rdap.org" else "robots"
+        HTTP_CALLS[name] = HTTP_CALLS.get(name, 0) + 1
+        if name != "rdap" and not audit.host_public_ips(host):
+            return None, None
         value = entry(name)
         if value is None:
             return None, None
@@ -135,6 +143,18 @@ def install_http(http):
 
     audit._fetch_mta_sts_policy = fetch_mta_sts
     audit._http_get = http_get
+
+
+def unexpected_http_host_is_refused():
+    """Exercise the runner's exact host map with a public but unconfigured hostname."""
+    install_resolver({
+        "expected.invalid": {"A": ["93.184.216.34"]},
+        "unexpected.invalid": {"A": ["93.184.216.34"]},
+    })
+    install_http("expected.invalid", {
+        "robots": {"status": 204, "body": "runner host-map canary"},
+    })
+    return audit._http_get("unexpected.invalid", "/robots.txt") == (None, None)
 
 
 def run_shipping_audit(domain):
@@ -243,6 +263,11 @@ def compare_contract(fx, result, score, ledger):
     for wanted in expected:
         for field in ("identity", "severity", "action", "fix", "lane"):
             ledger[field] += 1
+        if "detail" in wanted:
+            ledger["detail"] += 1
+        if "effort" in wanted:
+            ledger["effort"] += 1
+            ledger["value"] += 1
         key = finding_key(wanted)
         if key in expected_keys:
             problems.append(
@@ -267,15 +292,12 @@ def compare_contract(fx, result, score, ledger):
                 f"expected {wanted['lane']!r}, got {actual.get('lane')!r}"
             )
         if "detail" in wanted:
-            ledger["detail"] += 1
             if actual.get("detail") != wanted["detail"]:
                 problems.append(
                     f"findings[{finding_label(wanted)}].detail: "
                     f"expected {wanted['detail']!r}, got {actual.get('detail')!r}"
                 )
         if "effort" in wanted:
-            ledger["effort"] += 1
-            ledger["value"] += 1
             if actual.get("effort") != wanted["effort"]:
                 problems.append(
                     f"findings[{finding_label(wanted)}].effort: "
@@ -371,6 +393,11 @@ def run():
             print(f"unknown CONFORMANCE_FIXTURE: {only}", file=sys.stderr)
             return 2
 
+    if not unexpected_http_host_is_refused():
+        print("FAIL runner HTTP host map refuses unexpected host")
+        return 1
+    print("PASS runner HTTP host map refuses unexpected host")
+
     passed = failed = skipped = not_applicable = 0
     failures = []
     ledger = {
@@ -389,8 +416,9 @@ def run():
             continue
 
         NETWORK_ATTEMPTS.clear()
+        HTTP_CALLS.clear()
         install_resolver(fx["input"].get("dns", {}))
-        install_http(fx["input"].get("http", {}))
+        install_http(fx["input"]["domain"], fx["input"].get("http", {}))
         now_ms = fx["input"].get("nowMs")
         audit.time.time = REAL_TIME if now_ms is None else lambda: now_ms / 1000
         if os.environ.get("CONFORMANCE_CANARY_NETWORK_LOOKUP") == "1":
@@ -417,6 +445,12 @@ def run():
             *compare_legacy(fx, findings),
             *compare_contract(fx, result, score, ledger),
         ]
+        for name, wanted in fx.get("expect", {}).get("httpCalls", {}).items():
+            actual = HTTP_CALLS.get(name, 0)
+            if actual != wanted:
+                problems.append(
+                    f"httpCalls.{name}: expected {wanted}, got {actual}"
+                )
         if problems:
             failed += 1
             failures.extend(f"{fx['id']}.{problem}" for problem in problems)

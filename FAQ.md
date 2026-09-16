@@ -239,6 +239,11 @@ RDAP. All four are public information, and it *drafts* the exact changes for you
 review — it never touches your DNS, sends mail, or needs credentials. Nothing changes
 until you choose to apply a fix yourself.
 
+Before any domain-controlled HTTPS fetch, the scanner requires at least one A/AAAA
+answer and requires every answer to be public under its reviewed IANA-derived address
+contract. Mixed, unparseable, mapped-private, translated-private, and other non-public
+answers are refused rather than fetched.
+
 ### How is this different from a free DMARC checker?
 
 Most checkers tell you whether a record *exists*. This benchmarks your **whole sending

@@ -155,6 +155,11 @@ function compareContract(fx, result, score, surface, ledger) {
     ledger.action++;
     ledger.fix++;
     ledger.lane++;
+    if (own(wanted, "detail")) ledger.detail++;
+    if (own(wanted, "effort")) {
+      ledger.effort++;
+      ledger.value++;
+    }
     const key = findingKey(wanted);
     if (expectedKeys.has(key)) {
       problems.push(`findings[${findingLabel(wanted)}].identity: duplicate expectation`);
@@ -173,14 +178,11 @@ function compareContract(fx, result, score, surface, ledger) {
       problems.push(`findings[${findingLabel(wanted)}].lane: expected ${shown(wanted.lane)}, got ${shown(actual.lane)}`);
     }
     if (own(wanted, "detail")) {
-      ledger.detail++;
       if (actual.detail !== wanted.detail) {
         problems.push(`findings[${findingLabel(wanted)}].detail: expected ${shown(wanted.detail)}, got ${shown(actual.detail)}`);
       }
     }
     if (own(wanted, "effort")) {
-      ledger.effort++;
-      ledger.value++;
       if (actual.effort !== wanted.effort) {
         problems.push(`findings[${findingLabel(wanted)}].effort: expected ${shown(wanted.effort)}, got ${shown(actual.effort)}`);
       }

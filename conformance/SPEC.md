@@ -1,4 +1,4 @@
-# Amino Deliverability — Correctness Conformance Spec (v1.9)
+# Amino Deliverability — Correctness Conformance Spec (v1.10)
 
 **Status:** proposed · **Owner:** hireamino · **Canonical home:** `amino-skills/conformance/`
 
@@ -51,6 +51,25 @@ replaced by current output.
 
 ## Current status
 
+**v1.10 / WHI-127 C1 — one strict public-address contract:**
+`address-contract.json` is the single editable machine-readable contract for every
+domain-controlled socket and HTTPS fetch. The published Python skill carries a generated
+byte-identical copy beside `audit.py`; `check.py` rejects any drift between the two files.
+The contract is derived from the
+[IANA IPv4 Special-Purpose Address Registry](https://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry.xhtml)
+and [IANA IPv6 Special-Purpose Address Registry](https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry.xhtml),
+retrieved 2026-09-15.
+
+A host is eligible only when DNS returns at least one A/AAAA answer and every answer is
+public. IPv4 refuses the exact networks in the table. IPv6 is public only inside
+`2000::/3` and outside `2001::/23`, `2001:db8::/32`, `2002::/16`, and `3fff::/20`;
+everything else is refused. IPv4-mapped IPv6 is judged as its embedded IPv4 in every
+valid textual form. One unparseable answer refuses the whole host. The table's 114 rows
+pin boundaries, special ranges, mapped/compatible/NAT64 forms, and mixed answer sets on
+Python 3.12 and 3.14 without relying on version-sensitive `ipaddress` classification
+flags. Seven appended closed-world fixtures bring the corpus to 40 executable contract
+fixtures plus five skips, and the Python runner is guarded by 34 mutation canaries.
+
 **v1.9 / WHI-125 Step 1 — MTA-STS DNS lookup failure is not absence:** the
 Python resolver normalizes dig string RCODEs and numeric fixture/DoH RCODEs into one
 metadata shape and records terminal `SERVFAIL`, `REFUSED`, missing-status, and
@@ -66,22 +85,10 @@ areas / 39 action labels. The JavaScript consumers remain intentionally unchange
 until engine contract 1.3.0 consumes this reviewed corpus revision.
 
 **v1.8 / WHI-79 Phase A.2 — public-address socket guard:** the Python skill's
-single `host_public_ips()` helper returns addresses only when DNS supplies at least
-one A/AAAA answer and every answer is public. The stable cross-engine non-public
-contract is explicit: IPv4 `0.0.0.0/8`, `10.0.0.0/8`, `100.64.0.0/10`,
-`127.0.0.0/8`, `169.254.0.0/16`, `172.16.0.0/12`, and `192.168.0.0/16`;
-IPv6 `::`, `::1`, `fc00::/7`, and `fe80::/10`. IPv4-mapped IPv6 is judged as
-its embedded IPv4, including hexadecimal mapped notation. One unparseable answer
-refuses the whole host rather than being silently discarded.
-
-Python remains implementation-stricter for ranges that `ipaddress` identifies as
-private, loopback, link-local, reserved, multicast, or unspecified beyond the shared
-contract (including documentation and benchmark space). Those addresses cannot carry
-a public TCP response and are intentionally not encoded in cross-surface fixtures.
-Boundary checks cover the shared contract on Python 3.12 and 3.14. Low-level socket
-checks exercise the shipping robots, MTA-STS-policy, and MX STARTTLS call sites, while
-three new HTTP-observation fixtures prove mixed and shared-space answers remain
-`unavailable` even when a response is configured.
+single `host_public_ips()` helper established whole-host refusal, IPv4-mapped handling,
+and low-level guards at the robots, MTA-STS-policy, and MX STARTTLS call sites. The
+original partial range list and implementation-specific classification were superseded
+by the v1.10 table without changing those call sites.
 
 **v1.7 / WHI-79 Phase A — lane and HTTP observation metadata:** every finding
 carries one lane from the closed enum `outbound_auth | inbound_transport |
@@ -242,12 +249,11 @@ The web and Action pin files must name the same full amino-skills commit before 
 
 ## Fixtures
 
-See `fixtures.json`. It contains 38 known-answer cases: 23 closed-world
-`dns-engine` cases, ten closed-world `http-observation` cases (an absent/unavailable
-pair for MTA-STS policy, robots, and RDAP, the closed-world lane-coverage case, and
-three public-address-refusal cases),
-and five explicitly skipped
+See `fixtures.json`. It contains 45 known-answer cases: 24 closed-world
+`dns-engine` cases, 16 closed-world `http-observation` cases (the original
+absent/unavailable pairs, lane coverage and address refusals plus seven WHI-127
+coverage cases), and five explicitly skipped
 pure/HTTP/wrapper cases covered by per-surface tests or later work. Each is
 language-neutral and every harness adapts it to its own resolver/HTTP mock without
-ambient network access. The Python runner is guarded by 30 mutation canaries; the
+ambient network access. The Python runner is guarded by 34 mutation canaries; the
 staged JavaScript runner remains guarded by 15 canaries on each consumer engine.

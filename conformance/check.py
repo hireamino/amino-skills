@@ -10,9 +10,10 @@ import base64
 import json
 import os
 import sys
+from pathlib import Path
 
 HERE = os.path.dirname(__file__)
-SCRIPTS = os.environ.get("AUDIT_SCRIPTS") or os.path.join(
+SCRIPTS = os.path.join(
     HERE, "..",
     "amino-deliverability-audit", "skills", "amino-deliverability-audit", "scripts",
 )
@@ -315,10 +316,53 @@ except ValueError:
     _unknown_area_rejected = True
 chk("WHI-79 unknown finding area is rejected", _unknown_area_rejected, True)
 
-# WHI-79 Phase A.2 — the Python socket guard uses the same explicit public-address
-# contract as the canonical engine. DNS and sockets are stubbed at their lowest seams;
-# these checks therefore exercise the shipping helper and all three shipping call sites.
+# WHI-127 C1 — one reviewed table drives the published skill and every boundary check.
+# The scripts copy is generated from the conformance source and must remain byte-identical;
+# it is not a second editable source. DNS and sockets are stubbed at their lowest seams.
 _audit_dig = audit.dig
+_ADDRESS_CONTRACT_PATH = Path(HERE) / "address-contract.json"
+_SHIPPED_ADDRESS_CONTRACT_PATH = Path(SCRIPTS) / "address-contract.json"
+_ADDRESS_CONTRACT_BYTES = _ADDRESS_CONTRACT_PATH.read_bytes()
+chk("WHI-127 shipped address contract is byte-identical to the canonical source",
+    _SHIPPED_ADDRESS_CONTRACT_PATH.read_bytes() == _ADDRESS_CONTRACT_BYTES, True)
+_ADDRESS_CONTRACT = json.loads(_ADDRESS_CONTRACT_BYTES)
+chk("WHI-127 address contract version", _ADDRESS_CONTRACT.get("version"), "1.0.0")
+chk("WHI-127 address contract has at least 60 rows",
+    len(_ADDRESS_CONTRACT.get("rows", [])) >= 60, True)
+chk("WHI-127 address contract row ids are unique",
+    len({row.get("id") for row in _ADDRESS_CONTRACT.get("rows", [])}),
+    len(_ADDRESS_CONTRACT.get("rows", [])))
+chk("WHI-127 address contract expectations are closed",
+    sorted({row.get("expect") for row in _ADDRESS_CONTRACT.get("rows", [])}),
+    ["allow", "refuse"])
+chk("WHI-127 IPv4 non-public networks are exact",
+    _ADDRESS_CONTRACT.get("ipv4NonPublic"), [
+        "0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8",
+        "169.254.0.0/16", "172.16.0.0/12", "192.0.0.0/24",
+        "192.0.2.0/24", "192.88.99.0/24", "192.168.0.0/16",
+        "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24",
+        "224.0.0.0/4", "240.0.0.0/4",
+    ])
+chk("WHI-127 IPv6 public window is exact",
+    _ADDRESS_CONTRACT.get("ipv6PublicWithin"), ["2000::/3"])
+chk("WHI-127 IPv6 exclusions are exact",
+    _ADDRESS_CONTRACT.get("ipv6NonPublicWithinPublic"),
+    ["2001::/23", "2001:db8::/32", "2002::/16", "3fff::/20"])
+chk("WHI-127 IPv4-mapped range is exact",
+    _ADDRESS_CONTRACT.get("ipv4MappedWithin"), ["::ffff:0:0/96"])
+chk("WHI-127 address contract cites the reviewed IANA registries",
+    _ADDRESS_CONTRACT.get("sources"), [
+        {
+            "name": "IANA IPv4 Special-Purpose Address Registry",
+            "url": "https://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry.xhtml",
+            "retrieved": "2026-09-15",
+        },
+        {
+            "name": "IANA IPv6 Special-Purpose Address Registry",
+            "url": "https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry.xhtml",
+            "retrieved": "2026-09-15",
+        },
+    ])
 
 
 def _guarded_addresses(ipv4=(), ipv6=()):
@@ -326,33 +370,13 @@ def _guarded_addresses(ipv4=(), ipv6=()):
     return audit.host_public_ips("guard.invalid")
 
 
-_address_rows = (
-    ("9.255.255.255", True), ("10.0.0.0", False),
-    ("10.255.255.255", False), ("11.0.0.0", True),
-    ("172.15.255.255", True), ("172.16.0.0", False),
-    ("172.31.255.255", False), ("172.32.0.0", True),
-    ("192.167.255.255", True), ("192.168.0.0", False),
-    ("192.169.0.0", True), ("169.253.255.255", True),
-    ("169.254.0.0", False), ("169.255.0.0", True),
-    ("100.63.255.255", True), ("100.64.0.0", False),
-    ("100.127.255.255", False), ("100.128.0.0", True),
-    ("126.255.255.255", True), ("127.0.0.1", False),
-    ("128.0.0.0", True), ("0.0.0.0", False), ("1.0.0.1", True),
-)
-for _address, _allowed in _address_rows:
-    chk(f"WHI-79 address boundary {_address}",
-        _guarded_addresses((_address,)), [_address] if _allowed else [])
-
-_ipv6_rows = (
-    ("2606:4700::1111", True), ("::1", False), ("::", False),
-    ("fc00::1", False), ("fdff::1", False),
-    ("fe80::1", False), ("febf::1", False),
-    ("::ffff:127.0.0.1", False), ("::ffff:7f00:1", False),
-    ("::ffff:93.184.216.34", True),
-)
-for _address, _allowed in _ipv6_rows:
-    chk(f"WHI-79 address boundary {_address}",
-        _guarded_addresses((), (_address,)), [_address] if _allowed else [])
+for _row in _ADDRESS_CONTRACT["rows"]:
+    _addresses = _row["addresses"]
+    _ipv4 = tuple(address for address in _addresses if ":" not in address)
+    _ipv6 = tuple(address for address in _addresses if ":" in address)
+    _expected_addresses = list(_ipv4 + _ipv6) if _row["expect"] == "allow" else []
+    chk(f"WHI-127 address row {_row['id']}",
+        _guarded_addresses(_ipv4, _ipv6), _expected_addresses)
 
 chk("WHI-79 address list mixed public/private refuses host",
     _guarded_addresses(("93.184.216.34", "10.0.0.5")), [])
@@ -373,8 +397,8 @@ chk("WHI-79 detector 100.64 shared address refuses host",
     _guarded_addresses(("100.64.0.1",)), [])
 # CANARY-DETECTOR-END: shared-space
 # CANARY-DETECTOR-BEGIN: mapped-address
-chk("WHI-79 detector mapped 100.64 address refuses host",
-    _guarded_addresses((), ("::ffff:100.64.0.1",)), [])
+chk("WHI-79 detector mapped public address uses embedded IPv4",
+    _guarded_addresses((), ("::ffff:93.184.216.34",)), ["::ffff:93.184.216.34"])
 # CANARY-DETECTOR-END: mapped-address
 audit.dig = _audit_dig
 
@@ -444,14 +468,26 @@ _refused_hosts = (
 )
 _expected_http = [
     (name, ((None, None), [])) for name, _addresses in _refused_hosts
-] + [("allowed", ((None, None), [("93.184.216.34", 443)]))]
+] + [
+    ("allowed", ((None, None), [("93.184.216.34", 443)])),
+    ("mapped-public", ((None, None), [("::ffff:93.184.216.34", 443)])),
+]
 _expected_mta = [
     (name, (("unavailable", None), [])) for name, _addresses in _refused_hosts
-] + [("allowed", (("unavailable", None), [("93.184.216.34", 443)]))]
+] + [
+    ("allowed", (("unavailable", None), [("93.184.216.34", 443)])),
+    ("mapped-public", (("unavailable", None), [("::ffff:93.184.216.34", 443)])),
+]
 _expected_mx = [
     (name, (True, [])) for name, _addresses in _refused_hosts
-] + [("allowed", (True, [("93.184.216.34", 25)]))]
-_probe_inputs = list(_refused_hosts) + [("allowed", ("93.184.216.34",))]
+] + [
+    ("allowed", (True, [("93.184.216.34", 25)])),
+    ("mapped-public", (True, [("::ffff:93.184.216.34", 25)])),
+]
+_probe_inputs = list(_refused_hosts) + [
+    ("allowed", ("93.184.216.34",)),
+    ("mapped-public", ("::ffff:93.184.216.34",)),
+]
 chk("WHI-79 shipping _http_get address guard",
     [(name, _http_guard_probe(addresses)) for name, addresses in _probe_inputs],
     _expected_http)
@@ -497,6 +533,14 @@ chk("§7.4 label is the staged one", audit.action(_pnone), "Review DMARC reports
 chk("§7.4 label does not name reject", "reject" in audit.action(_pnone).lower(), False)
 
 _SRC = open(os.path.join(SCRIPTS, "audit.py"), encoding="utf-8").read()
+chk("WHI-127 shipping helper loads the generated address table",
+    'with _ADDRESS_CONTRACT_PATH.open(encoding="utf-8")' in _SRC, True)
+for _flag in (
+    ".is_private", ".is_reserved", ".is_global", ".is_multicast",
+    ".is_loopback", ".is_link_local", ".is_unspecified",
+):
+    chk(f"WHI-127 shipping helper does not use ipaddress classification {_flag}",
+        _flag in _SRC, False)
 chk("§7.4 reject is not framed as the destination",
     "ramp to p=quarantine" in _SRC, False)
 chk("§7.4 no unevidenced provider trust-signal claim",
@@ -554,9 +598,18 @@ _RUNNER = open(os.path.join(HERE, "run_py.py"), encoding="utf-8").read()
 chk("WHI-79 runner routes MTA-STS through shipping address helper",
     'audit.host_public_ips(f"mta-sts.{domain}")' in _RUNNER, True)
 chk("WHI-79 runner routes robots through shipping address helper",
-    'host != "rdap.org" and not audit.host_public_ips(host)' in _RUNNER, True)
+    'if name != "rdap" and not audit.host_public_ips(host)' in _RUNNER, True)
 chk("WHI-79 runner keeps fixed rdap.org host exempt",
-    'name = "rdap" if host == "rdap.org" else "robots"' in _RUNNER, True)
+    'if host == "rdap.org":\n            name = "rdap"' in _RUNNER, True)
+chk("WHI-127 runner maps only the fixture domain to robots",
+    'elif host == domain:\n            name = "robots"' in _RUNNER, True)
+chk("WHI-127 runner refuses every unexpected HTTP host",
+    'else:\n            return None, None' in _RUNNER, True)
+_SCRIPTS_OVERRIDE_NAME = "AUDIT_" + "SCRIPTS"
+chk("WHI-127 runner has no alternate scripts-tree override",
+    _SCRIPTS_OVERRIDE_NAME in _RUNNER, False)
+chk("WHI-127 checker has no alternate scripts-tree override",
+    _SCRIPTS_OVERRIDE_NAME in open(__file__, encoding="utf-8").read(), False)
 
 # ── the OTHER claims corrected in the engines on 2026-07-30 ────────────────
 # Same lesson as the np= one directly above: each of these was fixed in audit.py and
@@ -623,6 +676,18 @@ chk("WHI-125 SKILL treats the finding as unavailable evidence",
     "Treat **“Unable to confirm MTA-STS policy”** as unavailable evidence, not as a missing policy" in _DOCS["SKILL.md"], True)
 chk("WHI-125 docs do not call resolver failure a missing policy",
     "resolver failure means the mta-sts policy is missing" in _ALL.lower(), False)
+chk("WHI-127 README states whole-answer public-address refusal",
+    "every answer is public under the reviewed IANA-derived address contract" in
+    _DOCS["README.md"], True)
+chk("WHI-127 FAQ states whole-answer public-address refusal",
+    "every answer to be public under its reviewed IANA-derived address contract" in
+    _DOCS["FAQ.md"], True)
+chk("WHI-127 CONTRIBUTING names the canonical address table",
+    "conformance/address-contract.json" in _DOCS["CONTRIBUTING.md"], True)
+chk("WHI-127 CONTRIBUTING forbids a second editable address contract",
+    "a second editable contract" in _DOCS["CONTRIBUTING.md"], True)
+chk("WHI-127 SKILL forbids working around the address guard",
+    "never work around the guard or fetch the URL yourself" in _DOCS["SKILL.md"], True)
 
 # and the coupling: every doc asserted above must be in the workflow's path filter
 _PATHS = {"FAQ.md": "- 'FAQ.md'", "README.md": "- 'README.md'",
