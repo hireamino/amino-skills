@@ -17,8 +17,15 @@ SCRIPTS = (
     / "amino-deliverability-audit"
     / "scripts"
 )
-BASE = "e3ca0982beb94e1d6b291a16a2d991e71f0e8b99"
+BASE = "34a8fcb35f40ef4340b67be8f95f05ca6a3839e5"
 AUDIT_PATH = "amino-deliverability-audit/skills/amino-deliverability-audit/scripts/audit.py"
+TABLE_PATH = "amino-deliverability-audit/skills/amino-deliverability-audit/scripts/address-contract.json"
+EXPECTED_NEWLY_REFUSED = [
+    "ipv6-zone-public-name",
+    "ipv6-zone-public-numeric",
+    "ipv6-zone-mapped-public",
+    "list-public-ipv4-zone-ipv6",
+]
 
 
 def load_module(name, path):
@@ -50,11 +57,21 @@ def main():
         capture_output=True,
         check=True,
     ).stdout
+    old_table = subprocess.run(
+        ["git", "show", f"{BASE}:{TABLE_PATH}"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout
     sys.path.insert(0, str(SCRIPTS))
     current = load_module("whi127_current_audit", SCRIPTS / "audit.py")
     with tempfile.TemporaryDirectory(prefix="amino-address-differential-") as temporary:
         old_path = Path(temporary) / "audit.py"
         old_path.write_text(old_source, encoding="utf-8")
+        (Path(temporary) / "address-contract.json").write_text(
+            old_table, encoding="utf-8",
+        )
         old = load_module("whi127_base_audit", old_path)
 
         newly_refused = []
@@ -79,10 +96,15 @@ def main():
         f"SUMMARY python={sys.version.split()[0]} rows={len(table['rows'])} "
         f"newly_refused={len(newly_refused)} newly_allowed={len(newly_allowed)}"
     )
-    if newly_refused:
-        print("NEWLY_REFUSED " + ",".join(newly_refused))
+    print("NEWLY_REFUSED " + ",".join(newly_refused))
     if newly_allowed:
         print("NEWLY_ALLOWED " + ",".join(newly_allowed), file=sys.stderr)
+        return 1
+    if newly_refused != EXPECTED_NEWLY_REFUSED:
+        print(
+            "expected newly refused rows " + ",".join(EXPECTED_NEWLY_REFUSED),
+            file=sys.stderr,
+        )
         return 1
     return 0
 

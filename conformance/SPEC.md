@@ -1,4 +1,4 @@
-# Amino Deliverability — Correctness Conformance Spec (v1.10)
+# Amino Deliverability — Correctness Conformance Spec (v1.11)
 
 **Status:** proposed · **Owner:** hireamino · **Canonical home:** `amino-skills/conformance/`
 
@@ -50,6 +50,16 @@ review. The corpus has no expectation regeneration mode; reviewed answers cannot
 replaced by current output.
 
 ## Current status
+
+**v1.11 / WHI-175 C3 — real HTTP checks and zone-qualified addresses:** the Python
+fixture runner now invokes the skill's shipping MTA-STS-policy and generic HTTPS
+readers. A shared deterministic seam replaces only `socket.create_connection()` and
+`ssl.create_default_context()`, records the vetted endpoint, verified TLS context, SNI,
+and request path, and serves raw fixture HTTP; the runner no longer re-implements either
+reader. Address-contract 1.1 adds six IPv6-zone rows and explicitly refuses every
+zone-qualified address literal. Exactly four rows become newly refused relative to the
+reviewed base; no row becomes newly allowed. The table now has 120 rows and the Python
+runner is guarded by 39 mutation canaries.
 
 **v1.10 / WHI-127 C1 — one strict public-address contract:**
 `address-contract.json` is the single editable machine-readable contract for every
@@ -255,5 +265,5 @@ absent/unavailable pairs, lane coverage and address refusals plus seven WHI-127
 coverage cases), and five explicitly skipped
 pure/HTTP/wrapper cases covered by per-surface tests or later work. Each is
 language-neutral and every harness adapts it to its own resolver/HTTP mock without
-ambient network access. The Python runner is guarded by 34 mutation canaries; the
+ambient network access. The Python runner is guarded by 39 mutation canaries; the
 staged JavaScript runner remains guarded by 15 canaries on each consumer engine.

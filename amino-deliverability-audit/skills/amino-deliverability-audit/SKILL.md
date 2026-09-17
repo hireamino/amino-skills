@@ -65,6 +65,7 @@ trusted"), framed in business terms, not a pile of green/red dots.
    returns at least one A/AAAA answer and every answer is public under the reviewed
    IANA-derived address contract. Treat the resulting unavailable observation as evidence
    that was not safely obtainable; never work around the guard or fetch the URL yourself.
+   IPv6 zone-qualified address literals are refused.
 
 3. **Add forward-readiness judgment.** The scanner is deliberately conservative. Layer in
    the standards trajectory from `references/standards-radar.md` — DMARCbis, the

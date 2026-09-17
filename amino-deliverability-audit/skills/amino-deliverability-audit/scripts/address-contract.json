@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "sources": [
     {
       "name": "IANA IPv4 Special-Purpose Address Registry",
@@ -45,6 +45,7 @@
     "host": "allow only with at least one A or AAAA answer and every answer public",
     "unparseable": "refuse",
     "ipv4MappedIpv6": "judge as embedded IPv4 in every valid textual form",
+    "ipv6ZoneId": "refuse",
     "ipv6OutsidePublicWithin": "refuse"
   },
   "rows": [
@@ -161,6 +162,12 @@
     {"id": "list-public-multicast", "addresses": ["93.184.216.34", "224.0.0.1"], "expect": "refuse"},
     {"id": "list-public-nat64", "addresses": ["2606:4700::1111", "64:ff9b::7f00:1"], "expect": "refuse"},
     {"id": "list-public-mapped-loopback", "addresses": ["93.184.216.34", "0:0:0:0:0:ffff:7f00:1"], "expect": "refuse"},
-    {"id": "list-unparseable", "addresses": ["93.184.216.34", "not-an-ip"], "expect": "refuse"}
+    {"id": "list-unparseable", "addresses": ["93.184.216.34", "not-an-ip"], "expect": "refuse"},
+    {"id": "ipv6-zone-public-name", "addresses": ["2606:4700::1111%eth0"], "expect": "refuse"},
+    {"id": "ipv6-zone-public-numeric", "addresses": ["2606:4700::1111%1"], "expect": "refuse"},
+    {"id": "ipv6-zone-mapped-public", "addresses": ["::ffff:93.184.216.34%eth0"], "expect": "refuse"},
+    {"id": "list-public-ipv4-zone-ipv6", "addresses": ["93.184.216.34", "2606:4700::1111%eth0"], "expect": "refuse"},
+    {"id": "ipv6-zone-link-local", "addresses": ["fe80::1%eth0"], "expect": "refuse"},
+    {"id": "ipv4-zone-text", "addresses": ["93.184.216.34%eth0"], "expect": "refuse"}
   ]
 }

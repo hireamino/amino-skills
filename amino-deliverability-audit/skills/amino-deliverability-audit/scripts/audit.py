@@ -104,6 +104,8 @@ def host_public_ips(host):
     out = []
     for raw in addresses:
         text = raw.strip()
+        if "%" in text:
+            return []
         try:
             address = ipaddress.ip_address(text)
         except ValueError:

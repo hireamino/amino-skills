@@ -242,7 +242,8 @@ until you choose to apply a fix yourself.
 Before any domain-controlled HTTPS fetch, the scanner requires at least one A/AAAA
 answer and requires every answer to be public under its reviewed IANA-derived address
 contract. Mixed, unparseable, mapped-private, translated-private, and other non-public
-answers are refused rather than fetched.
+answers are refused rather than fetched. IPv6 zone-qualified address literals are
+refused.
 
 ### How is this different from a free DMARC checker?
 
