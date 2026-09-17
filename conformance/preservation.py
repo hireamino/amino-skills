@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Prove existing contract-fixture outputs are unchanged from the reviewed base."""
+"""Prove WHI-176 changes only reviewed finding-lane values from its base."""
 
+from collections import Counter
 import hashlib
 import importlib.util
 import json
@@ -12,11 +13,15 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
-BASE = "34a8fcb35f40ef4340b67be8f95f05ca6a3839e5"
+BASE = "59b8a630884e8c3ea992e2a521056c968caa789d"
 FIXTURES_PATH = "conformance/fixtures.json"
 TABLE_PATH = "conformance/address-contract.json"
-PROTECTED_PATHS = ("conformance/run.mjs", "conformance/canary.mjs")
 ORIGINAL_FIXTURE_COUNT = 45
+MOVED_AREA_LANES = {
+    "CAA": "brand_optional",
+    "DNSSEC": "outside_sending_posture",
+    "Reputation": "outside_sending_posture",
+}
 
 
 def canonical(value):
@@ -25,42 +30,35 @@ def canonical(value):
     ).encode()
 
 
-def raw_fixture_objects(source):
-    """Return each fixture object's exact source bytes, without JSON reserialization."""
-    marker = '"fixtures": ['
-    position = source.index(marker) + len(marker)
-    objects = []
-    while position < len(source):
-        while position < len(source) and source[position] in " \t\r\n,":
-            position += 1
-        if position >= len(source) or source[position] == "]":
-            break
-        if source[position] != "{":
-            raise ValueError(f"unexpected fixture token at offset {position}")
-        start = position
-        depth = 0
-        quoted = escaped = False
-        while position < len(source):
-            character = source[position]
-            if quoted:
-                if escaped:
-                    escaped = False
-                elif character == "\\":
-                    escaped = True
-                elif character == '"':
-                    quoted = False
-            elif character == '"':
-                quoted = True
-            elif character == "{":
-                depth += 1
-            elif character == "}":
-                depth -= 1
-                if depth == 0:
-                    position += 1
-                    objects.append(source[start:position].encode())
-                    break
-            position += 1
-    return objects
+def changes(old, new, path=()):
+    """Yield every semantic leaf change with its path."""
+    if type(old) is not type(new):
+        yield path, old, new
+    elif isinstance(old, dict):
+        for key in sorted(set(old) | set(new)):
+            if key not in old or key not in new:
+                yield path + (key,), old.get(key), new.get(key)
+            else:
+                yield from changes(old[key], new[key], path + (key,))
+    elif isinstance(old, list):
+        if len(old) != len(new):
+            yield path + ("length",), len(old), len(new)
+        for index, (old_item, new_item) in enumerate(zip(old, new)):
+            yield from changes(old_item, new_item, path + (index,))
+    elif old != new:
+        yield path, old, new
+
+
+def lane_counts(document):
+    return Counter(
+        finding["lane"]
+        for fixture in document["fixtures"]
+        for finding in fixture.get("expect", {}).get("findings", [])
+    )
+
+
+def shown_counts(counts):
+    return ",".join(f"{key}:{counts[key]}" for key in sorted(counts))
 
 
 def snapshot(repository):
@@ -123,25 +121,47 @@ def main():
         capture_output=True,
         check=True,
     ).stdout
-    old_fixture_objects = raw_fixture_objects(old_fixtures_source)
-    new_fixture_objects = raw_fixture_objects(
-        (ROOT / FIXTURES_PATH).read_text(encoding="utf-8")
-    )
-    changed_fixture_bytes = [
-        index for index, old_object in enumerate(old_fixture_objects)
-        if old_object != new_fixture_objects[index]
-    ]
-    fixture_bytes = b"\0".join(new_fixture_objects[:ORIGINAL_FIXTURE_COUNT])
-    fixture_digest = hashlib.sha256(fixture_bytes).hexdigest()
-    print(
-        f"FIXTURE_BYTES objects={len(old_fixture_objects)} "
-        f"changed={len(changed_fixture_bytes)} sha256={fixture_digest}"
-    )
-    if changed_fixture_bytes:
-        print(
-            "CHANGED_FIXTURE_BYTES " + ",".join(map(str, changed_fixture_bytes)),
-            file=sys.stderr,
+    old_fixture_document = json.loads(old_fixtures_source)
+    new_fixture_source = (ROOT / FIXTURES_PATH).read_text(encoding="utf-8")
+    new_fixture_document = json.loads(new_fixture_source)
+    fixture_changes = list(changes(old_fixture_document, new_fixture_document))
+    changed_areas = Counter()
+    invalid_fixture_changes = []
+    for path, old, new in fixture_changes:
+        valid_path = (
+            len(path) == 6
+            and path[0] == "fixtures"
+            and isinstance(path[1], int)
+            and path[2] == "expect"
+            and path[3] == "findings"
+            and isinstance(path[4], int)
+            and path[5] == "lane"
         )
+        if not valid_path:
+            invalid_fixture_changes.append((path, old, new))
+            continue
+        finding = old_fixture_document["fixtures"][path[1]]["expect"]["findings"][path[4]]
+        area = finding.get("area")
+        if area not in MOVED_AREA_LANES or old != MOVED_AREA_LANES[area] or new != "domain_posture":
+            invalid_fixture_changes.append((path, old, new))
+            continue
+        changed_areas[area] += 1
+    changed_keys = Counter(path[-1] for path, _old, _new in fixture_changes)
+    fixture_digest = hashlib.sha256(new_fixture_source.encode()).hexdigest()
+    print(
+        f"FIXTURE_CHANGE_PROOF fixtures={len(new_fixture_document['fixtures'])} "
+        f"changed_keys={len(fixture_changes)} keys={shown_counts(changed_keys)} "
+        f"areas={shown_counts(changed_areas)} sha256={fixture_digest}"
+    )
+    print(
+        f"LANE_COUNTS_BEFORE {shown_counts(lane_counts(old_fixture_document))}"
+    )
+    print(
+        f"LANE_COUNTS_AFTER {shown_counts(lane_counts(new_fixture_document))}"
+    )
+    if invalid_fixture_changes:
+        for path, old, new in invalid_fixture_changes:
+            print(f"UNEXPECTED_FIXTURE_CHANGE {path}: {old!r} -> {new!r}", file=sys.stderr)
         return 1
 
     old_table = json.loads(subprocess.run(
@@ -152,42 +172,14 @@ def main():
         check=True,
     ).stdout)
     new_table = json.loads((ROOT / TABLE_PATH).read_text(encoding="utf-8"))
-    protected_table_fields = (
-        "ipv4NonPublic", "ipv6PublicWithin",
-        "ipv6NonPublicWithinPublic", "ipv4MappedWithin",
-    )
-    table_fields_unchanged = all(
-        old_table[field] == new_table[field] for field in protected_table_fields
-    )
-    old_rows_unchanged = (
-        len(old_table["rows"]) == 114
-        and new_table["rows"][:114] == old_table["rows"]
-    )
+    table_unchanged = old_table == new_table
     print(
         "ADDRESS_TABLE_PRESERVATION "
-        f"networks={'unchanged' if table_fields_unchanged else 'changed'} "
-        f"old_rows={'unchanged' if old_rows_unchanged else 'changed'} "
+        f"unchanged={str(table_unchanged).lower()} "
         f"old={len(old_table['rows'])} new={len(new_table['rows'])}"
     )
-    if not table_fields_unchanged or not old_rows_unchanged:
+    if not table_unchanged:
         return 1
-
-    for protected_path in PROTECTED_PATHS:
-        old_bytes = subprocess.run(
-            ["git", "show", f"{BASE}:{protected_path}"],
-            cwd=ROOT,
-            capture_output=True,
-            check=True,
-        ).stdout
-        new_bytes = (ROOT / protected_path).read_bytes()
-        unchanged = old_bytes == new_bytes
-        print(
-            f"PROTECTED_BYTES path={protected_path} "
-            f"unchanged={str(unchanged).lower()} "
-            f"sha256={hashlib.sha256(new_bytes).hexdigest()}"
-        )
-        if not unchanged:
-            return 1
 
     with tempfile.TemporaryDirectory(prefix="amino-whi127-preservation-") as temporary:
         temporary = Path(temporary)
@@ -212,17 +204,46 @@ def main():
 
     old_outputs = json.loads(old_snapshot)
     new_outputs = json.loads(new_snapshot)
-    changed = [
-        fixture_id for fixture_id in old_outputs
-        if old_outputs[fixture_id] != new_outputs.get(fixture_id)
-    ]
+    output_changes = list(changes(old_outputs, new_outputs))
+    invalid_output_changes = []
+    changed_fixtures = set()
+    changed_output_areas = Counter()
+    for path, old, new in output_changes:
+        valid_path = (
+            len(path) == 5
+            and isinstance(path[0], str)
+            and path[1] == "result"
+            and path[2] == "findings"
+            and isinstance(path[3], int)
+            and path[4] == "lane"
+        )
+        if not valid_path:
+            invalid_output_changes.append((path, old, new))
+            continue
+        old_finding = old_outputs[path[0]]["result"]["findings"][path[3]]
+        new_finding = new_outputs[path[0]]["result"]["findings"][path[3]]
+        area = old_finding.get("area")
+        if (
+            area not in MOVED_AREA_LANES
+            or new_finding.get("area") != area
+            or old != MOVED_AREA_LANES[area]
+            or new != "domain_posture"
+        ):
+            invalid_output_changes.append((path, old, new))
+            continue
+        changed_fixtures.add(path[0])
+        changed_output_areas[area] += 1
+    output_keys = Counter(path[-1] for path, _old, _new in output_changes)
     digest = hashlib.sha256(new_snapshot).hexdigest()
     print(
-        f"PRESERVATION fixtures={len(new_outputs)} changed={len(changed)} "
+        f"PRESERVATION fixtures={len(new_outputs)} "
+        f"changed_fixtures={len(changed_fixtures)} changed_keys={len(output_changes)} "
+        f"keys={shown_counts(output_keys)} areas={shown_counts(changed_output_areas)} "
         f"sha256={digest}"
     )
-    if changed:
-        print("CHANGED " + ",".join(changed), file=sys.stderr)
+    if invalid_output_changes:
+        for path, old, new in invalid_output_changes:
+            print(f"UNEXPECTED_OUTPUT_CHANGE {path}: {old!r} -> {new!r}", file=sys.stderr)
         return 1
     if len(new_outputs) != 40:
         print(

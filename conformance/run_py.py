@@ -28,7 +28,10 @@ NETWORK_ATTEMPTS = []
 HTTP_CALLS = {}
 HTTP_REJECTS = []
 CONTRACT_MODES = {"dns-engine", "http-observation"}
-LANES = {"outbound_auth", "inbound_transport", "brand_optional", "outside_sending_posture"}
+LANES = {
+    "outbound_auth", "inbound_transport", "domain_posture",
+    "brand_optional", "outside_sending_posture",
+}
 OBSERVATION_KEYS = {"mta_sts_policy", "robots", "rdap"}
 OBSERVATION_STATES = {"checked", "unavailable", "not_applicable"}
 

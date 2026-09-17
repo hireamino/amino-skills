@@ -92,7 +92,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -102,7 +102,7 @@
             "value": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           }
         ],
         "score": {
@@ -224,7 +224,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -232,7 +232,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           }
         ],
         "score": {
@@ -346,7 +346,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -354,7 +354,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "DKIM",
@@ -484,7 +484,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -492,7 +492,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           }
         ],
         "score": {
@@ -614,7 +614,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -622,7 +622,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           }
         ],
         "score": {
@@ -736,7 +736,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -744,7 +744,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "DMARC",
@@ -874,7 +874,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -882,7 +882,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           }
         ],
         "score": {
@@ -1010,7 +1010,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -1018,7 +1018,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "DMARC",
@@ -1140,7 +1140,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -1148,7 +1148,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "DMARC",
@@ -1270,7 +1270,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -1278,7 +1278,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "SPF",
@@ -1413,7 +1413,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -1421,7 +1421,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "SPF",
@@ -1573,7 +1573,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "DNSSEC",
@@ -1581,7 +1581,7 @@
             "severity": "pass",
             "action": null,
             "fixIncludes": null,
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "Transport",
@@ -1717,7 +1717,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "Transport",
@@ -1733,7 +1733,7 @@
             "severity": "pass",
             "action": null,
             "fixIncludes": null,
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "Transport",
@@ -1869,7 +1869,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "DNSSEC",
@@ -1877,7 +1877,7 @@
             "severity": "pass",
             "action": null,
             "fixIncludes": null,
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           }
         ],
         "score": {
@@ -1998,7 +1998,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -2006,7 +2006,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           }
         ],
         "score": {
@@ -2110,7 +2110,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -2118,7 +2118,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "SPF",
@@ -2283,7 +2283,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -2291,7 +2291,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "SPF",
@@ -2423,7 +2423,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -2431,7 +2431,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "SPF",
@@ -2610,7 +2610,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -2618,7 +2618,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "SPF",
@@ -2806,7 +2806,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -2814,7 +2814,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "SPF",
@@ -2986,7 +2986,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -2994,7 +2994,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "SPF",
@@ -3156,7 +3156,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -3164,7 +3164,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "SPF",
@@ -3323,7 +3323,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -3331,7 +3331,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "SPF",
@@ -3493,7 +3493,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -3501,7 +3501,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "SPF",
@@ -3660,7 +3660,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -3668,7 +3668,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "SPF",
@@ -3824,7 +3824,7 @@
             "severity": "medium",
             "action": "Warm up the domain before scaling sends",
             "fixIncludes": "Warm up gradually — start low-volume to engaged recipients and ramp over weeks before scaling.",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "DKIM",
@@ -3864,7 +3864,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "AI visibility",
@@ -3888,7 +3888,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "Transport",
@@ -4050,7 +4050,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -4058,7 +4058,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "SPF",
@@ -4223,7 +4223,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -4231,7 +4231,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "SPF",
@@ -4408,7 +4408,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -4416,7 +4416,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "SPF",
@@ -4556,7 +4556,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "Transport",
@@ -4572,7 +4572,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "MTA-STS",
@@ -4731,7 +4731,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "Transport",
@@ -4747,7 +4747,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "MTA-STS",
@@ -4914,7 +4914,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "Transport",
@@ -4930,7 +4930,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "Transport",
@@ -5050,7 +5050,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -5058,7 +5058,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "SPF",
@@ -5237,7 +5237,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -5245,7 +5245,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "SPF",
@@ -5407,7 +5407,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -5415,7 +5415,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "SPF",
@@ -5577,7 +5577,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -5585,7 +5585,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "SPF",
@@ -5717,7 +5717,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -5725,7 +5725,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "SPF",
@@ -5921,7 +5921,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -5929,7 +5929,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "SPF",
@@ -6091,7 +6091,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -6099,7 +6099,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "SPF",
@@ -6275,7 +6275,7 @@
             "severity": "low",
             "action": "Enable DNSSEC",
             "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
-            "lane": "outside_sending_posture"
+            "lane": "domain_posture"
           },
           {
             "area": "CAA",
@@ -6283,7 +6283,7 @@
             "severity": "low",
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
-            "lane": "brand_optional"
+            "lane": "domain_posture"
           },
           {
             "area": "SPF",

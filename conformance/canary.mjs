@@ -47,19 +47,25 @@ if (declaredContractVersion === "1.1.0") {
 import * as legacy from "./phase-a-legacy-engine.mjs";
 const AREA_LANES = Object.freeze({
   SPF: "outbound_auth",
-  DKIM: "outbound_auth", DMARC: "outbound_auth",
-  "MTA-STS": "inbound_transport", "TLS-RPT": "inbound_transport",
-  Transport: "inbound_transport", MX: "inbound_transport",
-  BIMI: "brand_optional", CAA: "brand_optional",
-  DNSSEC: "outside_sending_posture", "AI visibility": "outside_sending_posture",
-  Reputation: "outside_sending_posture",
+  DKIM: "outbound_auth",
+  DMARC: "outbound_auth",
+  "MTA-STS": "inbound_transport",
+  "TLS-RPT": "inbound_transport",
+  Transport: "inbound_transport",
+  MX: "inbound_transport",
+  BIMI: "brand_optional",
+  CAA: "domain_posture",
+  DNSSEC: "domain_posture",
+  "AI visibility": "outside_sending_posture",
+  Reputation: "domain_posture",
 });
 const BUCKET_LANES = Object.freeze({ SPF: "outbound_auth", DKIM: "outbound_auth",
   DMARC: "outbound_auth", DMARC_enforced: "outbound_auth", DMARC_rua: "outbound_auth",
   MTA_STS: "inbound_transport", TLS_RPT: "inbound_transport",
   DANE: "inbound_transport", BIMI: "brand_optional" });
 function laneForFinding(finding) {
-  if (finding.area === "Transport" && (finding.title || "").toLowerCase().includes("reverse dns")) {
+  const title = (finding.title || "").toLowerCase();
+  if (finding.area === "Transport" && title.includes("reverse dns")) {
     return "outside_sending_posture";
   }
   if (!AREA_LANES[finding.area]) throw new Error("unknown finding area has no lane: " + finding.area);
@@ -70,7 +76,9 @@ export async function auditDomain(domain, q) {
   for (const finding of result.findings || []) finding.lane = laneForFinding(finding);
   const observations = domain.startsWith("mta-sts-policy-")
     ? { mta_sts_policy: "checked", robots: "checked", rdap: "checked" }
-    : { mta_sts_policy: "not_applicable", robots: "unavailable", rdap: "unavailable" };
+    : domain === "lane-coverage.example"
+      ? { mta_sts_policy: "not_applicable", robots: "checked", rdap: "checked" }
+      : { mta_sts_policy: "not_applicable", robots: "unavailable", rdap: "unavailable" };
   const observation = observations.mta_sts_policy;
   observations.mta_sts_policy = observation;
   return { ...result, observations };
@@ -133,6 +141,15 @@ function expectRed(name, source, fixture, expectedText, runnerPath = runner) {
   );
   if (ok) passed++;
   else failed++;
+}
+
+function requireGreen(name, source, fixture, runnerPath = runner) {
+  const result = execute(source, fixture, runnerPath);
+  const output = (result.stdout || "") + (result.stderr || "");
+  if (result.status !== 0) {
+    throw new Error(`${name}: healthy control failed\nexit=${result.status}\n${output.trim()}`);
+  }
+  console.log(`CONTROL ${name} — healthy target passes`);
 }
 
 try {
@@ -329,6 +346,51 @@ try {
     'mta-sts-policy-absent.observations: expected {"mta_sts_policy":"checked","robots":"checked","rdap":"checked"}, got {"mta_sts_policy":"unavailable","robots":"checked","rdap":"checked"}',
   );
 
+  requireGreen(
+    "WHI-176 five-lane contract",
+    contractEngine,
+    "lane-closed-world-coverage",
+  );
+
+  const revertedCaaLane = replaceExactlyOnce(
+    contractEngine,
+    '  CAA: "domain_posture",',
+    '  CAA: "brand_optional",',
+    "CAA domain-posture lane",
+  );
+  expectRed(
+    "R CAA reverted to brand optional",
+    revertedCaaLane,
+    "lane-closed-world-coverage",
+    'lane-closed-world-coverage.findings[CAA|No CAA records].lane: expected "domain_posture", got "brand_optional"',
+  );
+
+  const revertedDnssecLane = replaceExactlyOnce(
+    contractEngine,
+    '  DNSSEC: "domain_posture",',
+    '  DNSSEC: "outside_sending_posture",',
+    "DNSSEC domain-posture lane",
+  );
+  expectRed(
+    "S DNSSEC reverted to outside sending posture",
+    revertedDnssecLane,
+    "lane-closed-world-coverage",
+    'lane-closed-world-coverage.findings[DNSSEC|DNSSEC not enabled].lane: expected "domain_posture", got "outside_sending_posture"',
+  );
+
+  const removedReverseDnsException = replaceExactlyOnce(
+    contractEngine,
+    '  if (finding.area === "Transport" && title.includes("reverse dns")) {',
+    '  if (false) { // WHI-176 removed reverse-DNS exception canary',
+    "reverse-DNS lane exception",
+  );
+  expectRed(
+    "T removed reverse-DNS lane exception",
+    removedReverseDnsException,
+    "lane-closed-world-coverage",
+    'lane-closed-world-coverage.findings[Transport|Mail server has no reverse DNS (PTR)].lane: expected "outside_sending_posture", got "inbound_transport"',
+  );
+
   const originalRunner = readFileSync(runner, "utf8");
   const stubbedRunner = replaceExactlyOnce(
     originalRunner,
@@ -352,9 +414,9 @@ try {
   rmSync(temporary, { recursive: true, force: true });
 }
 
-console.log(`\nCanaries (${surface}): ${passed} passed, ${failed} failed; expected 15 cases.`);
-if (passed + failed !== 15) {
-  console.error(`FAIL  canary count: expected 15, got ${passed + failed}`);
+console.log(`\nCanaries (${surface}): ${passed} passed, ${failed} failed; expected 18 cases.`);
+if (passed + failed !== 18) {
+  console.error(`FAIL  canary count: expected 18, got ${passed + failed}`);
   process.exit(1);
 }
 process.exit(failed ? 1 : 0);

@@ -34,7 +34,10 @@ if (typeof engine.auditDomain !== "function" || typeof engine.buckets !== "funct
 }
 let { fixtures } = JSON.parse(readFileSync(resolve(here, "fixtures.json"), "utf8"));
 const CONTRACT_MODES = new Set(["dns-engine", "http-observation"]);
-const LANES = new Set(["outbound_auth", "inbound_transport", "brand_optional", "outside_sending_posture"]);
+const LANES = new Set([
+  "outbound_auth", "inbound_transport", "domain_posture",
+  "brand_optional", "outside_sending_posture",
+]);
 const OBSERVATION_KEYS = ["mta_sts_policy", "rdap", "robots"];
 const OBSERVATION_STATES = new Set(["checked", "unavailable", "not_applicable"]);
 const onlyFixture = process.env.CONFORMANCE_FIXTURE;
