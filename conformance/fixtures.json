@@ -131,7 +131,7 @@
         },
         "observations": {
           "mta_sts_policy": "not_applicable",
-          "robots": "unavailable",
+          "robots": "not_applicable",
           "rdap": "unavailable"
         }
       }
@@ -261,7 +261,7 @@
         },
         "observations": {
           "mta_sts_policy": "not_applicable",
-          "robots": "unavailable",
+          "robots": "not_applicable",
           "rdap": "unavailable"
         }
       }
@@ -391,7 +391,7 @@
         },
         "observations": {
           "mta_sts_policy": "not_applicable",
-          "robots": "unavailable",
+          "robots": "not_applicable",
           "rdap": "unavailable"
         }
       }
@@ -521,7 +521,7 @@
         },
         "observations": {
           "mta_sts_policy": "not_applicable",
-          "robots": "unavailable",
+          "robots": "not_applicable",
           "rdap": "unavailable"
         }
       }
@@ -651,7 +651,7 @@
         },
         "observations": {
           "mta_sts_policy": "not_applicable",
-          "robots": "unavailable",
+          "robots": "not_applicable",
           "rdap": "unavailable"
         }
       }
@@ -781,7 +781,7 @@
         },
         "observations": {
           "mta_sts_policy": "not_applicable",
-          "robots": "unavailable",
+          "robots": "not_applicable",
           "rdap": "unavailable"
         }
       }
@@ -911,7 +911,7 @@
         },
         "observations": {
           "mta_sts_policy": "not_applicable",
-          "robots": "unavailable",
+          "robots": "not_applicable",
           "rdap": "unavailable"
         }
       }
@@ -1055,7 +1055,7 @@
         },
         "observations": {
           "mta_sts_policy": "not_applicable",
-          "robots": "unavailable",
+          "robots": "not_applicable",
           "rdap": "unavailable"
         }
       }
@@ -1185,7 +1185,7 @@
         },
         "observations": {
           "mta_sts_policy": "not_applicable",
-          "robots": "unavailable",
+          "robots": "not_applicable",
           "rdap": "unavailable"
         }
       }
@@ -1315,7 +1315,7 @@
         },
         "observations": {
           "mta_sts_policy": "not_applicable",
-          "robots": "unavailable",
+          "robots": "not_applicable",
           "rdap": "unavailable"
         }
       }
@@ -1458,7 +1458,7 @@
         },
         "observations": {
           "mta_sts_policy": "not_applicable",
-          "robots": "unavailable",
+          "robots": "not_applicable",
           "rdap": "unavailable"
         }
       }
@@ -1625,7 +1625,7 @@
         },
         "observations": {
           "mta_sts_policy": "not_applicable",
-          "robots": "unavailable",
+          "robots": "not_applicable",
           "rdap": "unavailable"
         }
       }
@@ -1777,7 +1777,7 @@
         },
         "observations": {
           "mta_sts_policy": "not_applicable",
-          "robots": "unavailable",
+          "robots": "not_applicable",
           "rdap": "unavailable"
         }
       }
@@ -1906,7 +1906,7 @@
         },
         "observations": {
           "mta_sts_policy": "not_applicable",
-          "robots": "unavailable",
+          "robots": "not_applicable",
           "rdap": "unavailable"
         }
       }
@@ -2035,7 +2035,7 @@
         },
         "observations": {
           "mta_sts_policy": "not_applicable",
-          "robots": "unavailable",
+          "robots": "not_applicable",
           "rdap": "unavailable"
         }
       }
@@ -2180,7 +2180,7 @@
         },
         "observations": {
           "mta_sts_policy": "not_applicable",
-          "robots": "unavailable",
+          "robots": "not_applicable",
           "rdap": "unavailable"
         }
       }
@@ -2336,7 +2336,7 @@
         },
         "observations": {
           "mta_sts_policy": "not_applicable",
-          "robots": "unavailable",
+          "robots": "not_applicable",
           "rdap": "unavailable"
         }
       }
@@ -2492,7 +2492,7 @@
         },
         "observations": {
           "mta_sts_policy": "not_applicable",
-          "robots": "unavailable",
+          "robots": "not_applicable",
           "rdap": "unavailable"
         }
       }
@@ -2663,7 +2663,7 @@
         },
         "observations": {
           "mta_sts_policy": "not_applicable",
-          "robots": "unavailable",
+          "robots": "not_applicable",
           "rdap": "unavailable"
         }
       }
@@ -2727,7 +2727,8 @@
           },
           "rdap": {
             "status": 404,
-            "body": ""
+            "body": "",
+            "data": null
           }
         }
       },
@@ -2907,7 +2908,8 @@
           },
           "rdap": {
             "status": 404,
-            "body": ""
+            "body": "",
+            "data": null
           }
         }
       },
@@ -3077,7 +3079,8 @@
           },
           "rdap": {
             "status": 404,
-            "body": ""
+            "body": "",
+            "data": null
           }
         }
       },
@@ -3244,7 +3247,8 @@
           "robots": "unavailable",
           "rdap": {
             "status": 404,
-            "body": ""
+            "body": "",
+            "data": null
           }
         }
       },
@@ -3414,7 +3418,8 @@
           },
           "rdap": {
             "status": 404,
-            "body": ""
+            "body": "",
+            "data": null
           }
         }
       },
@@ -3582,7 +3587,7 @@
             "status": 404,
             "body": ""
           },
-          "rdap": "unavailable"
+          "rdap": null
         }
       },
       "expect": {
@@ -3756,12 +3761,14 @@
           "rdap": {
             "status": 200,
             "body": "{\"events\":[{\"eventAction\":\"registration\",\"eventDate\":\"2025-12-15T00:00:00Z\"}]}",
-            "events": [
-              {
-                "eventAction": "registration",
-                "eventDate": "2025-12-15T00:00:00Z"
-              }
-            ]
+            "data": {
+              "events": [
+                {
+                  "eventAction": "registration",
+                  "eventDate": "2025-12-15T00:00:00Z"
+                }
+              ]
+            }
           }
         }
       },
@@ -3971,7 +3978,8 @@
           },
           "rdap": {
             "status": 404,
-            "body": ""
+            "body": "",
+            "data": null
           }
         }
       },
@@ -4144,7 +4152,8 @@
           },
           "rdap": {
             "status": 404,
-            "body": ""
+            "body": "",
+            "data": null
           }
         }
       },
@@ -4329,7 +4338,8 @@
           },
           "rdap": {
             "status": 404,
-            "body": ""
+            "body": "",
+            "data": null
           }
         }
       },
@@ -4475,20 +4485,30 @@
         "domain": "mta-sts-lookup.invalid",
         "dns": {
           "mta-sts-lookup.invalid": {
-            "TXT": ["v=spf1 -all"],
-            "MX": ["10 mx.mta-sts-lookup.invalid."]
+            "TXT": [
+              "v=spf1 -all"
+            ],
+            "MX": [
+              "10 mx.mta-sts-lookup.invalid."
+            ]
           },
           "_dmarc.mta-sts-lookup.invalid": {
-            "TXT": ["v=DMARC1; p=reject"]
+            "TXT": [
+              "v=DMARC1; p=reject"
+            ]
           },
           "_mta-sts.mta-sts-lookup.invalid": {
             "status": 2
           },
           "mx.mta-sts-lookup.invalid": {
-            "A": ["192.0.2.10"]
+            "A": [
+              "192.0.2.10"
+            ]
           },
           "mta-sts.mta-sts-lookup.invalid": {
-            "A": ["93.184.216.34"]
+            "A": [
+              "93.184.216.34"
+            ]
           }
         },
         "http": {
@@ -4501,9 +4521,15 @@
       },
       "expect": {
         "present": [
-          {"area": "MTA-STS", "includes": "Unable to confirm MTA-STS policy"}
+          {
+            "area": "MTA-STS",
+            "includes": "Unable to confirm MTA-STS policy"
+          }
         ],
-        "absent": ["No MTA-STS policy", "MTA-STS present"],
+        "absent": [
+          "No MTA-STS policy",
+          "MTA-STS present"
+        ],
         "findings": [
           {
             "area": "DMARC",
@@ -4519,7 +4545,9 @@
             "severity": "medium",
             "action": "Confirm STARTTLS on the mail server",
             "fixIncludes": "Verify the MX offers STARTTLS with a valid certificate.",
-            "surfaces": ["skill"],
+            "surfaces": [
+              "skill"
+            ],
             "notApplicable": {
               "web": "The edge engine cannot open port 25 for a live STARTTLS probe.",
               "action": "The vendored JS engine intentionally omits live port-25 STARTTLS probing."
@@ -4636,7 +4664,7 @@
         },
         "observations": {
           "mta_sts_policy": "unavailable",
-          "robots": "unavailable",
+          "robots": "not_applicable",
           "rdap": "unavailable"
         }
       }
@@ -4650,20 +4678,30 @@
         "domain": "mta-sts-lookup.invalid",
         "dns": {
           "mta-sts-lookup.invalid": {
-            "TXT": ["v=spf1 -all"],
-            "MX": ["10 mx.mta-sts-lookup.invalid."]
+            "TXT": [
+              "v=spf1 -all"
+            ],
+            "MX": [
+              "10 mx.mta-sts-lookup.invalid."
+            ]
           },
           "_dmarc.mta-sts-lookup.invalid": {
-            "TXT": ["v=DMARC1; p=reject"]
+            "TXT": [
+              "v=DMARC1; p=reject"
+            ]
           },
           "_mta-sts.mta-sts-lookup.invalid": {
             "status": 5
           },
           "mx.mta-sts-lookup.invalid": {
-            "A": ["192.0.2.10"]
+            "A": [
+              "192.0.2.10"
+            ]
           },
           "mta-sts.mta-sts-lookup.invalid": {
-            "A": ["93.184.216.34"]
+            "A": [
+              "93.184.216.34"
+            ]
           }
         },
         "http": {
@@ -4676,9 +4714,15 @@
       },
       "expect": {
         "present": [
-          {"area": "MTA-STS", "includes": "Unable to confirm MTA-STS policy"}
+          {
+            "area": "MTA-STS",
+            "includes": "Unable to confirm MTA-STS policy"
+          }
         ],
-        "absent": ["No MTA-STS policy", "MTA-STS present"],
+        "absent": [
+          "No MTA-STS policy",
+          "MTA-STS present"
+        ],
         "findings": [
           {
             "area": "DMARC",
@@ -4694,7 +4738,9 @@
             "severity": "medium",
             "action": "Confirm STARTTLS on the mail server",
             "fixIncludes": "Verify the MX offers STARTTLS with a valid certificate.",
-            "surfaces": ["skill"],
+            "surfaces": [
+              "skill"
+            ],
             "notApplicable": {
               "web": "The edge engine cannot open port 25 for a live STARTTLS probe.",
               "action": "The vendored JS engine intentionally omits live port-25 STARTTLS probing."
@@ -4811,7 +4857,7 @@
         },
         "observations": {
           "mta_sts_policy": "unavailable",
-          "robots": "unavailable",
+          "robots": "not_applicable",
           "rdap": "unavailable"
         }
       }
@@ -4825,20 +4871,30 @@
         "domain": "mta-sts-lookup.invalid",
         "dns": {
           "mta-sts-lookup.invalid": {
-            "TXT": ["v=spf1 -all"],
-            "MX": ["10 mx.mta-sts-lookup.invalid."]
+            "TXT": [
+              "v=spf1 -all"
+            ],
+            "MX": [
+              "10 mx.mta-sts-lookup.invalid."
+            ]
           },
           "_dmarc.mta-sts-lookup.invalid": {
-            "TXT": ["v=DMARC1; p=reject"]
+            "TXT": [
+              "v=DMARC1; p=reject"
+            ]
           },
           "_mta-sts.mta-sts-lookup.invalid": {
             "status": 3
           },
           "mx.mta-sts-lookup.invalid": {
-            "A": ["192.0.2.10"]
+            "A": [
+              "192.0.2.10"
+            ]
           },
           "mta-sts.mta-sts-lookup.invalid": {
-            "A": ["93.184.216.34"]
+            "A": [
+              "93.184.216.34"
+            ]
           }
         },
         "http": {
@@ -4851,9 +4907,15 @@
       },
       "expect": {
         "present": [
-          {"area": "MTA-STS", "includes": "No MTA-STS policy"}
+          {
+            "area": "MTA-STS",
+            "includes": "No MTA-STS policy"
+          }
         ],
-        "absent": ["Unable to confirm MTA-STS policy", "MTA-STS present"],
+        "absent": [
+          "Unable to confirm MTA-STS policy",
+          "MTA-STS present"
+        ],
         "findings": [
           {
             "area": "DMARC",
@@ -4877,7 +4939,9 @@
             "severity": "medium",
             "action": "Confirm STARTTLS on the mail server",
             "fixIncludes": "Verify the MX offers STARTTLS with a valid certificate.",
-            "surfaces": ["skill"],
+            "surfaces": [
+              "skill"
+            ],
             "notApplicable": {
               "web": "The edge engine cannot open port 25 for a live STARTTLS probe.",
               "action": "The vendored JS engine intentionally omits live port-25 STARTTLS probing."
@@ -4983,7 +5047,7 @@
         },
         "observations": {
           "mta_sts_policy": "not_applicable",
-          "robots": "unavailable",
+          "robots": "not_applicable",
           "rdap": "unavailable"
         }
       }
@@ -4997,11 +5061,17 @@
         "domain": "nomail.invalid",
         "dns": {
           "nomail.invalid": {
-            "TXT": ["v=spf1 -all"],
-            "MX": ["0 ."]
+            "TXT": [
+              "v=spf1 -all"
+            ],
+            "MX": [
+              "0 ."
+            ]
           },
           "_dmarc.nomail.invalid": {
-            "TXT": ["v=DMARC1; p=reject"]
+            "TXT": [
+              "v=DMARC1; p=reject"
+            ]
           },
           "_mta-sts.nomail.invalid": {
             "status": 2
@@ -5010,8 +5080,14 @@
       },
       "expect": {
         "present": [
-          {"area": "MTA-STS", "includes": "not applicable"},
-          {"area": "Transport", "includes": "Null MX"}
+          {
+            "area": "MTA-STS",
+            "includes": "not applicable"
+          },
+          {
+            "area": "Transport",
+            "includes": "Null MX"
+          }
         ],
         "absent": [
           "Unable to confirm MTA-STS policy",
@@ -5120,7 +5196,7 @@
         },
         "observations": {
           "mta_sts_policy": "not_applicable",
-          "robots": "unavailable",
+          "robots": "not_applicable",
           "rdap": "unavailable"
         }
       }
@@ -5158,7 +5234,8 @@
           },
           "rdap": {
             "status": 404,
-            "body": ""
+            "body": "",
+            "data": null
           }
         }
       },
@@ -5328,7 +5405,8 @@
           },
           "rdap": {
             "status": 404,
-            "body": ""
+            "body": "",
+            "data": null
           }
         }
       },
@@ -5498,7 +5576,8 @@
           },
           "rdap": {
             "status": 404,
-            "body": ""
+            "body": "",
+            "data": null
           }
         }
       },
@@ -5787,7 +5866,7 @@
         },
         "observations": {
           "mta_sts_policy": "not_applicable",
-          "robots": "unavailable",
+          "robots": "not_applicable",
           "rdap": "unavailable"
         },
         "httpCalls": {
@@ -5842,7 +5921,8 @@
           },
           "rdap": {
             "status": 404,
-            "body": ""
+            "body": "",
+            "data": null
           }
         }
       },
@@ -6012,7 +6092,8 @@
           },
           "rdap": {
             "status": 404,
-            "body": ""
+            "body": "",
+            "data": null
           }
         }
       },
@@ -6196,7 +6277,8 @@
           },
           "rdap": {
             "status": 404,
-            "body": ""
+            "body": "",
+            "data": null
           }
         }
       },

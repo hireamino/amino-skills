@@ -1,4 +1,4 @@
-# Amino Deliverability — Correctness Conformance Spec (v1.12)
+# Amino Deliverability — Correctness Conformance Spec (v1.13)
 
 **Status:** proposed · **Owner:** hireamino · **Canonical home:** `amino-skills/conformance/`
 
@@ -50,6 +50,20 @@ review. The corpus has no expectation regeneration mode; reviewed answers cannot
 replaced by current output.
 
 ## Current status
+
+**v1.13 / WHI-176 Step 1b — website observation split and one RDAP port shape:**
+the website/robots check now reports `not_applicable` when the apex has no A or
+AAAA answers at all from authoritative DNS responses. A failed A or AAAA lookup,
+answers that exist but are refused by the public-address contract, and an attempted
+fetch that fails all remain `unavailable`. MTA-STS is
+deliberately different: once `_mta-sts` TXT advertises a policy, a policy host
+with no address or refused answers is a broken promise and stays `unavailable`.
+The RDAP fixture port is exactly `{status, data}` or `null`; `body` remains in the
+fixture only for the Python raw-HTTP surface, and the engine's tolerant bare-object
+branch is removed in contract 1.4.0. The 45-fixture corpus is unchanged in size:
+24 existing no-apex-address rows flip only `observations.robots`, while the
+private-address and attempted-fetch rows remain `unavailable`. Python mutation
+canaries rise from 42 to 46; the staged JavaScript count remains 18.
 
 **v1.12 / WHI-176 Step 1 — Domain posture lane:** the finding-lane enum is now
 the closed five-value set `outbound_auth | inbound_transport | domain_posture |
@@ -135,7 +149,9 @@ trustworthy response was obtained. `not_applicable` means the operation was
 intentionally skipped because its prerequisite does not apply (for example no
 advertised MTA-STS TXT or a true null MX). This metadata does not replace or weaken
 the existing DNS `inconclusive` contract. Robots and the MTA-STS policy fetch run only
-after their host resolves to a public address; no public address means `unavailable`.
+after their host resolves to a public address. For robots, no A/AAAA answers means
+`not_applicable`, while refused answers mean `unavailable`; for an advertised
+MTA-STS policy host, either condition remains `unavailable`.
 Three absent/unavailable pairs (six fixtures) prove that the states remain distinct
 without changing findings, scores, or ordering. A separate
 closed-world lane fixture exercises all 12 finding areas plus the reverse-DNS title
@@ -284,5 +300,5 @@ absent/unavailable pairs, lane coverage and address refusals plus seven WHI-127
 coverage cases), and five explicitly skipped
 pure/HTTP/wrapper cases covered by per-surface tests or later work. Each is
 language-neutral and every harness adapts it to its own resolver/HTTP mock without
-ambient network access. The Python runner is guarded by 39 mutation canaries; the
-staged JavaScript runner remains guarded by 15 canaries on each consumer engine.
+ambient network access. The Python runner is guarded by 46 mutation canaries; the
+staged JavaScript runner remains guarded by 18 canaries on each consumer engine.

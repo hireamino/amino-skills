@@ -572,6 +572,126 @@ try:
         )
 
     require_green(
+        "WHI-176 robots no-address observation",
+        execute({"CONFORMANCE_FIXTURE": "dkim-revoked-empty-p"}),
+    )
+    with tempfile.TemporaryDirectory(prefix="amino-whi176-no-address-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '    if address_state == "no_answers":\n',
+            '    if False:  # WHI-176 old no-address observation canary\n',
+            "robots no-address observation split",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red_comparison(
+            "WHI-176 treated no address answers as unavailable",
+            execute_with_scripts(target, {
+                "CONFORMANCE_FIXTURE": "dkim-revoked-empty-p",
+            }),
+            "dkim-revoked-empty-p.observations: expected {'mta_sts_policy': "
+            "'not_applicable', 'robots': 'not_applicable', 'rdap': 'unavailable'}, "
+            "got {'mta_sts_policy': 'not_applicable', 'robots': 'unavailable', "
+            "'rdap': 'unavailable'}",
+        )
+
+    require_green(
+        "WHI-176 robots refused-address observation",
+        execute({"CONFORMANCE_FIXTURE": "robots-shared-address-refused"}),
+    )
+    with tempfile.TemporaryDirectory(prefix="amino-whi176-refused-address-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '    if address_state == "no_answers":\n',
+            '    if address_state in ("no_answers", "refused"):  # WHI-176 conflation canary\n',
+            "robots refused-address observation split",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red_comparison(
+            "WHI-176 treated refused address answers as not applicable",
+            execute_with_scripts(target, {
+                "CONFORMANCE_FIXTURE": "robots-shared-address-refused",
+            }),
+            "robots-shared-address-refused.observations: expected "
+            "{'mta_sts_policy': 'not_applicable', 'robots': 'unavailable', "
+            "'rdap': 'checked'}, got {'mta_sts_policy': 'not_applicable', "
+            "'robots': 'not_applicable', 'rdap': 'checked'}",
+        )
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi176-mta-host-none-") as temporary:
+        conformance = Path(temporary) / "conformance"
+        scripts = Path(temporary) / "scripts"
+        conformance.mkdir()
+        scripts.mkdir()
+        corpus = json.loads((HERE / "fixtures.json").read_text(encoding="utf-8"))
+        remove_fixture_address(
+            corpus,
+            "mta-sts-policy-unavailable",
+            "mta-sts.mta-sts-policy-unavailable.invalid",
+        )
+        (conformance / "fixtures.json").write_text(
+            json.dumps(corpus, indent=2) + "\n", encoding="utf-8"
+        )
+        no_address_env = {"CONFORMANCE_FIXTURE": "mta-sts-policy-unavailable"}
+        require_green(
+            "WHI-176 MTA-STS no-address remains unavailable",
+            execute_with_conformance(conformance, no_address_env),
+        )
+        for filename in ("audit.py", "batch_score.py", "resolver.py"):
+            shutil.copyfile(SCRIPTS / filename, scripts / filename)
+        audit_path = scripts / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '            raise OSError("mta-sts host does not resolve to a public IP")  # SSRF guard\n',
+            '            return "not_applicable", None  # WHI-176 MTA-STS conflation canary\n',
+            "MTA-STS no-address observation",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red_comparison(
+            "WHI-176 treated missing MTA-STS policy host as not applicable",
+            execute_in_repository(
+                no_address_env, scripts=scripts, conformance=conformance,
+            ),
+            "mta-sts-policy-unavailable.observations: expected "
+            "{'mta_sts_policy': 'unavailable', 'robots': 'checked', "
+            "'rdap': 'checked'}, got {'mta_sts_policy': 'not_applicable', "
+            "'robots': 'checked', 'rdap': 'checked'}",
+        )
+
+    require_green("WHI-176 RDAP fixture port shape", execute_check())
+    with tempfile.TemporaryDirectory(prefix="amino-whi176-rdap-shape-") as temporary:
+        conformance = Path(temporary)
+        corpus = json.loads((HERE / "fixtures.json").read_text(encoding="utf-8"))
+        matches = [
+            fixture for fixture in corpus["fixtures"]
+            if fixture["id"] == "lane-closed-world-coverage"
+        ]
+        if len(matches) != 1:
+            raise AssertionError("RDAP fixture mutation anchor must occur exactly once")
+        rdap = matches[0]["input"]["http"]["rdap"]
+        if set(rdap.get("data", {})) != {"events"}:
+            raise AssertionError("RDAP data mutation anchor must contain events exactly once")
+        rdap["events"] = rdap.pop("data")["events"]
+        (conformance / "fixtures.json").write_text(
+            json.dumps(corpus, indent=2) + "\n", encoding="utf-8"
+        )
+        expect_red_comparison(
+            "WHI-176 put the RDAP payload at the top level",
+            execute_in_repository(conformance=conformance, check=True),
+            "FAIL WHI-176 RDAP fixture port shape",
+        )
+
+    require_green(
         "WHI-176 five-lane contract",
         execute({"CONFORMANCE_FIXTURE": "lane-closed-world-coverage"}),
     )
@@ -658,7 +778,7 @@ try:
             }),
             "robots-absent.observations: expected {'mta_sts_policy': 'not_applicable', "
             "'robots': 'checked', 'rdap': 'checked'}, got {'mta_sts_policy': "
-            "'not_applicable', 'robots': 'unavailable', 'rdap': 'checked'}",
+            "'not_applicable', 'robots': 'not_applicable', 'rdap': 'checked'}",
         )
 
     with tempfile.TemporaryDirectory(prefix="amino-whi79-mta-sts-reachability-") as temporary:
@@ -778,7 +898,7 @@ try:
         source = replace_exactly_once(
             source,
             '        if not allowed:\n'
-            '            return []\n',
+            '            return [], "refused"\n',
             '        if not allowed:\n'
             '            continue  # WHI-127 public-subset canary\n',
             "whole-host refusal",
@@ -973,7 +1093,7 @@ try:
             execute_with_scripts(target, _servfail_env),
             (
                 "mta-sts-lookup-servfail.findings[MTA-STS|Unable to confirm MTA-STS policy].identity: expected finding, got missing",
-                "mta-sts-lookup-servfail.observations: expected {'mta_sts_policy': 'unavailable', 'robots': 'unavailable', 'rdap': 'unavailable'}, got {'mta_sts_policy': 'not_applicable', 'robots': 'unavailable', 'rdap': 'unavailable'}",
+                "mta-sts-lookup-servfail.observations: expected {'mta_sts_policy': 'unavailable', 'robots': 'not_applicable', 'rdap': 'unavailable'}, got {'mta_sts_policy': 'not_applicable', 'robots': 'not_applicable', 'rdap': 'unavailable'}",
             ),
         )
 
@@ -996,7 +1116,7 @@ try:
             execute_with_scripts(target, _nxdomain_env),
             (
                 "mta-sts-lookup-nxdomain-control.findings[MTA-STS|No MTA-STS policy].identity: expected finding, got missing",
-                "mta-sts-lookup-nxdomain-control.observations: expected {'mta_sts_policy': 'not_applicable', 'robots': 'unavailable', 'rdap': 'unavailable'}, got {'mta_sts_policy': 'unavailable', 'robots': 'unavailable', 'rdap': 'unavailable'}",
+                "mta-sts-lookup-nxdomain-control.observations: expected {'mta_sts_policy': 'not_applicable', 'robots': 'not_applicable', 'rdap': 'unavailable'}, got {'mta_sts_policy': 'unavailable', 'robots': 'not_applicable', 'rdap': 'unavailable'}",
             ),
         )
 
@@ -1187,9 +1307,9 @@ try:
         source = replace_exactly_once(
             source,
             '        if "%" in text:\n'
-            '            return []\n',
+            '            return [], "refused"\n',
             '        if False and "%" in text:  # WHI-175 removed zone-id refusal canary\n'
-            '            return []\n',
+            '            return [], "refused"\n',
             "IPv6 zone-identifier refusal",
         )
         audit_path.write_text(source, encoding="utf-8")
@@ -1204,8 +1324,8 @@ except Exception as error:
     print(f"FAIL  canary setup — {error}")
     FAILED += 1
 
-print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 42 cases.")
-if PASSED + FAILED != 42:
-    print(f"FAIL  canary count: expected 42, got {PASSED + FAILED}", file=sys.stderr)
+print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 46 cases.")
+if PASSED + FAILED != 46:
+    print(f"FAIL  canary count: expected 46, got {PASSED + FAILED}", file=sys.stderr)
     sys.exit(1)
 sys.exit(1 if FAILED else 0)

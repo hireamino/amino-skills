@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Prove WHI-176 changes only reviewed finding-lane values from its base."""
+"""Prove WHI-176 Step 1b changes only the reviewed contract surfaces."""
 
 from collections import Counter
+import copy
 import hashlib
 import importlib.util
 import json
@@ -13,15 +14,21 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
-BASE = "59b8a630884e8c3ea992e2a521056c968caa789d"
+BASE = "2a9c4eb3d2b53c6207d92f08bb6ab31af0a2d578"
 FIXTURES_PATH = "conformance/fixtures.json"
 TABLE_PATH = "conformance/address-contract.json"
 ORIGINAL_FIXTURE_COUNT = 45
-MOVED_AREA_LANES = {
-    "CAA": "brand_optional",
-    "DNSSEC": "outside_sending_posture",
-    "Reputation": "outside_sending_posture",
-}
+EXPECTED_ROBOTS_FLIPS = (
+    "dkim-revoked-empty-p", "dkim-ed25519-badlen", "dkim-rsa-good",
+    "dkim-rsa1024-weak", "dmarc-banana-invalid", "dmarc-uppercase-tags",
+    "dmarc-none-monitor", "dmarc-multiple-void", "dmarc-subdomain-treewalk",
+    "spf-dash-all-uppercase", "spf-over-10-lookups", "dane-unvalidated-tlsa",
+    "dane-validated-tlsa", "dnssec-signed-zonecut", "dnssec-unsigned",
+    "null-mx-not-applicable", "no-mx-not-exempt", "bimi-present-without-vmc",
+    "ambiguous-null-mx-not-exempt", "mta-sts-lookup-servfail",
+    "mta-sts-lookup-refused", "mta-sts-lookup-nxdomain-control",
+    "mta-sts-lookup-servfail-null-mx", "mta-sts-null-mx-with-txt",
+)
 
 
 def canonical(value):
@@ -59,6 +66,30 @@ def lane_counts(document):
 
 def shown_counts(counts):
     return ",".join(f"{key}:{counts[key]}" for key in sorted(counts))
+
+
+def normalized_fixture_document(document, undo_observation_split=False):
+    """Normalize the reviewed RDAP storage re-key without hiding other changes."""
+    normalized = copy.deepcopy(document)
+    for fixture in normalized["fixtures"]:
+        http = fixture.get("input", {}).get("http", {})
+        if "rdap" in http:
+            rdap = http["rdap"]
+            if rdap == "unavailable":
+                http["rdap"] = None
+            elif isinstance(rdap, dict):
+                extras = {
+                    key: value for key, value in rdap.items()
+                    if key not in {"status", "body", "data"}
+                }
+                http["rdap"] = {
+                    "status": rdap.get("status"),
+                    "body": rdap.get("body"),
+                    "data": rdap.get("data", extras or None),
+                }
+        if undo_observation_split and fixture["id"] in EXPECTED_ROBOTS_FLIPS:
+            fixture["expect"]["observations"]["robots"] = "unavailable"
+    return normalized
 
 
 def snapshot(repository):
@@ -125,33 +156,50 @@ def main():
     new_fixture_source = (ROOT / FIXTURES_PATH).read_text(encoding="utf-8")
     new_fixture_document = json.loads(new_fixture_source)
     fixture_changes = list(changes(old_fixture_document, new_fixture_document))
-    changed_areas = Counter()
-    invalid_fixture_changes = []
-    for path, old, new in fixture_changes:
-        valid_path = (
-            len(path) == 6
-            and path[0] == "fixtures"
-            and isinstance(path[1], int)
-            and path[2] == "expect"
-            and path[3] == "findings"
-            and isinstance(path[4], int)
-            and path[5] == "lane"
-        )
-        if not valid_path:
-            invalid_fixture_changes.append((path, old, new))
+    old_ids = [fixture["id"] for fixture in old_fixture_document["fixtures"]]
+    new_ids = [fixture["id"] for fixture in new_fixture_document["fixtures"]]
+    normalized_old = normalized_fixture_document(old_fixture_document)
+    normalized_new = normalized_fixture_document(
+        new_fixture_document, undo_observation_split=True,
+    )
+    normalized_changes = list(changes(normalized_old, normalized_new))
+    actual_flips = set()
+    old_by_id = {fixture["id"]: fixture for fixture in old_fixture_document["fixtures"]}
+    for fixture in new_fixture_document["fixtures"]:
+        fixture_id = fixture["id"]
+        if fixture_id not in old_by_id:
             continue
-        finding = old_fixture_document["fixtures"][path[1]]["expect"]["findings"][path[4]]
-        area = finding.get("area")
-        if area not in MOVED_AREA_LANES or old != MOVED_AREA_LANES[area] or new != "domain_posture":
-            invalid_fixture_changes.append((path, old, new))
+        old_observations = old_by_id[fixture_id].get("expect", {}).get("observations")
+        new_observations = fixture.get("expect", {}).get("observations")
+        if old_observations is None and new_observations is None:
             continue
-        changed_areas[area] += 1
+        old_state = old_observations["robots"]
+        new_state = new_observations["robots"]
+        if old_state != new_state:
+            if (old_state, new_state) != ("unavailable", "not_applicable"):
+                normalized_changes.append(
+                    ((fixture_id, "expect", "observations", "robots"), old_state, new_state)
+                )
+            actual_flips.add(fixture_id)
+    expected_flips = set(EXPECTED_ROBOTS_FLIPS)
+    if actual_flips != expected_flips:
+        normalized_changes.append((
+            ("robots_flip_set",), sorted(expected_flips), sorted(actual_flips),
+        ))
+    if old_ids != new_ids:
+        normalized_changes.append((("fixture_ids",), old_ids, new_ids))
     changed_keys = Counter(path[-1] for path, _old, _new in fixture_changes)
+    rdap_changes = sum(
+        len(path) >= 5 and path[0] == "fixtures"
+        and path[2:5] == ("input", "http", "rdap")
+        for path, _old, _new in fixture_changes
+    )
     fixture_digest = hashlib.sha256(new_fixture_source.encode()).hexdigest()
     print(
         f"FIXTURE_CHANGE_PROOF fixtures={len(new_fixture_document['fixtures'])} "
         f"changed_keys={len(fixture_changes)} keys={shown_counts(changed_keys)} "
-        f"areas={shown_counts(changed_areas)} sha256={fixture_digest}"
+        f"robots_flips={len(actual_flips)} rdap_rekeys={rdap_changes} "
+        f"sha256={fixture_digest}"
     )
     print(
         f"LANE_COUNTS_BEFORE {shown_counts(lane_counts(old_fixture_document))}"
@@ -159,8 +207,11 @@ def main():
     print(
         f"LANE_COUNTS_AFTER {shown_counts(lane_counts(new_fixture_document))}"
     )
-    if invalid_fixture_changes:
-        for path, old, new in invalid_fixture_changes:
+    if lane_counts(old_fixture_document) != lane_counts(new_fixture_document):
+        print("UNEXPECTED_LANE_COUNT_CHANGE", file=sys.stderr)
+        return 1
+    if normalized_changes:
+        for path, old, new in normalized_changes:
             print(f"UNEXPECTED_FIXTURE_CHANGE {path}: {old!r} -> {new!r}", file=sys.stderr)
         return 1
 
@@ -207,43 +258,40 @@ def main():
     output_changes = list(changes(old_outputs, new_outputs))
     invalid_output_changes = []
     changed_fixtures = set()
-    changed_output_areas = Counter()
     for path, old, new in output_changes:
         valid_path = (
-            len(path) == 5
+            len(path) == 4
             and isinstance(path[0], str)
             and path[1] == "result"
-            and path[2] == "findings"
-            and isinstance(path[3], int)
-            and path[4] == "lane"
+            and path[2] == "observations"
+            and path[3] == "robots"
+            and path[0] in EXPECTED_ROBOTS_FLIPS
+            and old == "unavailable"
+            and new == "not_applicable"
         )
         if not valid_path:
             invalid_output_changes.append((path, old, new))
             continue
-        old_finding = old_outputs[path[0]]["result"]["findings"][path[3]]
-        new_finding = new_outputs[path[0]]["result"]["findings"][path[3]]
-        area = old_finding.get("area")
-        if (
-            area not in MOVED_AREA_LANES
-            or new_finding.get("area") != area
-            or old != MOVED_AREA_LANES[area]
-            or new != "domain_posture"
-        ):
-            invalid_output_changes.append((path, old, new))
-            continue
         changed_fixtures.add(path[0])
-        changed_output_areas[area] += 1
     output_keys = Counter(path[-1] for path, _old, _new in output_changes)
     digest = hashlib.sha256(new_snapshot).hexdigest()
     print(
         f"PRESERVATION fixtures={len(new_outputs)} "
         f"changed_fixtures={len(changed_fixtures)} changed_keys={len(output_changes)} "
-        f"keys={shown_counts(output_keys)} areas={shown_counts(changed_output_areas)} "
+        f"keys={shown_counts(output_keys)} "
         f"sha256={digest}"
     )
     if invalid_output_changes:
         for path, old, new in invalid_output_changes:
             print(f"UNEXPECTED_OUTPUT_CHANGE {path}: {old!r} -> {new!r}", file=sys.stderr)
+        return 1
+    if changed_fixtures != set(EXPECTED_ROBOTS_FLIPS):
+        print(
+            "UNEXPECTED_OUTPUT_FLIP_SET expected="
+            + ",".join(EXPECTED_ROBOTS_FLIPS)
+            + " got=" + ",".join(sorted(changed_fixtures)),
+            file=sys.stderr,
+        )
         return 1
     if len(new_outputs) != 40:
         print(

@@ -69,10 +69,14 @@ function mockQ(dns, http = {}, nowMs = 1767225600000) {
   };
   const response = (name) => http[name] === "unavailable" || http[name] === undefined
     ? null : structuredClone(http[name]);
+  const rdapResponse = () => {
+    const value = response("rdap");
+    return value === null ? null : { status: value.status, data: value.data };
+  };
   q.http = {
     mtaSts: async () => response("mta_sts_policy"),
     robots: async () => response("robots"),
-    rdap: async () => response("rdap"),
+    rdap: async () => rdapResponse(),
   };
   q.clock = { nowMs: () => nowMs };
   return q;
