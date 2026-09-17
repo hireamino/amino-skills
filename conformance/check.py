@@ -694,8 +694,8 @@ _CAPPED_HTTP = _http_get_probe(
     _HTTP_PRIMARY_DNS,
     cap=4096,
 )
-chk("WHI-175 HTTP body cap returns at most the cap",
-    len(_CAPPED_HTTP["body"]) <= 4096, True)
+chk("WHI-175 HTTP body cap pins the capped raw-response behavior",
+    len(_CAPPED_HTTP["body"]), 4072)
 chk("WHI-175 HTTP body cap transport",
     {key: value for key, value in _CAPPED_HTTP.items() if key != "body"},
     {"status": 200, **_HTTP_PRIMARY_TRACE})
