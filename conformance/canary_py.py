@@ -571,6 +571,77 @@ try:
             "'robots': 'checked', 'rdap': 'checked'}",
         )
 
+    require_green(
+        "WHI-176 five-lane contract",
+        execute({"CONFORMANCE_FIXTURE": "lane-closed-world-coverage"}),
+    )
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi176-caa-lane-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '    "CAA": "domain_posture",\n',
+            '    "CAA": "brand_optional",\n',
+            "CAA domain-posture lane",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red_comparison(
+            "WHI-176 CAA reverted to brand optional",
+            execute_with_scripts(target, {
+                "CONFORMANCE_FIXTURE": "lane-closed-world-coverage",
+            }),
+            "lane-closed-world-coverage.findings[CAA|No CAA records].lane: "
+            "expected 'domain_posture', got 'brand_optional'",
+        )
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi176-dnssec-lane-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '    "DNSSEC": "domain_posture",\n',
+            '    "DNSSEC": "outside_sending_posture",\n',
+            "DNSSEC domain-posture lane",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red_comparison(
+            "WHI-176 DNSSEC reverted to outside sending posture",
+            execute_with_scripts(target, {
+                "CONFORMANCE_FIXTURE": "lane-closed-world-coverage",
+            }),
+            "lane-closed-world-coverage.findings[DNSSEC|DNSSEC not enabled].lane: "
+            "expected 'domain_posture', got 'outside_sending_posture'",
+        )
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi176-reverse-dns-lane-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '    if area == "Transport" and "reverse dns" in title:\n',
+            '    if False:  # WHI-176 removed reverse-DNS exception canary\n',
+            "reverse-DNS lane exception",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red_comparison(
+            "WHI-176 removed reverse-DNS lane exception",
+            execute_with_scripts(target, {
+                "CONFORMANCE_FIXTURE": "lane-closed-world-coverage",
+            }),
+            "lane-closed-world-coverage.findings[Transport|Mail server has no reverse DNS (PTR)].lane: "
+            "expected 'outside_sending_posture', got 'inbound_transport'",
+        )
+
     with tempfile.TemporaryDirectory(prefix="amino-whi79-robots-reachability-") as temporary:
         target = Path(temporary)
         runner = target / "run_py.py"
@@ -1133,8 +1204,8 @@ except Exception as error:
     print(f"FAIL  canary setup — {error}")
     FAILED += 1
 
-print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 39 cases.")
-if PASSED + FAILED != 39:
-    print(f"FAIL  canary count: expected 39, got {PASSED + FAILED}", file=sys.stderr)
+print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 42 cases.")
+if PASSED + FAILED != 42:
+    print(f"FAIL  canary count: expected 42, got {PASSED + FAILED}", file=sys.stderr)
     sys.exit(1)
 sys.exit(1 if FAILED else 0)

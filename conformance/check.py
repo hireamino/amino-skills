@@ -286,10 +286,10 @@ _EXPECTED_AREA_LANES = {
     "SPF": "outbound_auth", "DKIM": "outbound_auth", "DMARC": "outbound_auth",
     "MTA-STS": "inbound_transport", "TLS-RPT": "inbound_transport",
     "Transport": "inbound_transport", "MX": "inbound_transport",
-    "BIMI": "brand_optional", "CAA": "brand_optional",
-    "DNSSEC": "outside_sending_posture",
+    "BIMI": "brand_optional", "CAA": "domain_posture",
+    "DNSSEC": "domain_posture",
     "AI visibility": "outside_sending_posture",
-    "Reputation": "outside_sending_posture",
+    "Reputation": "domain_posture",
 }
 _EXPECTED_BUCKET_LANES = {
     "SPF": "outbound_auth", "DKIM": "outbound_auth", "DMARC": "outbound_auth",
@@ -298,7 +298,8 @@ _EXPECTED_BUCKET_LANES = {
     "DANE": "inbound_transport", "BIMI": "brand_optional",
 }
 chk("WHI-79 lane enum is closed", audit.LANES,
-    ("outbound_auth", "inbound_transport", "brand_optional", "outside_sending_posture"))
+    ("outbound_auth", "inbound_transport", "domain_posture",
+     "brand_optional", "outside_sending_posture"))
 chk("WHI-79 all 12 finding areas have one lane", audit.AREA_LANES, _EXPECTED_AREA_LANES)
 chk("WHI-79 reverse-DNS Transport finding is outside sending posture",
     audit.lane_for_finding({"area": "Transport", "title": "Mail server has no reverse DNS (PTR)"}),

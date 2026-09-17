@@ -17,15 +17,10 @@ SCRIPTS = (
     / "amino-deliverability-audit"
     / "scripts"
 )
-BASE = "34a8fcb35f40ef4340b67be8f95f05ca6a3839e5"
+BASE = "59b8a630884e8c3ea992e2a521056c968caa789d"
 AUDIT_PATH = "amino-deliverability-audit/skills/amino-deliverability-audit/scripts/audit.py"
 TABLE_PATH = "amino-deliverability-audit/skills/amino-deliverability-audit/scripts/address-contract.json"
-EXPECTED_NEWLY_REFUSED = [
-    "ipv6-zone-public-name",
-    "ipv6-zone-public-numeric",
-    "ipv6-zone-mapped-public",
-    "list-public-ipv4-zone-ipv6",
-]
+EXPECTED_NEWLY_REFUSED = []
 
 
 def load_module(name, path):
@@ -97,8 +92,8 @@ def main():
         f"newly_refused={len(newly_refused)} newly_allowed={len(newly_allowed)}"
     )
     print("NEWLY_REFUSED " + ",".join(newly_refused))
+    print("NEWLY_ALLOWED " + ",".join(newly_allowed))
     if newly_allowed:
-        print("NEWLY_ALLOWED " + ",".join(newly_allowed), file=sys.stderr)
         return 1
     if newly_refused != EXPECTED_NEWLY_REFUSED:
         print(

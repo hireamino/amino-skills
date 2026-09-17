@@ -36,8 +36,8 @@ DOMAIN_RE = re.compile(r"^(?=.{1,253}$)(?!-)[a-z0-9-]{1,63}(?<!-)(?:\.(?!-)[a-z0
 # output instead of maintaining their own area map. The map is intentionally
 # closed: a new area requires an explicit contract decision.
 LANES = (
-    "outbound_auth", "inbound_transport", "brand_optional",
-    "outside_sending_posture",
+    "outbound_auth", "inbound_transport", "domain_posture",
+    "brand_optional", "outside_sending_posture",
 )
 AREA_LANES = {
     "SPF": "outbound_auth",
@@ -48,10 +48,10 @@ AREA_LANES = {
     "Transport": "inbound_transport",
     "MX": "inbound_transport",
     "BIMI": "brand_optional",
-    "CAA": "brand_optional",
-    "DNSSEC": "outside_sending_posture",
+    "CAA": "domain_posture",
+    "DNSSEC": "domain_posture",
     "AI visibility": "outside_sending_posture",
-    "Reputation": "outside_sending_posture",
+    "Reputation": "domain_posture",
 }
 OBSERVATION_STATES = ("checked", "unavailable", "not_applicable")
 

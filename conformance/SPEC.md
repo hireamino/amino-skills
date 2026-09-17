@@ -1,4 +1,4 @@
-# Amino Deliverability — Correctness Conformance Spec (v1.11)
+# Amino Deliverability — Correctness Conformance Spec (v1.12)
 
 **Status:** proposed · **Owner:** hireamino · **Canonical home:** `amino-skills/conformance/`
 
@@ -50,6 +50,25 @@ review. The corpus has no expectation regeneration mode; reviewed answers cannot
 replaced by current output.
 
 ## Current status
+
+**v1.12 / WHI-176 Step 1 — Domain posture lane:** the finding-lane enum is now
+the closed five-value set `outbound_auth | inbound_transport | domain_posture |
+brand_optional | outside_sending_posture`. The enum value
+`outside_sending_posture` is unchanged. Finding areas map as follows:
+
+| Lane | Finding areas |
+|---|---|
+| `outbound_auth` | SPF, DKIM, DMARC |
+| `inbound_transport` | MTA-STS, TLS-RPT, MX, Transport, except the reverse-DNS title exception |
+| `domain_posture` | DNSSEC, Reputation, CAA |
+| `brand_optional` | BIMI |
+| `outside_sending_posture` | AI visibility, and the reverse-DNS title exception |
+
+Reverse DNS stays outside sending posture because the PTR belongs to a receiving
+host, and DNS cannot show whether that host also sends. Unknown finding areas still
+fail closed. This lane-only contract revision deliberately raises the Python mutation
+canaries from 39 to 42 and the JavaScript mutation canaries from 15 to 18; finding
+text, severity, score, observations, address handling, and HTTP behavior are unchanged.
 
 **v1.11 / WHI-175 C3 — real HTTP checks and zone-qualified addresses:** the Python
 fixture runner now invokes the skill's shipping MTA-STS-policy and generic HTTPS
