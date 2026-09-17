@@ -21,10 +21,12 @@ SCRIPTS = os.path.abspath(DEFAULT_SCRIPTS)
 sys.path.insert(0, SCRIPTS)
 
 import resolver  # noqa: E402
+from socket_fixture import SocketTlsFixture, http_response  # noqa: E402
 
 
 NETWORK_ATTEMPTS = []
 HTTP_CALLS = {}
+HTTP_REJECTS = []
 CONTRACT_MODES = {"dns-engine", "http-observation"}
 LANES = {"outbound_auth", "inbound_transport", "brand_optional", "outside_sending_posture"}
 OBSERVATION_KEYS = {"mta_sts_policy", "robots", "rdap"}
@@ -67,6 +69,11 @@ def install_resolver(dns):
 
     def recs(name, rtype="A", *args, **kwargs):
         name = _norm(name)
+        # rdap.org is the shipping code's fixed public bootstrap host. The old
+        # runner bypassed this guard by replacing _http_get; keep the real guard
+        # in the path without requiring every fixture to repeat trusted-host DNS.
+        if name == "rdap.org" and rtype == "A":
+            return ["93.184.216.36"]
         if name in records and rtype in records[name]:
             return records[name][rtype]
         for key, value in records.items():
@@ -101,48 +108,45 @@ def install_resolver(dns):
     return recs
 
 
+def _fixture_http_name(domain, host):
+    if host == f"mta-sts.{domain}":
+        return "mta_sts_policy"
+    if host == domain:
+        return "robots"
+    if host == "rdap.org":
+        return "rdap"
+    return None
+
+
 def install_http(domain, http):
-    """Install deterministic HTTP observations; an omitted entry is unavailable."""
+    """Stub sockets/TLS while the shipping HTTP functions parse raw responses."""
     spec = http or {}
 
     def entry(name):
         value = spec.get(name, "unavailable")
         return None if value == "unavailable" else value
 
-    def fetch_mta_sts(domain):
-        HTTP_CALLS["mta_sts_policy"] = HTTP_CALLS.get("mta_sts_policy", 0) + 1
-        if not audit.host_public_ips(f"mta-sts.{domain}"):
-            return "unavailable", None
-        value = entry("mta_sts_policy")
-        if value is None:
-            return "unavailable", None
-        status = value.get("status")
-        content_type = value.get("contentType", "")
-        policy = value.get("body", "")[:8192] if (
-            status == 200 and content_type.lower().startswith("text/plain")
-        ) else None
-        return "checked", policy
-
-    def http_get(host, _path, follow=0, cap=65536):
-        del follow
-        # rdap.org is the fixed trusted bootstrap host. Match the engine adapter:
-        # fixture-backed RDAP bypasses the customer-controlled-host SSRF guard.
-        if host == "rdap.org":
-            name = "rdap"
-        elif host == domain:
-            name = "robots"
-        else:
-            return None, None
+    def response_for_host(host):
+        name = _fixture_http_name(domain, host)
+        if name is None:
+            HTTP_REJECTS.append(host)
+            raise AssertionError(f"fixture has no HTTP response for host {host}")
         HTTP_CALLS[name] = HTTP_CALLS.get(name, 0) + 1
-        if name != "rdap" and not audit.host_public_ips(host):
-            return None, None
         value = entry(name)
         if value is None:
-            return None, None
-        return value.get("status"), value.get("body", "")[:cap]
+            raise OSError(f"fixture HTTP unavailable for {host}")
+        if "contentType" in value:
+            return http_response(
+                value.get("status"),
+                value.get("body", ""),
+                content_type=value["contentType"],
+            )
+        return http_response(value.get("status"), value.get("body", ""))
 
-    audit._fetch_mta_sts_policy = fetch_mta_sts
-    audit._http_get = http_get
+    fixture = SocketTlsFixture(response_for_host)
+    audit.socket.create_connection = fixture.create_connection
+    audit.ssl.create_default_context = fixture.create_default_context
+    return fixture
 
 
 def unexpected_http_host_is_refused():
@@ -154,7 +158,9 @@ def unexpected_http_host_is_refused():
     install_http("expected.invalid", {
         "robots": {"status": 204, "body": "runner host-map canary"},
     })
-    return audit._http_get("unexpected.invalid", "/robots.txt") == (None, None)
+    HTTP_REJECTS.clear()
+    result = audit._http_get("unexpected.invalid", "/robots.txt")
+    return result == (None, None) and HTTP_REJECTS == ["unexpected.invalid"]
 
 
 def run_shipping_audit(domain):

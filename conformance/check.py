@@ -22,6 +22,7 @@ import audit  # noqa: E402
 import batch_score  # noqa: E402
 import resolver  # noqa: E402
 import verify  # noqa: E402
+from socket_fixture import SocketTlsFixture, http_response, request_path  # noqa: E402
 
 _SHIPPING_CONFIRM_TXT = audit.confirm_txt
 
@@ -326,9 +327,9 @@ _ADDRESS_CONTRACT_BYTES = _ADDRESS_CONTRACT_PATH.read_bytes()
 chk("WHI-127 shipped address contract is byte-identical to the canonical source",
     _SHIPPED_ADDRESS_CONTRACT_PATH.read_bytes() == _ADDRESS_CONTRACT_BYTES, True)
 _ADDRESS_CONTRACT = json.loads(_ADDRESS_CONTRACT_BYTES)
-chk("WHI-127 address contract version", _ADDRESS_CONTRACT.get("version"), "1.0.0")
-chk("WHI-127 address contract has at least 60 rows",
-    len(_ADDRESS_CONTRACT.get("rows", [])) >= 60, True)
+chk("WHI-175 address contract version", _ADDRESS_CONTRACT.get("version"), "1.1.0")
+chk("WHI-175 address contract has exactly 120 rows",
+    len(_ADDRESS_CONTRACT.get("rows", [])), 120)
 chk("WHI-127 address contract row ids are unique",
     len({row.get("id") for row in _ADDRESS_CONTRACT.get("rows", [])}),
     len(_ADDRESS_CONTRACT.get("rows", [])))
@@ -350,6 +351,8 @@ chk("WHI-127 IPv6 exclusions are exact",
     ["2001::/23", "2001:db8::/32", "2002::/16", "3fff::/20"])
 chk("WHI-127 IPv4-mapped range is exact",
     _ADDRESS_CONTRACT.get("ipv4MappedWithin"), ["::ffff:0:0/96"])
+chk("WHI-175 IPv6 zone identifiers are refused",
+    _ADDRESS_CONTRACT.get("rules", {}).get("ipv6ZoneId"), "refuse")
 chk("WHI-127 address contract cites the reviewed IANA registries",
     _ADDRESS_CONTRACT.get("sources"), [
         {
@@ -510,6 +513,200 @@ chk("WHI-79 detector MX STARTTLS blocks a private address",
     _mx_guard_probe(("10.0.0.5",)), (True, []))
 # CANARY-DETECTOR-END: mx-guard
 
+# WHI-175 — exercise the shipping HTTPS readers below DNS, at the socket/TLS seam.
+# These checks pin parsing and transport behavior together: a correct return value is
+# insufficient if it reached the wrong IP, skipped certificate verification, changed
+# SNI, or requested the wrong path.
+_HTTP_TEST_DOMAIN = "http-check.invalid"
+_HTTP_TEST_IP = "93.184.216.37"
+
+
+def _socket_trace(fixture):
+    return {
+        "connects": [
+            (entry["endpoint"], entry["timeout"]) for entry in fixture.connects
+        ],
+        "contexts": [context.factory for context in fixture.contexts],
+        "sni": [entry["server_hostname"] for entry in fixture.wraps],
+        "paths": [request_path(entry["request_line"]) for entry in fixture.requests],
+    }
+
+
+def _with_shipping_http(dns, responses, operation):
+    old_dig = audit.dig
+    old_connect = audit.socket.create_connection
+    old_default_context = audit.ssl.create_default_context
+    old_unverified_context = audit.ssl._create_unverified_context
+    fixture = SocketTlsFixture(lambda host: responses[host])
+    try:
+        audit.dig = lambda host, rrtype: list(dns.get((host, rrtype), ()))
+        audit.socket.create_connection = fixture.create_connection
+        audit.ssl.create_default_context = fixture.create_default_context
+        audit.ssl._create_unverified_context = fixture.create_unverified_context
+        result = operation()
+        return result, _socket_trace(fixture)
+    finally:
+        audit.dig = old_dig
+        audit.socket.create_connection = old_connect
+        audit.ssl.create_default_context = old_default_context
+        audit.ssl._create_unverified_context = old_unverified_context
+
+
+def _mta_sts_http_probe(response):
+    host = f"mta-sts.{_HTTP_TEST_DOMAIN}"
+    result, trace = _with_shipping_http(
+        {(host, "A"): (_HTTP_TEST_IP,)},
+        {host: response},
+        lambda: audit._fetch_mta_sts_policy(_HTTP_TEST_DOMAIN),
+    )
+    observation, policy = result
+    return {
+        "observation": observation,
+        "policy": len(policy) if policy is not None and len(policy) > 100 else policy,
+        **trace,
+    }
+
+
+_MTA_TRANSPORT = {
+    "connects": [((_HTTP_TEST_IP, 443), audit.SOCK_TIMEOUT)],
+    "contexts": ["default"],
+    "sni": [f"mta-sts.{_HTTP_TEST_DOMAIN}"],
+    "paths": ["/.well-known/mta-sts.txt"],
+}
+_MTA_STS_HTTP_ROWS = (
+    ("200 text/plain", http_response(200, "policy", content_type="text/plain"),
+     {"observation": "checked", "policy": "policy"}),
+    ("200 text/plain charset", http_response(
+        200, "policy", content_type="text/plain; charset=utf-8",
+    ), {"observation": "checked", "policy": "policy"}),
+    ("200 text/html", http_response(200, "policy", content_type="text/html"),
+     {"observation": "checked", "policy": None}),
+    ("200 no content-type", http_response(200, "policy"),
+     {"observation": "checked", "policy": None}),
+    ("404 text/plain", http_response(404, "policy", content_type="text/plain"),
+     {"observation": "checked", "policy": None}),
+    ("301 redirect", http_response(
+        301, "policy", content_type="text/plain",
+        headers={"Location": "https://elsewhere.invalid/policy"},
+    ), {"observation": "checked", "policy": None}),
+    ("non-HTTP response", b"not an HTTP response",
+     {"observation": "unavailable", "policy": None}),
+    ("connection error", OSError("fixture read failure"),
+     {"observation": "unavailable", "policy": None}),
+    ("8192-byte body cap", http_response(
+        200, "x" * 9000, content_type="text/plain",
+    ), {"observation": "checked", "policy": 8192}),
+)
+for _label, _response, _outcome in _MTA_STS_HTTP_ROWS:
+    chk(f"WHI-175 MTA-STS HTTP {_label}",
+        _mta_sts_http_probe(_response), {**_outcome, **_MTA_TRANSPORT})
+
+
+def _http_get_probe(host, path, response_map, dns, **kwargs):
+    result, trace = _with_shipping_http(
+        dns,
+        response_map,
+        lambda: audit._http_get(host, path, **kwargs),
+    )
+    status, body = result
+    return {"status": status, "body": body, **trace}
+
+
+_PUBLIC_REDIRECT = "redirect-public.invalid"
+_PRIVATE_REDIRECT = "redirect-private.invalid"
+_HTTP_PRIMARY_DNS = {(_HTTP_TEST_DOMAIN, "A"): (_HTTP_TEST_IP,)}
+_HTTP_PRIMARY_TRACE = {
+    "connects": [((_HTTP_TEST_IP, 443), audit.SOCK_TIMEOUT)],
+    "contexts": ["default"],
+    "sni": [_HTTP_TEST_DOMAIN],
+    "paths": ["/robots.txt"],
+}
+
+chk("WHI-175 HTTP 200 response",
+    _http_get_probe(
+        _HTTP_TEST_DOMAIN, "/robots.txt",
+        {_HTTP_TEST_DOMAIN: http_response(200, "body", content_type="text/plain")},
+        _HTTP_PRIMARY_DNS,
+    ),
+    {"status": 200, "body": "body", **_HTTP_PRIMARY_TRACE})
+chk("WHI-175 HTTP 404 response",
+    _http_get_probe(
+        _HTTP_TEST_DOMAIN, "/robots.txt",
+        {_HTTP_TEST_DOMAIN: http_response(404, "missing", content_type="text/plain")},
+        _HTTP_PRIMARY_DNS,
+    ),
+    {"status": 404, "body": "missing", **_HTTP_PRIMARY_TRACE})
+_REDIRECT_RESPONSE = http_response(
+    301, "redirect", headers={"Location": f"https://{_PUBLIC_REDIRECT}/next"},
+)
+chk("WHI-175 HTTP redirect follow=0",
+    _http_get_probe(
+        _HTTP_TEST_DOMAIN, "/robots.txt",
+        {_HTTP_TEST_DOMAIN: _REDIRECT_RESPONSE},
+        _HTTP_PRIMARY_DNS,
+        follow=0,
+    ),
+    {"status": 301, "body": "redirect", **_HTTP_PRIMARY_TRACE})
+chk("WHI-175 HTTP public redirect follow=1",
+    _http_get_probe(
+        _HTTP_TEST_DOMAIN, "/robots.txt",
+        {
+            _HTTP_TEST_DOMAIN: _REDIRECT_RESPONSE,
+            _PUBLIC_REDIRECT: http_response(200, "followed"),
+        },
+        {
+            **_HTTP_PRIMARY_DNS,
+            (_PUBLIC_REDIRECT, "A"): ("93.184.216.38",),
+        },
+        follow=1,
+    ),
+    {
+        "status": 200,
+        "body": "followed",
+        "connects": [
+            ((_HTTP_TEST_IP, 443), audit.SOCK_TIMEOUT),
+            (("93.184.216.38", 443), audit.SOCK_TIMEOUT),
+        ],
+        "contexts": ["default", "default"],
+        "sni": [_HTTP_TEST_DOMAIN, _PUBLIC_REDIRECT],
+        "paths": ["/robots.txt", "/next"],
+    })
+_PRIVATE_REDIRECT_RESPONSE = http_response(
+    301, "redirect", headers={"Location": f"https://{_PRIVATE_REDIRECT}/inside"},
+)
+chk("WHI-175 HTTP private redirect is refused before second connection",
+    _http_get_probe(
+        _HTTP_TEST_DOMAIN, "/robots.txt",
+        {
+            _HTTP_TEST_DOMAIN: _PRIVATE_REDIRECT_RESPONSE,
+            _PRIVATE_REDIRECT: http_response(200, "must not be fetched"),
+        },
+        {
+            **_HTTP_PRIMARY_DNS,
+            (_PRIVATE_REDIRECT, "A"): ("10.0.0.5",),
+        },
+        follow=1,
+    ),
+    {"status": None, "body": None, **_HTTP_PRIMARY_TRACE})
+_CAPPED_HTTP = _http_get_probe(
+    _HTTP_TEST_DOMAIN, "/robots.txt",
+    {_HTTP_TEST_DOMAIN: http_response(200, "x" * 9000)},
+    _HTTP_PRIMARY_DNS,
+    cap=4096,
+)
+chk("WHI-175 HTTP body cap pins the capped raw-response behavior",
+    len(_CAPPED_HTTP["body"]), 4072)
+chk("WHI-175 HTTP body cap transport",
+    {key: value for key, value in _CAPPED_HTTP.items() if key != "body"},
+    {"status": 200, **_HTTP_PRIMARY_TRACE})
+chk("WHI-175 HTTP connection error",
+    _http_get_probe(
+        _HTTP_TEST_DOMAIN, "/robots.txt",
+        {_HTTP_TEST_DOMAIN: OSError("fixture read failure")},
+        _HTTP_PRIMARY_DNS,
+    ),
+    {"status": None, "body": None, **_HTTP_PRIMARY_TRACE})
+
 # A non-pass fixture with no remediation would let /audit render an action in its
 # plan and "no action needed" in its evidence row for the same finding.
 with open(os.path.join(HERE, "fixtures.json"), encoding="utf-8") as _handle:
@@ -535,6 +732,8 @@ chk("§7.4 label does not name reject", "reject" in audit.action(_pnone).lower()
 _SRC = open(os.path.join(SCRIPTS, "audit.py"), encoding="utf-8").read()
 chk("WHI-127 shipping helper loads the generated address table",
     'with _ADDRESS_CONTRACT_PATH.open(encoding="utf-8")' in _SRC, True)
+chk("WHI-175 shipping helper refuses zone-qualified address literals",
+    'if "%" in text:\n            return []' in _SRC, True)
 for _flag in (
     ".is_private", ".is_reserved", ".is_global", ".is_multicast",
     ".is_loopback", ".is_link_local", ".is_unspecified",
@@ -595,16 +794,21 @@ chk("WHI-79 CI runs for Python engine/scorer changes",
 chk("WHI-79 CI includes Python 3.12", "python-version: ['3.12', '3.14']" in _WF, True)
 chk("WHI-79 CI includes Python 3.14", "python-version: ['3.12', '3.14']" in _WF, True)
 _RUNNER = open(os.path.join(HERE, "run_py.py"), encoding="utf-8").read()
-chk("WHI-79 runner routes MTA-STS through shipping address helper",
-    'audit.host_public_ips(f"mta-sts.{domain}")' in _RUNNER, True)
-chk("WHI-79 runner routes robots through shipping address helper",
-    'if name != "rdap" and not audit.host_public_ips(host)' in _RUNNER, True)
-chk("WHI-79 runner keeps fixed rdap.org host exempt",
-    'if host == "rdap.org":\n            name = "rdap"' in _RUNNER, True)
-chk("WHI-127 runner maps only the fixture domain to robots",
-    'elif host == domain:\n            name = "robots"' in _RUNNER, True)
-chk("WHI-127 runner refuses every unexpected HTTP host",
-    'else:\n            return None, None' in _RUNNER, True)
+chk("WHI-175 runner does not replace the shipping MTA-STS reader",
+    "audit._fetch_mta_sts_policy =" in _RUNNER, False)
+chk("WHI-175 runner does not replace the shipping generic HTTP reader",
+    "audit._http_get =" in _RUNNER, False)
+chk("WHI-175 runner stubs the socket seam",
+    "audit.socket.create_connection = fixture.create_connection" in _RUNNER, True)
+chk("WHI-175 runner stubs the verified TLS-context seam",
+    "audit.ssl.create_default_context = fixture.create_default_context" in _RUNNER, True)
+chk("WHI-175 runner keeps the exact three-host HTTP map",
+    all(fragment in _RUNNER for fragment in (
+        'if host == f"mta-sts.{domain}":',
+        'if host == domain:',
+        'if host == "rdap.org":',
+        "return None",
+    )), True)
 _SCRIPTS_OVERRIDE_NAME = "AUDIT_" + "SCRIPTS"
 chk("WHI-127 runner has no alternate scripts-tree override",
     _SCRIPTS_OVERRIDE_NAME in _RUNNER, False)
@@ -688,6 +892,9 @@ chk("WHI-127 CONTRIBUTING forbids a second editable address contract",
     "a second editable contract" in _DOCS["CONTRIBUTING.md"], True)
 chk("WHI-127 SKILL forbids working around the address guard",
     "never work around the guard or fetch the URL yourself" in _DOCS["SKILL.md"], True)
+for _n in ("README.md", "FAQ.md", "CONTRIBUTING.md", "SKILL.md"):
+    chk(f"WHI-175 {_n} states zone-qualified address refusal",
+        "IPv6 zone-qualified address literals are refused" in _DOCS[_n], True)
 
 # and the coupling: every doc asserted above must be in the workflow's path filter
 _PATHS = {"FAQ.md": "- 'FAQ.md'", "README.md": "- 'README.md'",

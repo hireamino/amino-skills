@@ -12,10 +12,11 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
-BASE = "e3ca0982beb94e1d6b291a16a2d991e71f0e8b99"
-AUDIT_PATH = "amino-deliverability-audit/skills/amino-deliverability-audit/scripts/audit.py"
+BASE = "34a8fcb35f40ef4340b67be8f95f05ca6a3839e5"
 FIXTURES_PATH = "conformance/fixtures.json"
-ORIGINAL_FIXTURE_COUNT = 38
+TABLE_PATH = "conformance/address-contract.json"
+PROTECTED_PATHS = ("conformance/run.mjs", "conformance/canary.mjs")
+ORIGINAL_FIXTURE_COUNT = 45
 
 
 def canonical(value):
@@ -64,6 +65,7 @@ def raw_fixture_objects(source):
 
 def snapshot(repository):
     conformance = repository / "conformance"
+    sys.path.insert(0, str(conformance))
     spec = importlib.util.spec_from_file_location(
         "whi127_preservation_runner", conformance / "run_py.py",
     )
@@ -98,7 +100,7 @@ def snapshot(repository):
 
 def snapshot_subprocess(repository):
     result = subprocess.run(
-        [sys.executable, str(repository / "conformance" / "preservation.py"),
+        [sys.executable, str(Path(__file__).resolve()),
          "--snapshot", str(repository)],
         cwd=repository,
         env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
@@ -114,13 +116,6 @@ def main():
         sys.stdout.buffer.write(canonical(snapshot(Path(sys.argv[2]).resolve())))
         return 0
 
-    old_source = subprocess.run(
-        ["git", "show", f"{BASE}:{AUDIT_PATH}"],
-        cwd=ROOT,
-        text=True,
-        capture_output=True,
-        check=True,
-    ).stdout
     old_fixtures_source = subprocess.run(
         ["git", "show", f"{BASE}:{FIXTURES_PATH}"],
         cwd=ROOT,
@@ -148,14 +143,70 @@ def main():
             file=sys.stderr,
         )
         return 1
+
+    old_table = json.loads(subprocess.run(
+        ["git", "show", f"{BASE}:{TABLE_PATH}"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout)
+    new_table = json.loads((ROOT / TABLE_PATH).read_text(encoding="utf-8"))
+    protected_table_fields = (
+        "ipv4NonPublic", "ipv6PublicWithin",
+        "ipv6NonPublicWithinPublic", "ipv4MappedWithin",
+    )
+    table_fields_unchanged = all(
+        old_table[field] == new_table[field] for field in protected_table_fields
+    )
+    old_rows_unchanged = (
+        len(old_table["rows"]) == 114
+        and new_table["rows"][:114] == old_table["rows"]
+    )
+    print(
+        "ADDRESS_TABLE_PRESERVATION "
+        f"networks={'unchanged' if table_fields_unchanged else 'changed'} "
+        f"old_rows={'unchanged' if old_rows_unchanged else 'changed'} "
+        f"old={len(old_table['rows'])} new={len(new_table['rows'])}"
+    )
+    if not table_fields_unchanged or not old_rows_unchanged:
+        return 1
+
+    for protected_path in PROTECTED_PATHS:
+        old_bytes = subprocess.run(
+            ["git", "show", f"{BASE}:{protected_path}"],
+            cwd=ROOT,
+            capture_output=True,
+            check=True,
+        ).stdout
+        new_bytes = (ROOT / protected_path).read_bytes()
+        unchanged = old_bytes == new_bytes
+        print(
+            f"PROTECTED_BYTES path={protected_path} "
+            f"unchanged={str(unchanged).lower()} "
+            f"sha256={hashlib.sha256(new_bytes).hexdigest()}"
+        )
+        if not unchanged:
+            return 1
+
     with tempfile.TemporaryDirectory(prefix="amino-whi127-preservation-") as temporary:
         temporary = Path(temporary)
         old_repository = temporary / "old"
         new_repository = temporary / "new"
         ignore = shutil.ignore_patterns(".git", "__pycache__", "*.pyc", ".DS_Store")
-        shutil.copytree(ROOT, old_repository, ignore=ignore)
+        # Clone the local object database and check out the reviewed commit instead
+        # of unpacking an archive. A shallow checkout that lacks BASE therefore fails
+        # closed at checkout, and neither archive paths nor external network are used.
+        subprocess.run(
+            ["git", "clone", "--no-hardlinks", "--quiet", str(ROOT), str(old_repository)],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "checkout", "--quiet", BASE],
+            cwd=old_repository,
+            check=True,
+        )
         shutil.copytree(ROOT, new_repository, ignore=ignore)
-        (old_repository / AUDIT_PATH).write_text(old_source, encoding="utf-8")
         old_snapshot = snapshot_subprocess(old_repository)
         new_snapshot = snapshot_subprocess(new_repository)
 
@@ -173,9 +224,9 @@ def main():
     if changed:
         print("CHANGED " + ",".join(changed), file=sys.stderr)
         return 1
-    if len(new_outputs) != 33:
+    if len(new_outputs) != 40:
         print(
-            f"expected 33 original contract fixtures, got {len(new_outputs)}",
+            f"expected 40 original contract fixtures, got {len(new_outputs)}",
             file=sys.stderr,
         )
         return 1

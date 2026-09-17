@@ -103,6 +103,31 @@ def expect_red_comparison(name, result, expected):
         FAILED += 1
 
 
+def expect_red_pair(name, first, first_expected, second, second_expected):
+    """Count one mutation only when both independent named verdicts go red."""
+    global PASSED, FAILED
+    first_output = first.stdout + first.stderr
+    second_output = second.stdout + second.stderr
+    ok = (
+        first.returncode != 0
+        and first_expected in first_output
+        and second.returncode != 0
+        and second_expected in second_output
+        and "Traceback (most recent call last)" not in first_output + second_output
+        and ".execution: threw" not in first_output + second_output
+    )
+    if ok:
+        print(f"PASS  {name} — {first_expected} + {second_expected}")
+        PASSED += 1
+    else:
+        print(
+            f"FAIL  {name}\n"
+            f"  first exit={first.returncode}\n  {first_output.strip()}\n"
+            f"  second exit={second.returncode}\n  {second_output.strip()}"
+        )
+        FAILED += 1
+
+
 def copy_repository_tree(destination):
     """Copy the checked repository without VCS or interpreter-generated state."""
     shutil.copytree(
@@ -836,10 +861,12 @@ try:
         source = runner.read_text(encoding="utf-8")
         source = replace_exactly_once(
             source,
-            '        else:\n            return None, None\n'
-            '        HTTP_CALLS[name] = HTTP_CALLS.get(name, 0) + 1\n',
-            '        else:\n            name = "robots"  # WHI-127 unexpected-host canary\n'
-            '        HTTP_CALLS[name] = HTTP_CALLS.get(name, 0) + 1\n',
+            '    if host == "rdap.org":\n'
+            '        return "rdap"\n'
+            '    return None\n',
+            '    if host == "rdap.org":\n'
+            '        return "rdap"\n'
+            '    return "robots"  # WHI-175 unexpected-host canary\n',
             "runner unexpected-host refusal",
         )
         runner.write_text(source, encoding="utf-8")
@@ -982,13 +1009,132 @@ try:
             "mta-sts-lookup-servfail-null-mx.findings[MTA-STS|MTA-STS not applicable — domain receives no mail].identity: expected finding, got missing",
         )
 
+    # WHI-175 C3 — the runner and behavioral tables execute the shipping HTTP
+    # readers. Each mutation changes audit.py in a temporary scripts tree and must
+    # fail through a named behavioral comparison rather than an aggregate or crash.
+    require_green("WHI-175 shipping HTTP fixture", execute({
+        "CONFORMANCE_FIXTURE": "mta-sts-policy-wrong-content-type",
+    }))
+    require_green("WHI-175 shipping HTTP behavior tables", execute_check())
+    with tempfile.TemporaryDirectory(prefix="amino-whi175-content-type-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py", "verify.py",
+                         "address-contract.json"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '        ctype_ok = re.search(r"^content-type:\\s*text/plain", head, re.I | re.M) is not None\n',
+            '        ctype_ok = True  # WHI-175 removed content-type requirement canary\n',
+            "MTA-STS content-type requirement",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red_pair(
+            "WHI-175 content-type requirement removed",
+            execute_with_scripts(target, {
+                "CONFORMANCE_FIXTURE": "mta-sts-policy-wrong-content-type",
+            }),
+            "mta-sts-policy-wrong-content-type.findings[MTA-STS|MTA-STS TXT present but policy file not retrievable].identity: expected finding, got missing",
+            execute_check_with_scripts(target),
+            "FAIL WHI-175 MTA-STS HTTP 200 text/html",
+        )
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi175-status-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py", "verify.py",
+                         "address-contract.json"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '        status_ok = int(status_match.group(1)) == 200\n',
+            '        status_ok = True  # WHI-175 removed HTTP-status requirement canary\n',
+            "MTA-STS HTTP status requirement",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red_comparison(
+            "WHI-175 HTTP-status requirement removed",
+            execute_check_with_scripts(target),
+            "FAIL WHI-175 MTA-STS HTTP 404 text/plain",
+        )
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi175-tls-context-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py", "verify.py",
+                         "address-contract.json"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '        ctx = ssl.create_default_context()\n'
+            '        conn = socket.create_connection((ips[0], 443), SOCK_TIMEOUT)  # connect to the vetted IP\n',
+            '        ctx = ssl._create_unverified_context()  # WHI-175 TLS verification canary\n'
+            '        conn = socket.create_connection((ips[0], 443), SOCK_TIMEOUT)  # connect to the vetted IP\n',
+            "MTA-STS verified TLS context",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red_comparison(
+            "WHI-175 verified TLS context removed",
+            execute_check_with_scripts(target),
+            "FAIL WHI-175 MTA-STS HTTP 200 text/plain",
+        )
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi175-redirect-guard-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py", "verify.py",
+                         "address-contract.json"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '    hops = 0\n'
+            '    while True:\n'
+            '        ips = host_public_ips(host)\n',
+            '    hops = 0\n'
+            '    ips = host_public_ips(host)  # WHI-175 redirect recheck canary\n'
+            '    while True:\n',
+            "HTTP redirect address recheck",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red_comparison(
+            "WHI-175 redirect address recheck removed",
+            execute_check_with_scripts(target),
+            "FAIL WHI-175 HTTP private redirect is refused before second connection",
+        )
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi175-zone-id-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py", "verify.py",
+                         "address-contract.json"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '        if "%" in text:\n'
+            '            return []\n',
+            '        if False and "%" in text:  # WHI-175 removed zone-id refusal canary\n'
+            '            return []\n',
+            "IPv6 zone-identifier refusal",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red_comparison(
+            "WHI-175 zone-identifier rule removed",
+            execute_check_with_scripts(target),
+            "FAIL WHI-127 address row ipv6-zone-public-name",
+        )
+
     prove_crashing_checker_rejected()
 except Exception as error:
     print(f"FAIL  canary setup — {error}")
     FAILED += 1
 
-print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 34 cases.")
-if PASSED + FAILED != 34:
-    print(f"FAIL  canary count: expected 34, got {PASSED + FAILED}", file=sys.stderr)
+print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 39 cases.")
+if PASSED + FAILED != 39:
+    print(f"FAIL  canary count: expected 39, got {PASSED + FAILED}", file=sys.stderr)
     sys.exit(1)
 sys.exit(1 if FAILED else 0)

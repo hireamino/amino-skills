@@ -60,7 +60,8 @@ and excluded from the gap; only an authoritative NXDOMAIN or NOERROR-empty answe
 reported as **“No MTA-STS policy.”** Failure is not evidence that a policy is missing.
 Domain-controlled HTTPS is fetched only when at least one A/AAAA answer exists and every
 answer is public under the reviewed IANA-derived address contract; mixed, unparseable,
-mapped-private, translated-private, and other non-public answers are refused.
+mapped-private, translated-private, and other non-public answers are refused. IPv6
+zone-qualified address literals are refused.
 
 ## Contributing
 
