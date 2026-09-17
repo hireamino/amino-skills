@@ -861,10 +861,12 @@ try:
         source = runner.read_text(encoding="utf-8")
         source = replace_exactly_once(
             source,
-            '        else:\n            return None, None\n'
-            '        HTTP_CALLS[name] = HTTP_CALLS.get(name, 0) + 1\n',
-            '        else:\n            name = "robots"  # WHI-127 unexpected-host canary\n'
-            '        HTTP_CALLS[name] = HTTP_CALLS.get(name, 0) + 1\n',
+            '    if host == "rdap.org":\n'
+            '        return "rdap"\n'
+            '    return None\n',
+            '    if host == "rdap.org":\n'
+            '        return "rdap"\n'
+            '    return "robots"  # WHI-175 unexpected-host canary\n',
             "runner unexpected-host refusal",
         )
         runner.write_text(source, encoding="utf-8")
