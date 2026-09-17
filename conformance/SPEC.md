@@ -58,12 +58,19 @@ answers that exist but are refused by the public-address contract, and an attemp
 fetch that fails all remain `unavailable`. MTA-STS is
 deliberately different: once `_mta-sts` TXT advertises a policy, a policy host
 with no address or refused answers is a broken promise and stays `unavailable`.
+DNS metadata remains backward-compatible: `status: 2` applies to every record
+type for that name, while an optional per-record-type map applies only to the
+listed types and treats an unlisted type as NOERROR. For example,
+`status: {"A": 2, "AAAA": 2}` makes address lookups fail while TXT and MX stay
+authoritative. A DNS name must not mix the scalar and map forms.
 The RDAP fixture port is exactly `{status, data}` or `null`; `body` remains in the
 fixture only for the Python raw-HTTP surface, and the engine's tolerant bare-object
-branch is removed in contract 1.4.0. The 45-fixture corpus is unchanged in size:
-24 existing no-apex-address rows flip only `observations.robots`, while the
-private-address and attempted-fetch rows remain `unavailable`. Python mutation
-canaries rise from 42 to 46; the staged JavaScript count remains 18.
+branch is removed in contract 1.4.0. Two fixtures extend the corpus from 45 to
+47: an apex A/AAAA lookup failure that leaves TXT and MX authoritative, and an
+advertised MTA-STS policy whose policy host has no A/AAAA answers. The 24 existing
+no-apex-address rows still flip only `observations.robots`, while private-address
+and attempted-fetch rows remain `unavailable`. Python mutation canaries rise from
+42 to 49; the staged JavaScript count remains 18.
 
 **v1.12 / WHI-176 Step 1 — Domain posture lane:** the finding-lane enum is now
 the closed five-value set `outbound_auth | inbound_transport | domain_posture |
@@ -294,11 +301,11 @@ The web and Action pin files must name the same full amino-skills commit before 
 
 ## Fixtures
 
-See `fixtures.json`. It contains 45 known-answer cases: 24 closed-world
+See `fixtures.json`. It contains 47 known-answer cases: 26 closed-world
 `dns-engine` cases, 16 closed-world `http-observation` cases (the original
 absent/unavailable pairs, lane coverage and address refusals plus seven WHI-127
 coverage cases), and five explicitly skipped
 pure/HTTP/wrapper cases covered by per-surface tests or later work. Each is
 language-neutral and every harness adapts it to its own resolver/HTTP mock without
-ambient network access. The Python runner is guarded by 46 mutation canaries; the
+ambient network access. The Python runner is guarded by 49 mutation canaries; the
 staged JavaScript runner remains guarded by 18 canaries on each consumer engine.

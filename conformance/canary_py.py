@@ -627,6 +627,89 @@ try:
             "'robots': 'not_applicable', 'rdap': 'checked'}",
         )
 
+    _failed_website_env = {"CONFORMANCE_FIXTURE": "robots-address-lookup-failed"}
+    require_green(
+        "WHI-176 failed website lookup fixture",
+        execute(_failed_website_env),
+    )
+    with tempfile.TemporaryDirectory(prefix="amino-whi176-failed-website-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '    if not addresses:\n'
+            '        if dns_meta(host, "A").get("error") or dns_meta(host, "AAAA").get("error"):\n'
+            '            return [], "lookup_failed"\n'
+            '        return [], "no_answers"\n',
+            '    if not addresses:\n'
+            '        return [], "no_answers"  # WHI-176 failure-as-absence canary\n',
+            "failed website lookup state",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red_comparison(
+            "WHI-176 treated failed website lookup as no answers",
+            execute_with_scripts(target, _failed_website_env),
+            "robots-address-lookup-failed.observations: expected "
+            "{'mta_sts_policy': 'not_applicable', 'robots': 'unavailable', "
+            "'rdap': 'unavailable'}, got {'mta_sts_policy': 'not_applicable', "
+            "'robots': 'not_applicable', 'rdap': 'unavailable'}",
+        )
+
+    with tempfile.TemporaryDirectory(prefix="amino-whi176-rrtype-runner-") as temporary:
+        conformance = Path(temporary)
+        runner_path = conformance / "run_py.py"
+        shutil.copyfile(RUNNER, runner_path)
+        source = runner_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '        if isinstance(status, dict):\n'
+            '            status = status.get(rtype.upper(), 0)\n',
+            '        if isinstance(status, dict):\n'
+            '            status = status.get("TXT", 0)  # WHI-176 ignored rrtype canary\n',
+            "per-record-type DNS status selection",
+        )
+        runner_path.write_text(source, encoding="utf-8")
+        expect_red_comparison(
+            "WHI-176 runner ignored the requested DNS record type",
+            execute_with_conformance(conformance, _failed_website_env),
+            "robots-address-lookup-failed.observations: expected "
+            "{'mta_sts_policy': 'not_applicable', 'robots': 'unavailable', "
+            "'rdap': 'unavailable'}, got {'mta_sts_policy': 'not_applicable', "
+            "'robots': 'not_applicable', 'rdap': 'unavailable'}",
+        )
+
+    _missing_policy_host_env = {
+        "CONFORMANCE_FIXTURE": "mta-sts-policy-host-no-address",
+    }
+    require_green(
+        "WHI-176 advertised policy with no policy-host address fixture",
+        execute(_missing_policy_host_env),
+    )
+    with tempfile.TemporaryDirectory(prefix="amino-whi176-policy-host-none-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '            raise OSError("mta-sts host does not resolve to a public IP")  # SSRF guard\n',
+            '            return "not_applicable", None  # WHI-176 advertised-policy canary\n',
+            "advertised policy host without address",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red_comparison(
+            "WHI-176 treated advertised policy with no host address as not applicable",
+            execute_with_scripts(target, _missing_policy_host_env),
+            "mta-sts-policy-host-no-address.observations: expected "
+            "{'mta_sts_policy': 'unavailable', 'robots': 'not_applicable', "
+            "'rdap': 'unavailable'}, got {'mta_sts_policy': 'not_applicable', "
+            "'robots': 'not_applicable', 'rdap': 'unavailable'}",
+        )
+
     with tempfile.TemporaryDirectory(prefix="amino-whi176-mta-host-none-") as temporary:
         conformance = Path(temporary) / "conformance"
         scripts = Path(temporary) / "scripts"
@@ -1324,8 +1407,8 @@ except Exception as error:
     print(f"FAIL  canary setup — {error}")
     FAILED += 1
 
-print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 46 cases.")
-if PASSED + FAILED != 46:
-    print(f"FAIL  canary count: expected 46, got {PASSED + FAILED}", file=sys.stderr)
+print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 49 cases.")
+if PASSED + FAILED != 49:
+    print(f"FAIL  canary count: expected 49, got {PASSED + FAILED}", file=sys.stderr)
     sys.exit(1)
 sys.exit(1 if FAILED else 0)

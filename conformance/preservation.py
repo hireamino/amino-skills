@@ -15,9 +15,20 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
 BASE = "2a9c4eb3d2b53c6207d92f08bb6ab31af0a2d578"
+REVISION_BASE = "edba29efb8bc3f2c04e1ee396df87ea595768ddc"
 FIXTURES_PATH = "conformance/fixtures.json"
 TABLE_PATH = "conformance/address-contract.json"
 ORIGINAL_FIXTURE_COUNT = 45
+EXPECTED_NEW_FIXTURES = (
+    "robots-address-lookup-failed",
+    "mta-sts-policy-host-no-address",
+)
+EXPECTED_NEW_FIXTURE_DIGESTS = {
+    "robots-address-lookup-failed":
+        "df93d7e6b77e14da5b97c936ad6e6917faa2953bb04ab1228cf46da93eb0cd59",
+    "mta-sts-policy-host-no-address":
+        "531d0df11fa8493aa53ade8a80ed6e91bce77342e41afff54253b7fc15ba60b5",
+}
 EXPECTED_ROBOTS_FLIPS = (
     "dkim-revoked-empty-p", "dkim-ed25519-badlen", "dkim-rsa-good",
     "dkim-rsa1024-weak", "dmarc-banana-invalid", "dmarc-uppercase-tags",
@@ -153,14 +164,57 @@ def main():
         check=True,
     ).stdout
     old_fixture_document = json.loads(old_fixtures_source)
+    revision_fixture_document = json.loads(subprocess.run(
+        ["git", "show", f"{REVISION_BASE}:{FIXTURES_PATH}"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout)
     new_fixture_source = (ROOT / FIXTURES_PATH).read_text(encoding="utf-8")
     new_fixture_document = json.loads(new_fixture_source)
-    fixture_changes = list(changes(old_fixture_document, new_fixture_document))
+    new_existing_document = copy.deepcopy(new_fixture_document)
+    new_existing_document["fixtures"] = new_existing_document["fixtures"][
+        :ORIGINAL_FIXTURE_COUNT
+    ]
+    fixture_changes = list(changes(old_fixture_document, new_existing_document))
     old_ids = [fixture["id"] for fixture in old_fixture_document["fixtures"]]
     new_ids = [fixture["id"] for fixture in new_fixture_document["fixtures"]]
+    revision_existing_changes = list(changes(
+        revision_fixture_document, new_existing_document,
+    ))
+    if revision_existing_changes:
+        for path, old, new in revision_existing_changes:
+            print(
+                f"UNEXPECTED_REVISION_EXISTING_FIXTURE_CHANGE {path}: "
+                f"{old!r} -> {new!r}",
+                file=sys.stderr,
+            )
+        return 1
+    added_fixtures = new_fixture_document["fixtures"][ORIGINAL_FIXTURE_COUNT:]
+    added_ids = tuple(fixture["id"] for fixture in added_fixtures)
+    if new_ids[:ORIGINAL_FIXTURE_COUNT] != old_ids or added_ids != EXPECTED_NEW_FIXTURES:
+        print(
+            "UNEXPECTED_FIXTURE_IDS existing="
+            + ",".join(new_ids[:ORIGINAL_FIXTURE_COUNT])
+            + " added=" + ",".join(added_ids),
+            file=sys.stderr,
+        )
+        return 1
+    added_digests = {
+        fixture["id"]: hashlib.sha256(canonical(fixture)).hexdigest()
+        for fixture in added_fixtures
+    }
+    if added_digests != EXPECTED_NEW_FIXTURE_DIGESTS:
+        print(
+            f"UNEXPECTED_NEW_FIXTURE_CHANGE expected={EXPECTED_NEW_FIXTURE_DIGESTS} "
+            f"got={added_digests}",
+            file=sys.stderr,
+        )
+        return 1
     normalized_old = normalized_fixture_document(old_fixture_document)
     normalized_new = normalized_fixture_document(
-        new_fixture_document, undo_observation_split=True,
+        new_existing_document, undo_observation_split=True,
     )
     normalized_changes = list(changes(normalized_old, normalized_new))
     actual_flips = set()
@@ -186,8 +240,6 @@ def main():
         normalized_changes.append((
             ("robots_flip_set",), sorted(expected_flips), sorted(actual_flips),
         ))
-    if old_ids != new_ids:
-        normalized_changes.append((("fixture_ids",), old_ids, new_ids))
     changed_keys = Counter(path[-1] for path, _old, _new in fixture_changes)
     rdap_changes = sum(
         len(path) >= 5 and path[0] == "fixtures"
@@ -197,17 +249,25 @@ def main():
     fixture_digest = hashlib.sha256(new_fixture_source.encode()).hexdigest()
     print(
         f"FIXTURE_CHANGE_PROOF fixtures={len(new_fixture_document['fixtures'])} "
+        f"existing_unchanged={ORIGINAL_FIXTURE_COUNT} added={len(added_fixtures)} "
         f"changed_keys={len(fixture_changes)} keys={shown_counts(changed_keys)} "
         f"robots_flips={len(actual_flips)} rdap_rekeys={rdap_changes} "
         f"sha256={fixture_digest}"
     )
     print(
+        "NEW_FIXTURE_DIGESTS "
+        + ",".join(f"{key}:{added_digests[key]}" for key in EXPECTED_NEW_FIXTURES)
+    )
+    print(
         f"LANE_COUNTS_BEFORE {shown_counts(lane_counts(old_fixture_document))}"
     )
     print(
-        f"LANE_COUNTS_AFTER {shown_counts(lane_counts(new_fixture_document))}"
+        f"LANE_COUNTS_AFTER_EXISTING {shown_counts(lane_counts(new_existing_document))}"
     )
-    if lane_counts(old_fixture_document) != lane_counts(new_fixture_document):
+    print(
+        f"LANE_COUNTS_ADDED {shown_counts(lane_counts({'fixtures': added_fixtures}))}"
+    )
+    if lane_counts(old_fixture_document) != lane_counts(new_existing_document):
         print("UNEXPECTED_LANE_COUNT_CHANGE", file=sys.stderr)
         return 1
     if normalized_changes:
@@ -235,6 +295,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="amino-whi127-preservation-") as temporary:
         temporary = Path(temporary)
         old_repository = temporary / "old"
+        revision_repository = temporary / "revision"
         new_repository = temporary / "new"
         ignore = shutil.ignore_patterns(".git", "__pycache__", "*.pyc", ".DS_Store")
         # Clone the local object database and check out the reviewed commit instead
@@ -249,9 +310,37 @@ def main():
             cwd=old_repository,
             check=True,
         )
+        subprocess.run(
+            ["git", "clone", "--no-hardlinks", "--quiet", str(ROOT),
+             str(revision_repository)],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "checkout", "--quiet", REVISION_BASE],
+            cwd=revision_repository,
+            check=True,
+        )
         shutil.copytree(ROOT, new_repository, ignore=ignore)
         old_snapshot = snapshot_subprocess(old_repository)
+        revision_snapshot = snapshot_subprocess(revision_repository)
         new_snapshot = snapshot_subprocess(new_repository)
+
+    revision_output_changes = list(changes(
+        json.loads(revision_snapshot), json.loads(new_snapshot),
+    ))
+    print(
+        "REVISION_EXISTING_PRESERVATION "
+        f"fixtures={len(json.loads(new_snapshot))} "
+        f"changed_keys={len(revision_output_changes)} "
+        f"sha256={hashlib.sha256(new_snapshot).hexdigest()}"
+    )
+    if revision_output_changes:
+        for path, old, new in revision_output_changes:
+            print(
+                f"UNEXPECTED_REVISION_OUTPUT_CHANGE {path}: {old!r} -> {new!r}",
+                file=sys.stderr,
+            )
+        return 1
 
     old_outputs = json.loads(old_snapshot)
     new_outputs = json.loads(new_snapshot)

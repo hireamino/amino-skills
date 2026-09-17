@@ -63,9 +63,13 @@ function mockQ(dns, http = {}, nowMs = 1767225600000) {
     }
     return [];
   };
-  q.meta = async (name) => {
+  q.meta = async (name, rrtype) => {
     const entry = map[norm(name)] || {};
-    return { status: entry.status !== undefined ? entry.status : 0, ad: !!entry.ad, error: false };
+    const configured = entry.status !== undefined ? entry.status : 0;
+    const status = configured && typeof configured === "object" && !Array.isArray(configured)
+      ? (configured[String(rrtype || "").toUpperCase()] ?? 0)
+      : configured;
+    return { status, ad: !!entry.ad, error: false };
   };
   const response = (name) => http[name] === "unavailable" || http[name] === undefined
     ? null : structuredClone(http[name]);
@@ -242,11 +246,23 @@ function compareContract(fx, result, score, surface, ledger) {
   if (shown(result.observations) !== shown(fx.expect.observations)) {
     problems.push(`observations: expected ${shown(fx.expect.observations)}, got ${shown(result.observations)}`);
   }
+  if (own(fx.expect, "inconclusive")) {
+    ledger.inconclusive++;
+    if (result.inconclusive !== fx.expect.inconclusive) {
+      problems.push(`inconclusive: expected ${shown(fx.expect.inconclusive)}, got ${shown(result.inconclusive)}`);
+    }
+  }
+  if (own(fx.expect, "inconclusive_reason")) {
+    ledger.inconclusiveReason++;
+    if ((result.inconclusive_reason ?? null) !== fx.expect.inconclusive_reason) {
+      problems.push(`inconclusive_reason: expected ${shown(fx.expect.inconclusive_reason)}, got ${shown(result.inconclusive_reason ?? null)}`);
+    }
+  }
   return problems;
 }
 
 function assertionPlan(surface) {
-  const plan = { identity: 0, severity: 0, action: 0, fix: 0, lane: 0, detail: 0, effort: 0, value: 0, scoreFields: 0, closedWorld: 0, observations: 0 };
+  const plan = { identity: 0, severity: 0, action: 0, fix: 0, lane: 0, detail: 0, effort: 0, value: 0, scoreFields: 0, closedWorld: 0, observations: 0, inconclusive: 0, inconclusiveReason: 0 };
   for (const fx of fixtures.filter((fixture) => CONTRACT_MODES.has(fixture.mode))) {
     const { expected } = expectedFindings(fx, surface);
     plan.identity += expected.length;
@@ -260,6 +276,8 @@ function assertionPlan(surface) {
     plan.scoreFields += Object.keys(fx.expect.score || {}).length;
     plan.closedWorld++;
     plan.observations++;
+    if (own(fx.expect, "inconclusive")) plan.inconclusive++;
+    if (own(fx.expect, "inconclusive_reason")) plan.inconclusiveReason++;
   }
   return plan;
 }
@@ -269,7 +287,7 @@ let fail = 0;
 let skip = 0;
 let notApplicable = 0;
 const failures = [];
-const ledger = { identity: 0, severity: 0, action: 0, fix: 0, lane: 0, detail: 0, effort: 0, value: 0, scoreFields: 0, closedWorld: 0, observations: 0 };
+const ledger = { identity: 0, severity: 0, action: 0, fix: 0, lane: 0, detail: 0, effort: 0, value: 0, scoreFields: 0, closedWorld: 0, observations: 0, inconclusive: 0, inconclusiveReason: 0 };
 
 for (const fx of fixtures) {
   if (!CONTRACT_MODES.has(fx.mode)) {

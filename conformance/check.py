@@ -733,8 +733,56 @@ chk("WHI-175 HTTP connection error",
 
 # A non-pass fixture with no remediation would let /audit render an action in its
 # plan and "no action needed" in its evidence row for the same finding.
+_DNS_STATUS_SHAPE_PROBLEMS = []
+
+
+def _fixture_object(pairs):
+    """Retain normal dict semantics while detecting a mixed duplicate status form."""
+    result = {}
+    for key, value in pairs:
+        if key == "status" and key in result:
+            previous = result[key]
+            if isinstance(previous, dict) != isinstance(value, dict):
+                _DNS_STATUS_SHAPE_PROBLEMS.append(
+                    "one DNS name supplies both scalar and per-type status forms"
+                )
+            else:
+                _DNS_STATUS_SHAPE_PROBLEMS.append(
+                    "one DNS name supplies status more than once"
+                )
+        result[key] = value
+    return result
+
+
 with open(os.path.join(HERE, "fixtures.json"), encoding="utf-8") as _handle:
-    _FIXTURES = json.load(_handle)["fixtures"]
+    _FIXTURE_DOCUMENT = json.loads(
+        _handle.read(), object_pairs_hook=_fixture_object,
+    )
+_FIXTURES = _FIXTURE_DOCUMENT["fixtures"]
+for _fixture in _FIXTURES:
+    for _dns_name, _dns_entry in _fixture.get("input", {}).get("dns", {}).items():
+        if not isinstance(_dns_entry, dict) or "status" not in _dns_entry:
+            continue
+        _status = _dns_entry["status"]
+        if isinstance(_status, dict):
+            _bad_types = sorted(
+                str(_rrtype) for _rrtype, _rcode in _status.items()
+                if not isinstance(_rrtype, str)
+                or not _rrtype
+                or _rrtype != _rrtype.upper()
+                or not isinstance(_rcode, int)
+                or isinstance(_rcode, bool)
+            )
+            if _bad_types:
+                _DNS_STATUS_SHAPE_PROBLEMS.append(
+                    f"{_fixture['id']}:{_dns_name} invalid per-type status entries "
+                    + ",".join(_bad_types)
+                )
+        elif not isinstance(_status, int) or isinstance(_status, bool):
+            _DNS_STATUS_SHAPE_PROBLEMS.append(
+                f"{_fixture['id']}:{_dns_name} status must be a number or per-type map"
+            )
+chk("WHI-176 DNS fixture status shape", _DNS_STATUS_SHAPE_PROBLEMS, [])
 _RDAP_SHAPE_PROBLEMS = []
 for _fixture in _FIXTURES:
     _http = _fixture.get("input", {}).get("http", {})
