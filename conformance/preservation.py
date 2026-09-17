@@ -3,14 +3,12 @@
 
 import hashlib
 import importlib.util
-import io
 import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import sys
-import tarfile
 import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -196,15 +194,18 @@ def main():
         old_repository = temporary / "old"
         new_repository = temporary / "new"
         ignore = shutil.ignore_patterns(".git", "__pycache__", "*.pyc", ".DS_Store")
-        archive = subprocess.run(
-            ["git", "archive", BASE],
-            cwd=ROOT,
-            capture_output=True,
+        # Clone the local object database and check out the reviewed commit instead
+        # of unpacking an archive. A shallow checkout that lacks BASE therefore fails
+        # closed at checkout, and neither archive paths nor external network are used.
+        subprocess.run(
+            ["git", "clone", "--no-hardlinks", "--quiet", str(ROOT), str(old_repository)],
             check=True,
-        ).stdout
-        old_repository.mkdir()
-        with tarfile.open(fileobj=io.BytesIO(archive)) as bundle:
-            bundle.extractall(old_repository, filter="data")
+        )
+        subprocess.run(
+            ["git", "checkout", "--quiet", BASE],
+            cwd=old_repository,
+            check=True,
+        )
         shutil.copytree(ROOT, new_repository, ignore=ignore)
         old_snapshot = snapshot_subprocess(old_repository)
         new_snapshot = snapshot_subprocess(new_repository)
