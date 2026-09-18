@@ -34,7 +34,7 @@ jobs:
       # NOTE: this gitleaks pass scans the WORKING TREE, which catches a secret at
       # the moment it is introduced. Full-git-history sweeps are Layer 3's job.
       - name: Security gate (SAST + secrets)
-        uses: cisoventures/vulngate@v1
+        uses: cisoventures/vulngate@b6a322b92b494341a9d702e2c8e91856a9096412  # v1.5.5
         with:
           fail-on: high
           ignore-dev-deps: true
