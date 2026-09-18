@@ -1,0 +1,12 @@
+version: 2
+# Keep GitHub Actions pins current. vulngate is SHA-pinned (with a `# vX.Y.Z`
+# note); Dependabot follows new vulngate releases and opens a PR to bump the SHA
+# + note, so this gate stays fresh without a moving @v1 tag. (vulngate's own
+# scanner-engine pins are maintained inside vulngate, not here.)
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore(ci)"
