@@ -96,20 +96,24 @@ _IPV4_MAPPED_NETWORKS = tuple(
 )
 
 
-def host_public_ips(host):
-    """Return all resolved addresses only when every answer satisfies the table contract."""
-    addresses = dig(host, "A") + dig(host, "AAAA")
+def host_public_ips_with_state(host):
+    """Return (addresses, state), preserving absence vs contract refusal."""
+    ipv4 = dig(host, "A")
+    ipv6 = dig(host, "AAAA")
+    addresses = ipv4 + ipv6
     if not addresses:
-        return []
+        if dns_meta(host, "A").get("error") or dns_meta(host, "AAAA").get("error"):
+            return [], "lookup_failed"
+        return [], "no_answers"
     out = []
     for raw in addresses:
         text = raw.strip()
         if "%" in text:
-            return []
+            return [], "refused"
         try:
             address = ipaddress.ip_address(text)
         except ValueError:
-            return []
+            return [], "refused"
         if address.version == 6 and any(
                 address in network for network in _IPV4_MAPPED_NETWORKS):
             candidate = ipaddress.ip_address(address.packed[-4:])
@@ -127,9 +131,15 @@ def host_public_ips(host):
                 )
             )
         if not allowed:
-            return []
+            return [], "refused"
         out.append(text)
-    return out
+    return out, "public"
+
+
+def host_public_ips(host):
+    """Return all resolved addresses only when every answer satisfies the table contract."""
+    addresses, _state = host_public_ips_with_state(host)
+    return addresses
 
 SOCK_TIMEOUT = 3   # raw socket probes (STARTTLS:25, MTA-STS HTTPS) — these hit
                    # blocked ports on many networks, so fail fast rather than hang
@@ -1111,6 +1121,11 @@ def _robots_blocks_ai_bots(txt):
 
 
 def check_ai_bots(domain, F, observations=None):
+    _addresses, address_state = host_public_ips_with_state(domain)
+    if address_state == "no_answers":
+        if observations is not None:
+            observations["robots"] = "not_applicable"
+        return
     status, body = _http_get(domain, "/robots.txt", follow=0, cap=20000)
     if observations is not None:
         observations["robots"] = "checked" if status is not None else "unavailable"

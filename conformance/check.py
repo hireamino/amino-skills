@@ -374,6 +374,29 @@ def _guarded_addresses(ipv4=(), ipv6=()):
     return audit.host_public_ips("guard.invalid")
 
 
+def _guarded_resolution(ipv4=(), ipv6=(), failed=()):
+    old_dig, old_meta = audit.dig, audit.dns_meta
+    try:
+        audit.dig = lambda _host, rrtype: list(
+            ipv4 if rrtype == "A" else ipv6 if rrtype == "AAAA" else ()
+        )
+        audit.dns_meta = lambda _host, rrtype: {"error": rrtype in failed}
+        return audit.host_public_ips_with_state("guard.invalid")
+    finally:
+        audit.dig, audit.dns_meta = old_dig, old_meta
+
+
+chk("WHI-176 no address answers are distinguishable",
+    _guarded_resolution(), ([], "no_answers"))
+chk("WHI-176 address lookup failure is not authoritative absence",
+    _guarded_resolution(failed=("A",)), ([], "lookup_failed"))
+chk("WHI-176 refused address answers are distinguishable",
+    _guarded_resolution(ipv4=("10.0.0.1",)), ([], "refused"))
+chk("WHI-176 public address answers remain eligible",
+    _guarded_resolution(ipv4=("93.184.216.34",)),
+    (["93.184.216.34"], "public"))
+
+
 for _row in _ADDRESS_CONTRACT["rows"]:
     _addresses = _row["addresses"]
     _ipv4 = tuple(address for address in _addresses if ":" not in address)
@@ -710,8 +733,79 @@ chk("WHI-175 HTTP connection error",
 
 # A non-pass fixture with no remediation would let /audit render an action in its
 # plan and "no action needed" in its evidence row for the same finding.
+_DNS_STATUS_SHAPE_PROBLEMS = []
+
+
+def _fixture_object(pairs):
+    """Retain normal dict semantics while detecting a mixed duplicate status form."""
+    result = {}
+    for key, value in pairs:
+        if key == "status" and key in result:
+            previous = result[key]
+            if isinstance(previous, dict) != isinstance(value, dict):
+                _DNS_STATUS_SHAPE_PROBLEMS.append(
+                    "one DNS name supplies both scalar and per-type status forms"
+                )
+            else:
+                _DNS_STATUS_SHAPE_PROBLEMS.append(
+                    "one DNS name supplies status more than once"
+                )
+        result[key] = value
+    return result
+
+
 with open(os.path.join(HERE, "fixtures.json"), encoding="utf-8") as _handle:
-    _FIXTURES = json.load(_handle)["fixtures"]
+    _FIXTURE_DOCUMENT = json.loads(
+        _handle.read(), object_pairs_hook=_fixture_object,
+    )
+_FIXTURES = _FIXTURE_DOCUMENT["fixtures"]
+for _fixture in _FIXTURES:
+    for _dns_name, _dns_entry in _fixture.get("input", {}).get("dns", {}).items():
+        if not isinstance(_dns_entry, dict) or "status" not in _dns_entry:
+            continue
+        _status = _dns_entry["status"]
+        if isinstance(_status, dict):
+            _bad_types = sorted(
+                str(_rrtype) for _rrtype, _rcode in _status.items()
+                if not isinstance(_rrtype, str)
+                or not _rrtype
+                or _rrtype != _rrtype.upper()
+                or not isinstance(_rcode, int)
+                or isinstance(_rcode, bool)
+            )
+            if _bad_types:
+                _DNS_STATUS_SHAPE_PROBLEMS.append(
+                    f"{_fixture['id']}:{_dns_name} invalid per-type status entries "
+                    + ",".join(_bad_types)
+                )
+        elif not isinstance(_status, int) or isinstance(_status, bool):
+            _DNS_STATUS_SHAPE_PROBLEMS.append(
+                f"{_fixture['id']}:{_dns_name} status must be a number or per-type map"
+            )
+chk("WHI-176 DNS fixture status shape", _DNS_STATUS_SHAPE_PROBLEMS, [])
+_RDAP_SHAPE_PROBLEMS = []
+for _fixture in _FIXTURES:
+    _http = _fixture.get("input", {}).get("http", {})
+    if "rdap" not in _http or _http["rdap"] is None:
+        continue
+    _rdap = _http["rdap"]
+    if not isinstance(_rdap, dict):
+        _RDAP_SHAPE_PROBLEMS.append(
+            f"{_fixture['id']}: expected RDAP null or object, got {type(_rdap).__name__}"
+        )
+        continue
+    _missing = sorted({"status", "data"} - set(_rdap))
+    _payload_keys = sorted(set(_rdap) - {"status", "body", "data"})
+    if _missing:
+        _RDAP_SHAPE_PROBLEMS.append(
+            f"{_fixture['id']}: RDAP object missing {','.join(_missing)}"
+        )
+    if _payload_keys:
+        _RDAP_SHAPE_PROBLEMS.append(
+            f"{_fixture['id']}: RDAP payload must be under data, got "
+            + ",".join(_payload_keys)
+        )
+chk("WHI-176 RDAP fixture port shape", _RDAP_SHAPE_PROBLEMS, [])
 _NON_PASS_WITHOUT_FIX = [
     f"{_fixture['id']}:{_finding['area']}|{_finding['title']}"
     for _fixture in _FIXTURES

@@ -92,7 +92,10 @@ def install_resolver(dns):
 
     def dns_meta(name, rtype):
         entry = records.get(_norm(name), {})
-        return resolver.normalized_meta(entry.get("status", 0), entry.get("ad", False))
+        status = entry.get("status", 0)
+        if isinstance(status, dict):
+            status = status.get(rtype.upper(), 0)
+        return resolver.normalized_meta(status, entry.get("ad", False))
 
     audit.dig = recs
     audit.query_fresh = recs

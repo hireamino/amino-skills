@@ -17,7 +17,7 @@ SCRIPTS = (
     / "amino-deliverability-audit"
     / "scripts"
 )
-BASE = "59b8a630884e8c3ea992e2a521056c968caa789d"
+BASE = "2a9c4eb3d2b53c6207d92f08bb6ab31af0a2d578"
 AUDIT_PATH = "amino-deliverability-audit/skills/amino-deliverability-audit/scripts/audit.py"
 TABLE_PATH = "amino-deliverability-audit/skills/amino-deliverability-audit/scripts/address-contract.json"
 EXPECTED_NEWLY_REFUSED = []
