@@ -1389,12 +1389,27 @@ def main():
             f["action"] = action(f)
     summary = {s: sum(1 for f in F if f["severity"] == s)
                for s in ["critical", "high", "medium", "low", "pass"]}
+    # I20: inspect only the three critical DNS lookups, in the engine's order.
+    # The resolver records the final metadata after its existing retry policy.
+    inconclusive, inconclusive_reason = False, None
+    for name, rrtype in ((domain, "TXT"), (f"_dmarc.{domain}", "TXT"), (domain, "MX")):
+        metadata = dns_meta(name, rrtype)
+        status = metadata.get("status")
+        if metadata.get("error") or status in (2, 5):
+            inconclusive = True
+            # Python's normalized_meta marks SERVFAIL/REFUSED as error too;
+            # unlike the engine's fetch-error bit, that must not change the reason.
+            reason = "SERVFAIL/REFUSED" if status in (2, 5) else "lookup error"
+            inconclusive_reason = f"{rrtype} {name}: {reason}"
+            break
     print(json.dumps({
         "domain": domain,
         "primary_mx": mx_host,
         "summary": summary,
         "findings": F,
         "observations": observations,
+        "inconclusive": inconclusive,
+        "inconclusive_reason": inconclusive_reason,
         "notes": "Read-only scan. DKIM is best-effort (common selectors only). "
                  "PQC transport readiness is inferred from TLS version; ML-KEM negotiation "
                  "is not directly probed by this scanner. DMARCbis = RFC 9989 (published May 2026).",

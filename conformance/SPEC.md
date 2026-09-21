@@ -1,4 +1,4 @@
-# Amino Deliverability — Correctness Conformance Spec (v1.13)
+# Amino Deliverability — Correctness Conformance Spec (v1.14)
 
 **Status:** proposed · **Owner:** hireamino · **Canonical home:** `amino-skills/conformance/`
 
@@ -38,6 +38,8 @@ another surface or a regenerated snapshot. For every `dns-engine` or
   `lanes` map;
 - `observations` is an exact result-level map with the keys `mta_sts_policy`, `robots`,
   and `rdap`; and
+- `inconclusive` and `inconclusive_reason` are compared on both surfaces whenever
+  a fixture declares them; and
 - a surface may omit a finding only through `surfaces` plus a non-empty
   `notApplicable` reason for that surface.
 
@@ -50,6 +52,27 @@ review. The corpus has no expectation regeneration mode; reviewed answers cannot
 replaced by current output.
 
 ## Current status
+
+**v1.14 / WHI-180 — critical-DNS inconclusive result contract:** both the Python
+skill and the JavaScript engine report `inconclusive: bool` and
+`inconclusive_reason: string | null`. After the normal resolver retries, inspect
+the final metadata in this exact order: apex TXT, `_dmarc.<domain>` TXT, then apex
+MX. The first lookup whose metadata has an error, SERVFAIL (2), or REFUSED (5)
+sets `inconclusive: true` with the exact reason
+`"<TYPE> <name>: SERVFAIL/REFUSED"` for status 2 or 5, otherwise
+`"<TYPE> <name>: lookup error"` for a fetch/transport error (including a Python
+timeout with no final status). With no such lookup, return `false` and `null`.
+NXDOMAIN (3) and NOERROR/NODATA (0) are conclusive. DKIM, MTA-STS, TLS-RPT,
+BIMI, A/AAAA, CAA, DNSSEC, PTR, and TLSA are non-critical and never set this
+flag. Python's metadata `error` includes SERVFAIL/REFUSED, so the numeric status
+takes precedence when choosing the reason string. The fixture fields
+`expect.inconclusive` and `expect.inconclusive_reason` bind both surfaces. They
+are now stated on all 26 existing `dns-engine` fixtures and five new cases,
+bringing the corpus from 47 to 52 fixtures (47 contract passes, five skips).
+Python mutation canaries rise from 49 to 54; JavaScript canaries from 18 to 23.
+This version deliberately leaves finding text for a failed critical lookup
+unchanged; whether to revise those affected “missing” verdicts remains an open
+product decision, not a silent consequence of this metadata change.
 
 **v1.13 / WHI-176 Step 1b — website observation split and one RDAP port shape:**
 the website/robots check now reports `not_applicable` when the apex has no A or
