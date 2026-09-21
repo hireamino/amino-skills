@@ -143,6 +143,18 @@ function expectRed(name, source, fixture, expectedText, runnerPath = runner) {
   else failed++;
 }
 
+function expectRedComparison(name, source, fixture, expectedText) {
+  const result = execute(source, fixture);
+  const output = (result.stdout || "") + (result.stderr || "");
+  const ok = result.status !== 0 && output.includes(expectedText)
+    && !output.includes(".execution: threw") && !output.includes("Error [")
+    && !output.includes("SyntaxError:");
+  console.log(`${ok ? "PASS" : "FAIL"}  ${name}`
+    + (ok ? ` — ${expectedText}` : `\n  exit=${result.status}\n  ${output.trim()}`));
+  if (ok) passed++;
+  else failed++;
+}
+
 function requireGreen(name, source, fixture, runnerPath = runner) {
   const result = execute(source, fixture, runnerPath);
   const output = (result.stdout || "") + (result.stderr || "");
@@ -391,6 +403,50 @@ try {
     'lane-closed-world-coverage.findings[Transport|Mail server has no reverse DNS (PTR)].lane: expected "outside_sending_posture", got "inbound_transport"',
   );
 
+  const i20Condition = "if (m.error || m.status === 2 || m.status === 5) {";
+  const i20Order = 'for (const [n, t] of [[domain, "TXT"], ["_dmarc." + domain, "TXT"], [domain, "MX"]]) {';
+  requireGreen("I20 apex TXT failure", contractEngine, "inconclusive-apex-txt-servfail");
+  expectRedComparison(
+    "U I20 flag forced false",
+    replaceExactlyOnce(contractEngine, i20Condition, "if (false) { // I20 forced false", "I20 false flag"),
+    "inconclusive-apex-txt-servfail",
+    "inconclusive-apex-txt-servfail.inconclusive: expected true, got false",
+  );
+  requireGreen("I20 healthy domain", contractEngine, "dane-unvalidated-tlsa");
+  expectRedComparison(
+    "V I20 flag forced true",
+    replaceExactlyOnce(contractEngine, "let inconclusive = false, inconclusiveReason = null;",
+      'let inconclusive = true, inconclusiveReason = "TXT ex.com: lookup error";', "I20 true flag"),
+    "dane-unvalidated-tlsa",
+    "dane-unvalidated-tlsa.inconclusive: expected false, got true",
+  );
+  requireGreen("I20 non-critical MTA-STS failure", contractEngine, "mta-sts-lookup-servfail");
+  expectRedComparison(
+    "W I20 non-critical lookup drives flag",
+    replaceExactlyOnce(contractEngine, i20Order,
+      'for (const [n, t] of [["_mta-sts." + domain, "TXT"], [domain, "TXT"], ["_dmarc." + domain, "TXT"], [domain, "MX"]]) {',
+      "I20 non-critical lookup"),
+    "mta-sts-lookup-servfail",
+    "mta-sts-lookup-servfail.inconclusive: expected false, got true",
+  );
+  requireGreen("I20 order", contractEngine, "inconclusive-apex-txt-before-mx");
+  expectRedComparison(
+    "X I20 MX before TXT",
+    replaceExactlyOnce(contractEngine, i20Order,
+      'for (const [n, t] of [[domain, "MX"], [domain, "TXT"], ["_dmarc." + domain, "TXT"]]) {',
+      "I20 check order"),
+    "inconclusive-apex-txt-before-mx",
+    'inconclusive-apex-txt-before-mx.inconclusive_reason: expected "TXT ex.com: SERVFAIL/REFUSED", got "MX ex.com: SERVFAIL/REFUSED"',
+  );
+  requireGreen("I20 NXDOMAIN", contractEngine, "inconclusive-dmarc-nxdomain");
+  expectRedComparison(
+    "Y I20 NXDOMAIN treated as failure",
+    replaceExactlyOnce(contractEngine, i20Condition,
+      "if (m.error || m.status === 2 || m.status === 5 || m.status === 3) {", "I20 NXDOMAIN"),
+    "inconclusive-dmarc-nxdomain",
+    "inconclusive-dmarc-nxdomain.inconclusive: expected false, got true",
+  );
+
   const originalRunner = readFileSync(runner, "utf8");
   const stubbedRunner = replaceExactlyOnce(
     originalRunner,
@@ -414,9 +470,9 @@ try {
   rmSync(temporary, { recursive: true, force: true });
 }
 
-console.log(`\nCanaries (${surface}): ${passed} passed, ${failed} failed; expected 18 cases.`);
-if (passed + failed !== 18) {
-  console.error(`FAIL  canary count: expected 18, got ${passed + failed}`);
+console.log(`\nCanaries (${surface}): ${passed} passed, ${failed} failed; expected 23 cases.`);
+if (passed + failed !== 23) {
+  console.error(`FAIL  canary count: expected 23, got ${passed + failed}`);
   process.exit(1);
 }
 process.exit(failed ? 1 : 0);

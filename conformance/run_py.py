@@ -371,6 +371,24 @@ def compare_contract(fx, result, score, ledger):
         problems.append(
             f"observations: expected {wanted_observations!r}, got {actual_observations!r}"
         )
+    if "inconclusive" in fx["expect"]:
+        ledger["inconclusive"] += 1
+        wanted = fx["expect"]["inconclusive"]
+        actual = result.get("inconclusive")
+        if actual is not wanted:
+            problems.append(
+                "inconclusive: expected " + json.dumps(wanted)
+                + ", got " + json.dumps(actual)
+            )
+    if "inconclusive_reason" in fx["expect"]:
+        ledger["inconclusiveReason"] += 1
+        wanted = fx["expect"]["inconclusive_reason"]
+        actual = result.get("inconclusive_reason")
+        if actual != wanted:
+            problems.append(
+                "inconclusive_reason: expected " + json.dumps(wanted)
+                + ", got " + json.dumps(actual)
+            )
     return problems
 
 
@@ -379,6 +397,7 @@ def assertion_plan(fixtures):
         "identity": 0, "severity": 0, "action": 0, "fix": 0, "lane": 0,
         "detail": 0, "effort": 0, "value": 0,
         "scoreFields": 0, "closedWorld": 0, "observations": 0,
+        "inconclusive": 0, "inconclusiveReason": 0,
     }
     for fx in fixtures:
         if fx.get("mode") not in CONTRACT_MODES:
@@ -392,6 +411,10 @@ def assertion_plan(fixtures):
         plan["scoreFields"] += len(fx.get("expect", {}).get("score", {}))
         plan["closedWorld"] += 1
         plan["observations"] += 1
+        if "inconclusive" in fx["expect"]:
+            plan["inconclusive"] += 1
+        if "inconclusive_reason" in fx["expect"]:
+            plan["inconclusiveReason"] += 1
     return plan
 
 
@@ -416,6 +439,7 @@ def run():
         "identity": 0, "severity": 0, "action": 0, "fix": 0, "lane": 0,
         "detail": 0, "effort": 0, "value": 0,
         "scoreFields": 0, "closedWorld": 0, "observations": 0,
+        "inconclusive": 0, "inconclusiveReason": 0,
     }
 
     for fx in fixtures:

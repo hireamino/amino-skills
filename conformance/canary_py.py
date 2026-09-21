@@ -319,6 +319,23 @@ def replace_fixture_addresses(corpus, fixture_id, host, rrtype, expected, replac
     entry[rrtype] = replacement
 
 
+def whi180_inconclusive_canary(name, fixture, anchor, replacement, diagnostic):
+    """Mutate the shipping Python audit, not a test or an expected fixture."""
+    selected = {"CONFORMANCE_FIXTURE": fixture}
+    require_green(name, execute(selected))
+    with tempfile.TemporaryDirectory(prefix="amino-whi180-inconclusive-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        audit_path.write_text(
+            replace_exactly_once(source, anchor, replacement, name),
+            encoding="utf-8",
+        )
+        expect_red_comparison(name, execute_with_scripts(target, selected), diagnostic)
+
+
 try:
     with tempfile.TemporaryDirectory(prefix="amino-whi8-skill-") as temporary:
         target = Path(temporary)
@@ -1402,13 +1419,44 @@ try:
             "FAIL WHI-127 address row ipv6-zone-public-name",
         )
 
+    whi180_inconclusive_canary(
+        "I20 flag forced false", "inconclusive-apex-txt-servfail",
+        '        if metadata.get("error") or status in (2, 5):\n',
+        '        if False:  # I20 forced-false canary\n',
+        "inconclusive-apex-txt-servfail.inconclusive: expected true, got false",
+    )
+    whi180_inconclusive_canary(
+        "I20 flag forced true", "dane-unvalidated-tlsa",
+        '    inconclusive, inconclusive_reason = False, None\n',
+        '    inconclusive, inconclusive_reason = True, "TXT ex.com: lookup error"\n',
+        "dane-unvalidated-tlsa.inconclusive: expected false, got true",
+    )
+    whi180_inconclusive_canary(
+        "I20 non-critical MTA-STS drives flag", "mta-sts-lookup-servfail",
+        '    for name, rrtype in ((domain, "TXT"), (f"_dmarc.{domain}", "TXT"), (domain, "MX")):\n',
+        '    for name, rrtype in ((f"_mta-sts.{domain}", "TXT"), (domain, "TXT"), (f"_dmarc.{domain}", "TXT"), (domain, "MX")):\n',
+        "mta-sts-lookup-servfail.inconclusive: expected false, got true",
+    )
+    whi180_inconclusive_canary(
+        "I20 MX before TXT", "inconclusive-apex-txt-before-mx",
+        '    for name, rrtype in ((domain, "TXT"), (f"_dmarc.{domain}", "TXT"), (domain, "MX")):\n',
+        '    for name, rrtype in ((domain, "MX"), (domain, "TXT"), (f"_dmarc.{domain}", "TXT")):\n',
+        'inconclusive-apex-txt-before-mx.inconclusive_reason: expected "TXT ex.com: SERVFAIL/REFUSED", got "MX ex.com: SERVFAIL/REFUSED"',
+    )
+    whi180_inconclusive_canary(
+        "I20 NXDOMAIN treated as failure", "inconclusive-dmarc-nxdomain",
+        '        if metadata.get("error") or status in (2, 5):\n',
+        '        if metadata.get("error") or status in (2, 5, 3):\n',
+        "inconclusive-dmarc-nxdomain.inconclusive: expected false, got true",
+    )
+
     prove_crashing_checker_rejected()
 except Exception as error:
     print(f"FAIL  canary setup — {error}")
     FAILED += 1
 
-print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 49 cases.")
-if PASSED + FAILED != 49:
-    print(f"FAIL  canary count: expected 49, got {PASSED + FAILED}", file=sys.stderr)
+print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 54 cases.")
+if PASSED + FAILED != 54:
+    print(f"FAIL  canary count: expected 54, got {PASSED + FAILED}", file=sys.stderr)
     sys.exit(1)
 sys.exit(1 if FAILED else 0)
