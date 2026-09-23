@@ -1,4 +1,4 @@
-# Amino Deliverability — Correctness Conformance Spec (v1.14)
+# Amino Deliverability — Correctness Conformance Spec (v1.15)
 
 **Status:** proposed · **Owner:** hireamino · **Canonical home:** `amino-skills/conformance/`
 
@@ -52,6 +52,30 @@ review. The corpus has no expectation regeneration mode; reviewed answers cannot
 replaced by current output.
 
 ## Current status
+
+**v1.15 / WHI-180 Step 2 — critical-DNS rcode boundary:** for the three
+critical lookups (apex TXT, `_dmarc.<domain>` TXT, then apex MX), only NOERROR
+(0) and NXDOMAIN (3) are conclusive. Every other response code—including FORMERR
+(1), SERVFAIL (2), NOTIMP (4), and REFUSED (5)—and every transport error is
+inconclusive. Status 2 and 5 use the existing reason
+`"<TYPE> <name>: SERVFAIL/REFUSED"`; every other failure uses
+`"<TYPE> <name>: lookup error"`. Non-critical lookups never set the flag.
+
+Six fixtures extend the corpus from 52 to 58 cases (53 contract passes and five
+skips): three critical FORMERR/NOTIMP rows, one non-critical NOTIMP control, an
+AAAA-only website lookup failure, and an apex-NXDOMAIN website path. The website
+rows pin that either address-family lookup failure makes `robots` unavailable,
+while authoritative apex NXDOMAIN makes it not applicable; neither affects the
+critical-DNS inconclusive result. Python mutation canaries rise from 54 to 59 and
+JavaScript mutation canaries from 23 to 27. The skipped `reliability-servfail`
+wrapper placeholder is retained, but its stale pre-v1.14 explanation is replaced:
+resolver-level I20 is now covered by `dns-engine` fixtures, while wrapper exception
+handling remains covered by consumer `finalize()` tests.
+
+The Python skill already implements this rule through its normalized resolver
+metadata, so this revision changes no shipping Python logic. Engine contract 1.4.0
+intentionally fails the three new critical-rcode rows; its correction ships only
+in the engine's own reviewed PR together with the immutable skills-pin bump.
 
 **v1.14 / WHI-180 — critical-DNS inconclusive result contract:** both the Python
 skill and the JavaScript engine report `inconclusive: bool` and

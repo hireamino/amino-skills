@@ -1449,14 +1449,44 @@ try:
         '        if metadata.get("error") or status in (2, 5, 3):\n',
         "inconclusive-dmarc-nxdomain.inconclusive: expected false, got true",
     )
+    whi180_inconclusive_canary(
+        "I20 only SERVFAIL and REFUSED count", "inconclusive-apex-txt-notimp",
+        '        if metadata.get("error") or status in (2, 5):\n',
+        '        if status in (2, 5):  # I20 rare-rcode canary\n',
+        "inconclusive-apex-txt-notimp.inconclusive: expected true, got false",
+    )
+    whi180_inconclusive_canary(
+        "I20 every non-zero rcode counts", "inconclusive-dmarc-nxdomain",
+        '        if metadata.get("error") or status in (2, 5):\n',
+        '        if metadata.get("error") or status != 0:  # I20 NXDOMAIN canary\n',
+        "inconclusive-dmarc-nxdomain.inconclusive: expected false, got true",
+    )
+    whi180_inconclusive_canary(
+        "I20 reason forms swapped", "inconclusive-apex-txt-servfail",
+        '            reason = "SERVFAIL/REFUSED" if status in (2, 5) else "lookup error"\n',
+        '            reason = "lookup error" if status in (2, 5) else "SERVFAIL/REFUSED"\n',
+        'inconclusive-apex-txt-servfail.inconclusive_reason: expected "TXT ex.com: SERVFAIL/REFUSED", got "TXT ex.com: lookup error"',
+    )
+    whi180_inconclusive_canary(
+        "I20 website consults both address-family metadata", "robots-aaaa-lookup-failed",
+        '        if dns_meta(host, "A").get("error") or dns_meta(host, "AAAA").get("error"):\n',
+        '        if dns_meta(host, "A").get("error"):  # I20 A-only metadata canary\n',
+        "robots-aaaa-lookup-failed.observations: expected {'mta_sts_policy': 'not_applicable', 'robots': 'unavailable', 'rdap': 'unavailable'}, got {'mta_sts_policy': 'not_applicable', 'robots': 'not_applicable', 'rdap': 'unavailable'}",
+    )
+    whi180_inconclusive_canary(
+        "I20 website treats apex NXDOMAIN as conclusive", "robots-apex-nxdomain",
+        '        if dns_meta(host, "A").get("error") or dns_meta(host, "AAAA").get("error"):\n',
+        '        if dns_meta(host, "A").get("status") != 0 or dns_meta(host, "AAAA").get("status") != 0:\n',
+        "robots-apex-nxdomain.observations: expected {'mta_sts_policy': 'not_applicable', 'robots': 'not_applicable', 'rdap': 'unavailable'}, got {'mta_sts_policy': 'not_applicable', 'robots': 'unavailable', 'rdap': 'unavailable'}",
+    )
 
     prove_crashing_checker_rejected()
 except Exception as error:
     print(f"FAIL  canary setup — {error}")
     FAILED += 1
 
-print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 54 cases.")
-if PASSED + FAILED != 54:
-    print(f"FAIL  canary count: expected 54, got {PASSED + FAILED}", file=sys.stderr)
+print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 59 cases.")
+if PASSED + FAILED != 59:
+    print(f"FAIL  canary count: expected 59, got {PASSED + FAILED}", file=sys.stderr)
     sys.exit(1)
 sys.exit(1 if FAILED else 0)
