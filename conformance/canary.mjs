@@ -446,6 +446,41 @@ try {
     "inconclusive-dmarc-nxdomain",
     "inconclusive-dmarc-nxdomain.inconclusive: expected false, got true",
   );
+  requireGreen("I20 reason forms", contractEngine, "inconclusive-apex-txt-servfail");
+  expectRedComparison(
+    "Z I20 reason forms swapped",
+    replaceExactlyOnce(contractEngine,
+      '(m.error ? "lookup error" : "SERVFAIL/REFUSED")',
+      '(m.error ? "SERVFAIL/REFUSED" : "lookup error")', "I20 reason forms"),
+    "inconclusive-apex-txt-servfail",
+    'inconclusive-apex-txt-servfail.inconclusive_reason: expected "TXT ex.com: SERVFAIL/REFUSED", got "TXT ex.com: lookup error"',
+  );
+  requireGreen("I20 AAAA-only website failure", contractEngine, "robots-aaaa-lookup-failed");
+  expectRedComparison(
+    "AA I20 website consults only A metadata",
+    replaceExactlyOnce(contractEngine,
+      "return dnsMetaFailed(aMeta) || dnsMetaFailed(aaaaMeta)\n        ? \"lookup_failed\" : \"no_answers\";",
+      'return dnsMetaFailed(aMeta)\n        ? "lookup_failed" : "no_answers";', "I20 address-family metadata"),
+    "robots-aaaa-lookup-failed",
+    'robots-aaaa-lookup-failed.observations: expected {"mta_sts_policy":"not_applicable","robots":"unavailable","rdap":"unavailable"}, got {"mta_sts_policy":"not_applicable","robots":"not_applicable","rdap":"unavailable"}',
+  );
+  requireGreen("I20 website apex NXDOMAIN", contractEngine, "robots-apex-nxdomain");
+  expectRedComparison(
+    "AB I20 website accepts NOERROR only",
+    replaceExactlyOnce(contractEngine,
+      "return !!meta?.error || ![0, 3].includes(meta?.status);",
+      "return !!meta?.error || meta?.status !== 0;", "I20 website NXDOMAIN"),
+    "robots-apex-nxdomain",
+    'robots-apex-nxdomain.observations: expected {"mta_sts_policy":"not_applicable","robots":"not_applicable","rdap":"unavailable"}, got {"mta_sts_policy":"unavailable","robots":"unavailable","rdap":"unavailable"}',
+  );
+  requireGreen("I20 NXDOMAIN reason", contractEngine, "inconclusive-dmarc-nxdomain");
+  expectRedComparison(
+    "AC I20 every non-zero rcode counts",
+    replaceExactlyOnce(contractEngine, i20Condition,
+      "if (m.error || m.status !== 0) {", "I20 every non-zero rcode"),
+    "inconclusive-dmarc-nxdomain",
+    "inconclusive-dmarc-nxdomain.inconclusive: expected false, got true",
+  );
 
   const originalRunner = readFileSync(runner, "utf8");
   const stubbedRunner = replaceExactlyOnce(
@@ -470,9 +505,9 @@ try {
   rmSync(temporary, { recursive: true, force: true });
 }
 
-console.log(`\nCanaries (${surface}): ${passed} passed, ${failed} failed; expected 23 cases.`);
-if (passed + failed !== 23) {
-  console.error(`FAIL  canary count: expected 23, got ${passed + failed}`);
+console.log(`\nCanaries (${surface}): ${passed} passed, ${failed} failed; expected 27 cases.`);
+if (passed + failed !== 27) {
+  console.error(`FAIL  canary count: expected 27, got ${passed + failed}`);
   process.exit(1);
 }
 process.exit(failed ? 1 : 0);
