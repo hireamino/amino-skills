@@ -471,7 +471,7 @@ try {
       "return !!meta?.error || ![0, 3].includes(meta?.status);",
       "return !!meta?.error || meta?.status !== 0;", "I20 website NXDOMAIN"),
     "robots-apex-nxdomain",
-    'robots-apex-nxdomain.observations: expected {"mta_sts_policy":"not_applicable","robots":"not_applicable","rdap":"unavailable"}, got {"mta_sts_policy":"not_applicable","robots":"unavailable","rdap":"unavailable"}',
+    'robots-apex-nxdomain.observations: expected {"mta_sts_policy":"not_applicable","robots":"not_applicable","rdap":"unavailable"}, got {"mta_sts_policy":"unavailable","robots":"unavailable","rdap":"unavailable"}',
   );
   requireGreen("I20 NXDOMAIN reason", contractEngine, "inconclusive-dmarc-nxdomain");
   expectRedComparison(
