@@ -403,7 +403,7 @@ try {
     'lane-closed-world-coverage.findings[Transport|Mail server has no reverse DNS (PTR)].lane: expected "outside_sending_posture", got "inbound_transport"',
   );
 
-  const i20Condition = "if (m.error || m.status === 2 || m.status === 5) {";
+  const i20Condition = "if (dnsMetaFailed(m)) {";
   const i20Order = 'for (const [n, t] of [[domain, "TXT"], ["_dmarc." + domain, "TXT"], [domain, "MX"]]) {';
   requireGreen("I20 apex TXT failure", contractEngine, "inconclusive-apex-txt-servfail");
   expectRedComparison(
@@ -442,7 +442,7 @@ try {
   expectRedComparison(
     "Y I20 NXDOMAIN treated as failure",
     replaceExactlyOnce(contractEngine, i20Condition,
-      "if (m.error || m.status === 2 || m.status === 5 || m.status === 3) {", "I20 NXDOMAIN"),
+      "if (dnsMetaFailed(m) || m.status === 3) {", "I20 NXDOMAIN"),
     "inconclusive-dmarc-nxdomain",
     "inconclusive-dmarc-nxdomain.inconclusive: expected false, got true",
   );
@@ -450,8 +450,8 @@ try {
   expectRedComparison(
     "Z I20 reason forms swapped",
     replaceExactlyOnce(contractEngine,
-      '(m.error ? "lookup error" : "SERVFAIL/REFUSED")',
-      '(m.error ? "SERVFAIL/REFUSED" : "lookup error")', "I20 reason forms"),
+      '((m.status === 2 || m.status === 5) ? "SERVFAIL/REFUSED" : "lookup error")',
+      '((m.status === 2 || m.status === 5) ? "lookup error" : "SERVFAIL/REFUSED")', "I20 reason forms"),
     "inconclusive-apex-txt-servfail",
     'inconclusive-apex-txt-servfail.inconclusive_reason: expected "TXT ex.com: SERVFAIL/REFUSED", got "TXT ex.com: lookup error"',
   );
