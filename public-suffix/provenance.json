@@ -1,0 +1,20 @@
+{
+  "alabel_converted_rule_count": 459,
+  "artifact": "public_suffix_rules.tsv",
+  "artifact_format": "section-tab-alabel-rule-v1",
+  "artifact_sha256": "c16d8b621302b8b5c04ad7c6378494e5aec55e8017f87c4e9fc82efe61e1c7cf",
+  "fetched_at": "2026-10-05T23:35:32Z",
+  "sections": {
+    "ICANN": {
+      "rule_count": 6949
+    },
+    "PRIVATE": {
+      "rule_count": 3384
+    }
+  },
+  "source_commit": "6cd82aff889e3d64e5e03bc5c1f43da1934a960a",
+  "source_sha256": "e0fe072d26b0536525badea237953ff451c9f8e64c9d02c6daa81a4491d2fc66",
+  "source_url": "https://publicsuffix.org/list/public_suffix_list.dat",
+  "source_version": "2026-10-01_23-02-52_UTC",
+  "total_rule_count": 10333
+}

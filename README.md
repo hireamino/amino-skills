@@ -63,6 +63,10 @@ answer is public under the reviewed IANA-derived address contract; mixed, unpars
 mapped-private, translated-private, and other non-public answers are refused. IPv6
 zone-qualified address literals are refused.
 
+Registrable-domain decisions are moving to one generated, pinned
+[Public Suffix List artifact](./public-suffix/README.md). Step 1 establishes and
+tests that shared source without changing any shipping audit surface.
+
 ## Contributing
 
 Contributions welcome — new checks, missing DKIM selectors, standards updates, and

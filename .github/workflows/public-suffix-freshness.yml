@@ -1,0 +1,20 @@
+name: public-suffix-freshness
+
+on:
+  schedule:
+    - cron: '23 8 * * 2'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b  # v5
+        with:
+          python-version: '3.12'
+      - name: Compare pinned artifact with canonical Public Suffix List
+        run: python3 public-suffix/freshness.py --report "$RUNNER_TEMP/public-suffix-freshness.md"

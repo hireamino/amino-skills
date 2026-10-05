@@ -1,4 +1,4 @@
-# Amino Deliverability — Correctness Conformance Spec (v1.15)
+# Amino Deliverability — Correctness Conformance Spec (v1.16)
 
 **Status:** proposed · **Owner:** hireamino · **Canonical home:** `amino-skills/conformance/`
 
@@ -52,6 +52,26 @@ review. The corpus has no expectation regeneration mode; reviewed answers cannot
 replaced by current output.
 
 ## Current status
+
+**v1.16 / WHI-215 Step 1 — one pinned registrable-domain source:**
+`public-suffix/public_suffix_rules.tsv` is the sole reviewed source of truth for
+future registrable-domain and public-suffix decisions. It is generated from the
+canonical Public Suffix List, carries both ICANN and PRIVATE rules tagged by
+section, and stores every rule in A-label form. Its provenance binds the upstream
+VERSION and COMMIT, source and artifact SHA-256 values, fetch time, section counts,
+and conversion count. The verbatim MPL-2.0 notice remains in the artifact; the
+official 78-case CC0 vector suite is vendored beside it and passes 78/78 against a
+test-only reference lookup built from the artifact.
+
+This source will replace three incomplete implementations: the engine's
+`PUBLIC_SUFFIX_2` / `orgBase`, the Python skill's `PUBLIC_SUFFIX_2` / `org_base`,
+and Watchtower's `MULTI_TLD` / `regDomain`. Adoption order is engine + Python skill
+together, then console, then Watchtower. A weekly workflow reports canonical drift;
+a reviewed refresh regenerates the artifact and provenance and reruns all official
+vectors. The networked freshness check is separate from offline conformance and
+does not weaken its network kill switch. **No shipping surface consumes the new
+artifact in Step 1, so audit findings, scores, observations, and ownership behavior
+are unchanged.**
 
 **v1.15 / WHI-180 Step 2 — critical-DNS rcode boundary:** for the three
 critical lookups (apex TXT, `_dmarc.<domain>` TXT, then apex MX), only NOERROR
