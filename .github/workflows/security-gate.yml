@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # Actions are SHA-pinned (supply-chain hardening); trailing comment = the tag.
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v4
 
       # Semgrep (SAST) + gitleaks 8.30.1 (secrets, checksum-verified by the action).
       # NOTE: this gitleaks pass scans the WORKING TREE, which catches a secret at
