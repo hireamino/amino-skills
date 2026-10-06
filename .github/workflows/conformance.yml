@@ -10,6 +10,7 @@ on:
       - 'amino-deliverability-audit/skills/amino-deliverability-audit/SKILL.md'
       - 'amino-deliverability-audit/skills/amino-deliverability-audit/references/**'
       - 'conformance/**'
+      - 'public-suffix/**'
       - 'FAQ.md'
       - 'README.md'
       - 'CONTRIBUTING.md'
@@ -19,6 +20,7 @@ on:
       - 'amino-deliverability-audit/skills/amino-deliverability-audit/SKILL.md'
       - 'amino-deliverability-audit/skills/amino-deliverability-audit/references/**'
       - 'conformance/**'
+      - 'public-suffix/**'
       - 'FAQ.md'
       - 'README.md'
       - 'CONTRIBUTING.md'
@@ -48,3 +50,7 @@ jobs:
         run: python3 conformance/run_py.py
       - name: Mutation canaries (material contract + network kill switch)
         run: python3 conformance/canary_py.py
+      - name: Pinned public-suffix artifact (offline)
+        run: |
+          python3 public-suffix/verify.py
+          python3 public-suffix/test_generator.py

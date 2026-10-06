@@ -1,0 +1,244 @@
+#!/usr/bin/env python3
+"""Generate the pinned, section-tagged Public Suffix List artifact.
+
+The only supported network source is publicsuffix.org's canonical list.  Tests and
+review tooling may pass an already-downloaded source file, but the recorded source
+URL remains canonical.
+"""
+
+from __future__ import annotations
+
+import argparse
+from dataclasses import dataclass
+from datetime import datetime, timezone
+import hashlib
+import json
+from pathlib import Path
+import re
+import sys
+from urllib.request import Request, urlopen
+
+
+SOURCE_URL = "https://publicsuffix.org/list/public_suffix_list.dat"
+ARTIFACT_NAME = "public_suffix_rules.tsv"
+PROVENANCE_NAME = "provenance.json"
+MPL_NOTICE = (
+    "// This Source Code Form is subject to the terms of the Mozilla Public\n"
+    "// License, v. 2.0. If a copy of the MPL was not distributed with this\n"
+    "// file, You can obtain one at https://mozilla.org/MPL/2.0/.\n"
+)
+VERSION_RE = re.compile(r"^// VERSION: (\S+)$", re.MULTILINE)
+COMMIT_RE = re.compile(r"^// COMMIT: ([0-9a-f]{40})$", re.MULTILINE)
+BEGIN = {
+    "ICANN": "// ===BEGIN ICANN DOMAINS===",
+    "PRIVATE": "// ===BEGIN PRIVATE DOMAINS===",
+}
+END = {
+    "ICANN": "// ===END ICANN DOMAINS===",
+    "PRIVATE": "// ===END PRIVATE DOMAINS===",
+}
+
+
+class GenerationError(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class ParsedSource:
+    version: str
+    commit: str
+    source_sha256: str
+    rules: dict[str, tuple[str, ...]]
+    converted_rule_count: int
+
+
+def sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def alabel_rule(rule: str) -> tuple[str, bool]:
+    prefix = ""
+    value = rule
+    if value.startswith("!"):
+        prefix, value = "!", value[1:]
+    elif value.startswith("*."):
+        prefix, value = "*.", value[2:]
+    if not value or any(not label for label in value.split(".")):
+        raise GenerationError(f"invalid public-suffix rule {rule!r}")
+    try:
+        encoded = ".".join(label.encode("idna").decode("ascii") for label in value.split("."))
+    except UnicodeError as exc:
+        raise GenerationError(f"cannot A-label encode rule {rule!r}: {exc}") from exc
+    result = prefix + encoded.lower()
+    return result, result != rule.lower()
+
+
+def parse_source(data: bytes, *, enforce_production_floor: bool = True) -> ParsedSource:
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise GenerationError(f"source is not UTF-8: {exc}") from exc
+    if not text.endswith("\n"):
+        raise GenerationError("source appears truncated: missing final newline")
+    if not text.startswith(MPL_NOTICE):
+        raise GenerationError("source is missing the verbatim MPL-2.0 notice")
+    version_match = VERSION_RE.search(text)
+    commit_match = COMMIT_RE.search(text)
+    if not version_match or not commit_match:
+        raise GenerationError("source header must carry VERSION and 40-character COMMIT")
+
+    lines = text.splitlines()
+    parsed: dict[str, tuple[str, ...]] = {}
+    converted = 0
+    for section in ("ICANN", "PRIVATE"):
+        if lines.count(BEGIN[section]) != 1 or lines.count(END[section]) != 1:
+            raise GenerationError(
+                f"source appears truncated or malformed: must contain exactly one {section} section"
+            )
+        start = lines.index(BEGIN[section]) + 1
+        stop = lines.index(END[section])
+        if start >= stop:
+            raise GenerationError(f"source has an empty or reversed {section} section")
+        values: list[str] = []
+        for line in lines[start:stop]:
+            rule = line.strip()
+            if not rule or rule.startswith("//"):
+                continue
+            encoded, changed = alabel_rule(rule)
+            values.append(encoded)
+            converted += int(changed)
+        parsed[section] = tuple(values)
+
+    if lines[-1] != END["PRIVATE"]:
+        raise GenerationError("source appears truncated: PRIVATE end marker is not last")
+    if enforce_production_floor:
+        if len(data) < 250_000:
+            raise GenerationError(f"source appears truncated: only {len(data)} bytes")
+        if len(parsed["ICANN"]) < 6_000 or len(parsed["PRIVATE"]) < 3_000:
+            raise GenerationError(
+                "source appears truncated: "
+                f"ICANN={len(parsed['ICANN'])}, PRIVATE={len(parsed['PRIVATE'])}"
+            )
+    if len(set(parsed["ICANN"])) != len(parsed["ICANN"]):
+        raise GenerationError("A-label conversion created a duplicate ICANN rule")
+    if len(set(parsed["PRIVATE"])) != len(parsed["PRIVATE"]):
+        raise GenerationError("A-label conversion created a duplicate PRIVATE rule")
+    return ParsedSource(
+        version=version_match.group(1),
+        commit=commit_match.group(1),
+        source_sha256=sha256(data),
+        rules=parsed,
+        converted_rule_count=converted,
+    )
+
+
+def artifact_bytes(parsed: ParsedSource) -> bytes:
+    lines = [
+        MPL_NOTICE.rstrip("\n"),
+        "",
+        "// Generated by public-suffix/generate.py. DO NOT EDIT.",
+        f"// Source: {SOURCE_URL}",
+        f"// VERSION: {parsed.version}",
+        f"// COMMIT: {parsed.commit}",
+        "// Format: SECTION<TAB>A-LABEL-RULE",
+        "",
+    ]
+    for section in ("ICANN", "PRIVATE"):
+        lines.extend(f"{section}\t{rule}" for rule in parsed.rules[section])
+    return ("\n".join(lines) + "\n").encode("utf-8")
+
+
+def provenance(parsed: ParsedSource, artifact: bytes, fetched_at: str) -> dict:
+    return {
+        "artifact": ARTIFACT_NAME,
+        "artifact_format": "section-tab-alabel-rule-v1",
+        "artifact_sha256": sha256(artifact),
+        "fetched_at": fetched_at,
+        "source_commit": parsed.commit,
+        "source_sha256": parsed.source_sha256,
+        "source_url": SOURCE_URL,
+        "source_version": parsed.version,
+        "sections": {
+            "ICANN": {"rule_count": len(parsed.rules["ICANN"])},
+            "PRIVATE": {"rule_count": len(parsed.rules["PRIVATE"])},
+        },
+        "total_rule_count": sum(len(values) for values in parsed.rules.values()),
+        "alabel_converted_rule_count": parsed.converted_rule_count,
+    }
+
+
+def provenance_bytes(document: dict) -> bytes:
+    return (json.dumps(document, indent=2, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8")
+
+
+def canonical_timestamp(value: str) -> str:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise GenerationError(f"invalid --fetched-at timestamp {value!r}") from exc
+    if parsed.tzinfo is None:
+        raise GenerationError("--fetched-at must include a timezone")
+    return parsed.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def existing_timestamp(output_dir: Path, source_sha: str) -> str | None:
+    path = output_dir / PROVENANCE_NAME
+    if not path.exists():
+        return None
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if document.get("source_sha256") == source_sha:
+        return document.get("fetched_at")
+    return None
+
+
+def read_source(source_file: Path | None) -> bytes:
+    if source_file is not None:
+        return source_file.read_bytes()
+    request = Request(SOURCE_URL, headers={"User-Agent": "hireamino-psl-generator/1"})
+    with urlopen(request, timeout=30) as response:
+        if response.status != 200:
+            raise GenerationError(f"canonical source returned HTTP {response.status}")
+        return response.read()
+
+
+def generate(source: bytes, output_dir: Path, fetched_at: str | None = None) -> tuple[bytes, bytes]:
+    parsed = parse_source(source)
+    artifact = artifact_bytes(parsed)
+    timestamp = fetched_at or existing_timestamp(output_dir, parsed.source_sha256)
+    if timestamp is None:
+        timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    timestamp = canonical_timestamp(timestamp)
+    document = provenance(parsed, artifact, timestamp)
+    return artifact, provenance_bytes(document)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--source-file", type=Path, help="use reviewed local source bytes; never a mirror URL")
+    parser.add_argument("--output-dir", type=Path, default=Path(__file__).resolve().parent)
+    parser.add_argument("--fetched-at", help="UTC timestamp; reused from provenance when source is unchanged")
+    args = parser.parse_args()
+    try:
+        source = read_source(args.source_file)
+        artifact, record = generate(source, args.output_dir, args.fetched_at)
+        args.output_dir.mkdir(parents=True, exist_ok=True)
+        (args.output_dir / ARTIFACT_NAME).write_bytes(artifact)
+        (args.output_dir / PROVENANCE_NAME).write_bytes(record)
+        parsed_record = json.loads(record)
+        print(
+            "GENERATED "
+            f"rules={parsed_record['total_rule_count']} "
+            f"converted={parsed_record['alabel_converted_rule_count']} "
+            f"bytes={len(artifact)} sha256={parsed_record['artifact_sha256']}"
+        )
+        return 0
+    except (GenerationError, OSError) as exc:
+        print(f"GENERATION REFUSED: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
