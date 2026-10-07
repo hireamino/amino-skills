@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""WHI-180 Step 2: prove the reviewed corpus and Python output are preserved.
+"""WHI-215 Step 2: prove existing reviewed rows and Python outputs are preserved.
 
 BASE is a commit, never a mutable branch. A shallow clone without BASE fails
 closed at git show/checkout; the workflow fetches full history for this proof.
@@ -17,25 +17,29 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
-BASE = "3ce3113138371f858e55ce3f3300228310d09ef2"
+BASE = "e61b74ebe84116f30eb24aa70db64e81ab1db9c7"
 FIXTURES_PATH = "conformance/fixtures.json"
 TABLE_PATH = "conformance/address-contract.json"
 NEW_IDS = (
-    "inconclusive-apex-txt-notimp",
-    "inconclusive-dmarc-txt-formerr",
-    "inconclusive-apex-mx-notimp",
-    "inconclusive-noncritical-mta-sts-notimp",
-    "robots-aaaa-lookup-failed",
-    "robots-apex-nxdomain",
+    "registrable-root-nhs-uk",
+    "registrable-root-sch-uk-wildcard",
+    "registrable-root-police-uk",
+    "registrable-root-gov-uk",
+    "registrable-root-com-es",
+    "registrable-root-ac-in",
+    "registrable-root-k12-us",
+    "registrable-root-alabel",
 )
 # Deliberately re-pin only after reviewing the new fixture bodies.
 NEW_DIGESTS = {
-    "inconclusive-apex-txt-notimp": "ff0459c7e36f82a1df183018544b36bf4f80854b1289f7edb31333a6b5c23cd5",
-    "inconclusive-dmarc-txt-formerr": "e83f2d4f58b635ace5c853f5059cedd0c40151a99dace989901ac9d0f8929146",
-    "inconclusive-apex-mx-notimp": "67936509ae1dfb6201821a998af5662cfdd35dcc627501c91ffcb90c1a18dba7",
-    "inconclusive-noncritical-mta-sts-notimp": "cd2119e50b016dd5c3e2be85c345d8e7e101ee01a0b739fba0cc980c5c6487cd",
-    "robots-aaaa-lookup-failed": "1ad63d8275187ef167c3fad2933141cd0f5b443ad382c4c3a93052adc09dc19c",
-    "robots-apex-nxdomain": "78715644a10ce3bb5dd1cc08e4f7dc1a401a4d8bacc507316439b61e7ead4969",
+    "registrable-root-nhs-uk": "d4538348fed16ce85e7a398e8737c2412a8a66fa76c63e883cd1c3fa893cb4a0",
+    "registrable-root-sch-uk-wildcard": "2a37fc39729a0185f50bccfecfca630bd95a5f3e0872f9ddc51ced52bce045cc",
+    "registrable-root-police-uk": "97e9ea1c9c730a992a510f1f29c7735a9d4de34ce46608c531b86f8dffa3167f",
+    "registrable-root-gov-uk": "f291a6e89af338e258fe41312eb8c1c0c2b35fa37698cb4695c151e1dbc9a170",
+    "registrable-root-com-es": "7a59b3cd68df69fcdf3b530e8d2cec3e3045db4ec8b23f11b0c25c53cb87cd13",
+    "registrable-root-ac-in": "98ec9548b55a681d17da7e02058348e8708639aed637f8c4d9a7c88aac2851f0",
+    "registrable-root-k12-us": "26303cf414f0b27850d3606b111e4770fd6e191ebb84bd9e2f47ef9e30d8e3dc",
+    "registrable-root-alabel": "6bea83dceadc39695bae505f08647a99f4df8f8630892581ecd2638eebc59693",
 }
 
 OLD_RELIABILITY_REASON = (
@@ -126,7 +130,7 @@ def main():
     current_document = json.loads((ROOT / FIXTURES_PATH).read_text(encoding="utf-8"))
     base = base_document["fixtures"]
     current = current_document["fixtures"]
-    if set(base_document) != set(current_document) or len(base) != 52 or len(current) != 58:
+    if set(base_document) != set(current_document) or len(base) != 58 or len(current) != 66:
         print("UNEXPECTED_FIXTURE_SHAPE", file=sys.stderr)
         return 1
     if [f["id"] for f in current[:len(base)]] != [f["id"] for f in base]:
@@ -139,11 +143,7 @@ def main():
     fixture_changes = []
     for old, new in zip(base, current):
         delta = list(changes(old, new))
-        expected = (
-            [(('skip_reason',), OLD_RELIABILITY_REASON, NEW_RELIABILITY_REASON)]
-            if old["id"] == "reliability-servfail"
-            else []
-        )
+        expected = []
         if delta != expected:
             fixture_changes.append((old["id"], delta, expected))
     if fixture_changes:
@@ -157,7 +157,7 @@ def main():
     table_same = git_show(TABLE_PATH) == (ROOT / TABLE_PATH).read_bytes()
     print(
         f"FIXTURE_CHANGE_PROOF existing={len(base)} added={len(NEW_IDS)} "
-        "allowed_existing_changes=reliability-servfail.skip_reason "
+        "allowed_existing_changes=none "
         f"address_table_unchanged={str(table_same).lower()}"
     )
     print("NEW_FIXTURE_DIGESTS " + ",".join(f"{key}:{digests[key]}" for key in NEW_IDS))
@@ -177,7 +177,7 @@ def main():
     output_changes = list(changes(old_outputs, current_outputs))
     grouped = Counter(path[-1] for path, _before, _after in output_changes)
     expected_ids = set(old_outputs)
-    valid = set(current_outputs) == expected_ids and len(expected_ids) == 47 and not output_changes
+    valid = set(current_outputs) == expected_ids and len(expected_ids) == 53 and not output_changes
     print(
         f"OUTPUT_PRESERVATION fixtures={len(current_outputs)} changed_keys={len(output_changes)} "
         f"by_key={dict(sorted(grouped.items()))} "

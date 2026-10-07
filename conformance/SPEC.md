@@ -1,4 +1,4 @@
-# Amino Deliverability — Correctness Conformance Spec (v1.16)
+# Amino Deliverability — Correctness Conformance Spec (v1.17)
 
 **Status:** proposed · **Owner:** hireamino · **Canonical home:** `amino-skills/conformance/`
 
@@ -52,6 +52,22 @@ review. The corpus has no expectation regeneration mode; reviewed answers cannot
 replaced by current output.
 
 ## Current status
+
+**v1.17 / WHI-215 Step 2 — full registrable-domain contract:** the Python
+skill loads the byte-identical sibling copy of
+`public-suffix/public_suffix_rules.tsv`; canonical engine contract 1.6.0 embeds
+those same reviewed bytes to preserve its single-file distribution contract.
+Both shipping implementations delete their hand-written two-label tables and
+apply the complete PSL algorithm: longest exact or wildcard match, exception
+rule precedence, the prevailing `*` rule, and A-label matching for non-Latin
+names. The 78 official vectors and an independent mutation restoring the former
+last-two-label fallback are release-blocking on each implementation. The corpus
+adds eight reviewed registrable-root rows covering `nhs.uk`, the `sch.uk`
+wildcard, `police.uk`, `gov.uk`, `com.es`, `ac.in`, a US `k12` suffix, and a
+non-Latin A-label name. It now has 61 executable contract cases plus five
+explicit skips. Existing findings, scores, observations, and inconclusive
+results remain byte-identical; only registrable-root decisions bound by the new
+rows change.
 
 **v1.16 / WHI-215 Step 1 — one pinned registrable-domain source:**
 `public-suffix/public_suffix_rules.tsv` is the sole reviewed source of truth for
@@ -368,11 +384,11 @@ The web and Action pin files must name the same full amino-skills commit before 
 
 ## Fixtures
 
-See `fixtures.json`. It contains 47 known-answer cases: 26 closed-world
-`dns-engine` cases, 16 closed-world `http-observation` cases (the original
-absent/unavailable pairs, lane coverage and address refusals plus seven WHI-127
-coverage cases), and five explicitly skipped
-pure/HTTP/wrapper cases covered by per-surface tests or later work. Each is
-language-neutral and every harness adapts it to its own resolver/HTTP mock without
-ambient network access. The Python runner is guarded by 49 mutation canaries; the
-staged JavaScript runner remains guarded by 18 canaries on each consumer engine.
+See `fixtures.json`. It contains 66 known-answer cases: 61 executable contract
+cases and five explicitly skipped pure/HTTP/wrapper cases covered by per-surface
+tests or later work. Eight WHI-215 rows additionally assert the exact registrable
+root returned by both shipping implementations. Each fixture is language-neutral
+and every harness adapts it to its own resolver/HTTP mock without ambient network
+access. The Python runner is guarded by 59 mutation canaries plus the independent
+public-suffix fallback canary; engine contract 1.6.0 carries the corresponding
+JavaScript vector and mutation gates.
