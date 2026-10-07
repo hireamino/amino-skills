@@ -15,7 +15,6 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 SCRIPTS = ROOT / "amino-deliverability-audit" / "skills" / "amino-deliverability-audit" / "scripts"
 AUDIT = SCRIPTS / "audit.py"
-RULES = SCRIPTS / "public_suffix_rules.tsv"
 RUNNER = HERE / "run_vectors.py"
 ADAPTER = HERE / "adapters" / "skill.py"
 
@@ -46,10 +45,9 @@ def main() -> int:
         return 1
 
     with tempfile.TemporaryDirectory(prefix="amino-psl-python-canary-") as temporary:
-        target = Path(temporary)
+        target = Path(temporary) / "scripts"
+        shutil.copytree(SCRIPTS, target)
         mutated = target / "audit.py"
-        shutil.copy2(AUDIT, mutated)
-        shutil.copy2(RULES, target / RULES.name)
         source = mutated.read_text(encoding="utf-8")
         pattern = re.compile(r"def org_base\(host\):\n.*?\n\ndef count_spf_lookups", re.DOTALL)
         replacement = '''def org_base(host):
