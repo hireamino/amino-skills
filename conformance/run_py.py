@@ -389,6 +389,15 @@ def compare_contract(fx, result, score, ledger):
                 "inconclusive_reason: expected " + json.dumps(wanted)
                 + ", got " + json.dumps(actual)
             )
+    if "registrable_root" in fx["expect"]:
+        ledger["registrableRoot"] += 1
+        wanted = fx["expect"]["registrable_root"]
+        actual = audit.org_base(fx["input"]["domain"])
+        if actual != wanted:
+            problems.append(
+                "registrable_root: expected " + json.dumps(wanted, ensure_ascii=False)
+                + ", got " + json.dumps(actual, ensure_ascii=False)
+            )
     return problems
 
 
@@ -397,7 +406,7 @@ def assertion_plan(fixtures):
         "identity": 0, "severity": 0, "action": 0, "fix": 0, "lane": 0,
         "detail": 0, "effort": 0, "value": 0,
         "scoreFields": 0, "closedWorld": 0, "observations": 0,
-        "inconclusive": 0, "inconclusiveReason": 0,
+        "inconclusive": 0, "inconclusiveReason": 0, "registrableRoot": 0,
     }
     for fx in fixtures:
         if fx.get("mode") not in CONTRACT_MODES:
@@ -415,6 +424,8 @@ def assertion_plan(fixtures):
             plan["inconclusive"] += 1
         if "inconclusive_reason" in fx["expect"]:
             plan["inconclusiveReason"] += 1
+        if "registrable_root" in fx["expect"]:
+            plan["registrableRoot"] += 1
     return plan
 
 
@@ -439,7 +450,7 @@ def run():
         "identity": 0, "severity": 0, "action": 0, "fix": 0, "lane": 0,
         "detail": 0, "effort": 0, "value": 0,
         "scoreFields": 0, "closedWorld": 0, "observations": 0,
-        "inconclusive": 0, "inconclusiveReason": 0,
+        "inconclusive": 0, "inconclusiveReason": 0, "registrableRoot": 0,
     }
 
     for fx in fixtures:

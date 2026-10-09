@@ -53,12 +53,27 @@ chk("I11 spf ~All -> '~'", audit.spf_qualifier("v=spf1 ~All"), "~")
 chk("I10 good.co.uk org", audit.org_base("good.co.uk"), "good.co.uk")
 chk("I10 evil.co.uk org", audit.org_base("evil.co.uk"), "evil.co.uk")
 chk("I10 aspmx.l.google.com org", audit.org_base("aspmx.l.google.com"), "google.com")
+chk("WHI-215 nhs.uk registrable root", audit.org_base("trust.nhs.uk"), "trust.nhs.uk")
+chk("WHI-215 sch.uk wildcard registrable root", audit.org_base("myschool.devon.sch.uk"), "myschool.devon.sch.uk")
+chk("WHI-215 PSL exception registrable root", audit.org_base("www.city.kobe.jp"), "city.kobe.jp")
+chk("WHI-215 non-Latin registrable root", audit.org_base("食狮.公司.cn"), "食狮.公司.cn")
 # I10 — tree walk: subdomain inherits nearest ancestor policy (mock resolver, no network)
 _MOCK = {"_dmarc.example.co.uk": "v=DMARC1; p=reject"}
 audit.confirm_txt = lambda name, prefix: _MOCK.get(name.rstrip(".").lower())
 _rec, _source, _inherited = audit.discover_dmarc("send.example.co.uk")
 chk("I10 treewalk finds ancestor", (_source, _inherited), ("example.co.uk", True))
 chk("I10 treewalk returns record", _rec, "v=DMARC1; p=reject")
+_MOCK = {"_dmarc.nhs.uk": "v=DMARC1; p=reject"}
+_rec, _source, _inherited = audit.discover_dmarc("trust.nhs.uk")
+chk("WHI-215 treewalk stops at registrable root", (_rec, _source, _inherited), (None, None, False))
+_MOCK = {"_dmarc.trust.nhs.uk": "v=DMARC1; p=reject"}
+_rec, _source, _inherited = audit.discover_dmarc("mail.trust.nhs.uk")
+chk(
+    "WHI-215 subdomain inherits registrable-root policy",
+    (_rec, _source, _inherited),
+    ("v=DMARC1; p=reject", "trust.nhs.uk", True),
+)
+audit.confirm_txt = _SHIPPING_CONFIRM_TXT
 # I15 — MTA-STS strict field validation (RFC 8461)
 chk("I15 valid enforce → no problems", audit.mta_sts_policy_problems("version: STSv1\nmode: enforce\nmax_age: 604800\nmx: mx.ex.com\n")[0], [])
 chk("I15 enforce missing fields → problems", len(audit.mta_sts_policy_problems("mode: enforce\n")[0]) > 0, True)
