@@ -63,6 +63,17 @@ audit.confirm_txt = lambda name, prefix: _MOCK.get(name.rstrip(".").lower())
 _rec, _source, _inherited = audit.discover_dmarc("send.example.co.uk")
 chk("I10 treewalk finds ancestor", (_source, _inherited), ("example.co.uk", True))
 chk("I10 treewalk returns record", _rec, "v=DMARC1; p=reject")
+_MOCK = {"_dmarc.nhs.uk": "v=DMARC1; p=reject"}
+_rec, _source, _inherited = audit.discover_dmarc("trust.nhs.uk")
+chk("WHI-215 treewalk stops at registrable root", (_rec, _source, _inherited), (None, None, False))
+_MOCK = {"_dmarc.trust.nhs.uk": "v=DMARC1; p=reject"}
+_rec, _source, _inherited = audit.discover_dmarc("mail.trust.nhs.uk")
+chk(
+    "WHI-215 subdomain inherits registrable-root policy",
+    (_rec, _source, _inherited),
+    ("v=DMARC1; p=reject", "trust.nhs.uk", True),
+)
+audit.confirm_txt = _SHIPPING_CONFIRM_TXT
 # I15 — MTA-STS strict field validation (RFC 8461)
 chk("I15 valid enforce → no problems", audit.mta_sts_policy_problems("version: STSv1\nmode: enforce\nmax_age: 604800\nmx: mx.ex.com\n")[0], [])
 chk("I15 enforce missing fields → problems", len(audit.mta_sts_policy_problems("mode: enforce\n")[0]) > 0, True)

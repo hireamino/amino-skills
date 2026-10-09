@@ -1,6 +1,6 @@
 {
   "$schema": "amino-conformance/v4",
-  "notes": "Single shared reviewed-answer corpus consumed by conformance/run.mjs (web and Action) and conformance/run_py.py (published skill). For every dns-engine fixture, legacy present/absent assertions remain active and expect.findings is a closed list: area, title, severity, action, and fixIncludes are asserted; every non-pass finding must declare a non-null fixIncludes. Optional exact detail and optional effort+value pairs are asserted only where declared. expect.score is the exact bucket + DKIM-state + gap + note object; a true null MX uses explicit null for the inbound-only MTA_STS, TLS_RPT, and DANE buckets. expect.registrable_root, when present, asserts the exact full-PSL registrable-domain decision on every shipping surface. Surface-specific findings require surfaces plus a documented notApplicable reason for every omitted shipping surface. No expectation-regeneration mode exists. Non-dns-engine modes remain explicitly skipped with a reason.",
+  "notes": "Single shared reviewed-answer corpus consumed by conformance/run.mjs (web and Action) and conformance/run_py.py (published skill). For every dns-engine fixture, legacy present/absent assertions remain active and expect.findings is a closed list: area, title, severity, action, and fixIncludes are asserted; every non-pass finding must declare a non-null fixIncludes. Optional exact detail and optional effort+value pairs are asserted only where declared. expect.score is the exact bucket + DKIM-state + gap + note object; a true null MX uses explicit null for the inbound-only MTA_STS, TLS_RPT, and DANE buckets. expect.registrable_root, when present, asserts the exact full-PSL registrable-domain decision on an adopting surface; Step 2a gates Python and Step 2b activates the JavaScript assertion. Surface-specific findings require surfaces plus a documented notApplicable reason for every omitted shipping surface. No expectation-regeneration mode exists. Non-dns-engine modes remain explicitly skipped with a reason.",
   "fixtures": [
     {
       "id": "dkim-revoked-empty-p",
@@ -8644,6 +8644,11 @@
           "trust.nhs.uk": {
             "DNSKEY": [],
             "ad": false
+          },
+          "_dmarc.nhs.uk": {
+            "TXT": [
+              "v=DMARC1; p=reject"
+            ]
           }
         }
       },
@@ -8776,6 +8781,11 @@
           "myschool.devon.sch.uk": {
             "DNSKEY": [],
             "ad": false
+          },
+          "_dmarc.devon.sch.uk": {
+            "TXT": [
+              "v=DMARC1; p=reject"
+            ]
           }
         }
       },
@@ -8908,6 +8918,11 @@
           "force.police.uk": {
             "DNSKEY": [],
             "ad": false
+          },
+          "_dmarc.police.uk": {
+            "TXT": [
+              "v=DMARC1; p=reject"
+            ]
           }
         }
       },
@@ -9040,6 +9055,11 @@
           "tax.service.gov.uk": {
             "DNSKEY": [],
             "ad": false
+          },
+          "_dmarc.service.gov.uk": {
+            "TXT": [
+              "v=DMARC1; p=reject"
+            ]
           }
         }
       },
@@ -9172,6 +9192,11 @@
           "acme.com.es": {
             "DNSKEY": [],
             "ad": false
+          },
+          "_dmarc.com.es": {
+            "TXT": [
+              "v=DMARC1; p=reject"
+            ]
           }
         }
       },
@@ -9304,6 +9329,11 @@
           "dept.ac.in": {
             "DNSKEY": [],
             "ad": false
+          },
+          "_dmarc.ac.in": {
+            "TXT": [
+              "v=DMARC1; p=reject"
+            ]
           }
         }
       },
@@ -9436,6 +9466,11 @@
           "school.k12.ak.us": {
             "DNSKEY": [],
             "ad": false
+          },
+          "_dmarc.k12.ak.us": {
+            "TXT": [
+              "v=DMARC1; p=reject"
+            ]
           }
         }
       },
@@ -9568,6 +9603,11 @@
           "xn--85x722f.xn--55qx5d.cn": {
             "DNSKEY": [],
             "ad": false
+          },
+          "_dmarc.xn--55qx5d.cn": {
+            "TXT": [
+              "v=DMARC1; p=reject"
+            ]
           }
         }
       },

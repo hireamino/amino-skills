@@ -53,21 +53,22 @@ replaced by current output.
 
 ## Current status
 
-**v1.17 / WHI-215 Step 2 — full registrable-domain contract:** the Python
+**v1.17 / WHI-215 Step 2a — Python registrable-domain contract:** the Python
 skill loads the byte-identical sibling copy of
-`public-suffix/public_suffix_rules.tsv`; canonical engine contract 1.6.0 embeds
-those same reviewed bytes to preserve its single-file distribution contract.
-Both shipping implementations delete their hand-written two-label tables and
-apply the complete PSL algorithm: longest exact or wildcard match, exception
-rule precedence, the prevailing `*` rule, and A-label matching for non-Latin
-names. The 78 official vectors and an independent mutation restoring the former
-last-two-label fallback are release-blocking on each implementation. The corpus
-adds eight reviewed registrable-root rows covering `nhs.uk`, the `sch.uk`
-wildcard, `police.uk`, `gov.uk`, `com.es`, `ac.in`, a US `k12` suffix, and a
-non-Latin A-label name. It now has 61 executable contract cases plus five
-explicit skips. Existing findings, scores, observations, and inconclusive
-results remain byte-identical; only registrable-root decisions bound by the new
-rows change.
+`public-suffix/public_suffix_rules.tsv`, deletes its hand-written two-label
+table, and applies the complete PSL algorithm: longest exact or wildcard match,
+exception rule precedence, the prevailing `*` rule, and A-label matching for
+non-Latin names. The 78 official vectors and independent mutations restoring
+the former last-two-label fallback or crossing above a registrable root are
+release-blocking for the Python implementation. The corpus adds eight reviewed
+registrable-root rows covering `nhs.uk`, the `sch.uk` wildcard, `police.uk`,
+`gov.uk`, `com.es`, `ac.in`, a US `k12` suffix, and a non-Latin A-label name;
+each also places a DMARC record above the registrable root to prove the tree
+walk never crosses that boundary. It now has 61 executable contract cases plus
+five explicit skips. Existing findings, scores, observations, and inconclusive
+results remain byte-identical. Engine embedding, JavaScript vectors, the
+cross-runtime differential, and contract 1.6.0 are deferred to WHI-215 Step 2b
+after this revision has an immutable merge SHA.
 
 **v1.16 / WHI-215 Step 1 — one pinned registrable-domain source:**
 `public-suffix/public_suffix_rules.tsv` is the sole reviewed source of truth for
@@ -387,8 +388,9 @@ The web and Action pin files must name the same full amino-skills commit before 
 See `fixtures.json`. It contains 66 known-answer cases: 61 executable contract
 cases and five explicitly skipped pure/HTTP/wrapper cases covered by per-surface
 tests or later work. Eight WHI-215 rows additionally assert the exact registrable
-root returned by both shipping implementations. Each fixture is language-neutral
-and every harness adapts it to its own resolver/HTTP mock without ambient network
-access. The Python runner is guarded by 59 mutation canaries plus the independent
-public-suffix fallback canary; engine contract 1.6.0 carries the corresponding
-JavaScript vector and mutation gates.
+root and the DMARC tree-walk boundary. Each fixture is language-neutral and every
+harness adapts it to its own resolver/HTTP mock without ambient network access.
+Step 2a gates the Python runner with 59 existing mutation canaries plus two
+independent public-suffix adoption canaries. Step 2b will activate the shared
+JavaScript assertion, official vectors, mutation gate, and cross-runtime
+differential.

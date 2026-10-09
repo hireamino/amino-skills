@@ -583,6 +583,11 @@ def discover_dmarc(domain):
     if own:
         return own, domain, False
     base = org_base(domain)
+    # A registrable root has no organizational ancestor to inherit from. Without
+    # this boundary, a multi-label public suffix such as nhs.uk could be queried
+    # as though it were an organization when auditing trust.nhs.uk.
+    if not base or domain == base:
+        return None, None, False
     labels = domain.split(".")
     for i in range(1, min(len(labels) - 1, 6)):
         parent = ".".join(labels[i:])

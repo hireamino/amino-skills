@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""WHI-215 Step 2: prove existing reviewed rows and Python outputs are preserved.
+"""WHI-215 Step 2a: prove existing reviewed rows and Python outputs are preserved.
 
 BASE is a commit, never a mutable branch. A shallow clone without BASE fails
 closed at git show/checkout; the workflow fetches full history for this proof.
@@ -32,14 +32,14 @@ NEW_IDS = (
 )
 # Deliberately re-pin only after reviewing the new fixture bodies.
 NEW_DIGESTS = {
-    "registrable-root-nhs-uk": "d4538348fed16ce85e7a398e8737c2412a8a66fa76c63e883cd1c3fa893cb4a0",
-    "registrable-root-sch-uk-wildcard": "2a37fc39729a0185f50bccfecfca630bd95a5f3e0872f9ddc51ced52bce045cc",
-    "registrable-root-police-uk": "97e9ea1c9c730a992a510f1f29c7735a9d4de34ce46608c531b86f8dffa3167f",
-    "registrable-root-gov-uk": "f291a6e89af338e258fe41312eb8c1c0c2b35fa37698cb4695c151e1dbc9a170",
-    "registrable-root-com-es": "7a59b3cd68df69fcdf3b530e8d2cec3e3045db4ec8b23f11b0c25c53cb87cd13",
-    "registrable-root-ac-in": "98ec9548b55a681d17da7e02058348e8708639aed637f8c4d9a7c88aac2851f0",
-    "registrable-root-k12-us": "26303cf414f0b27850d3606b111e4770fd6e191ebb84bd9e2f47ef9e30d8e3dc",
-    "registrable-root-alabel": "6bea83dceadc39695bae505f08647a99f4df8f8630892581ecd2638eebc59693",
+    "registrable-root-nhs-uk": "2de63b1150fb19285191641939c8b7d19d2f991c547097c3bb49e8b46110e529",
+    "registrable-root-sch-uk-wildcard": "b88cc4ebae3b41aa840e5840cede47ecbfddfbec9b9ff0be09988d973a9ff9e2",
+    "registrable-root-police-uk": "db10b58effc944a11af306e423f9c943c56ae36095f9ac5805327453a45e8ee9",
+    "registrable-root-gov-uk": "c06b4b1618d2a6affad8597514307c2fb3b7bbeff3f16c68d223c54fb3db0e87",
+    "registrable-root-com-es": "d990830915197d9576b662a8d47a6e137eab9ef75deca074802f370bf3565366",
+    "registrable-root-ac-in": "f592e5f6699d225bc517520a5ff2fc2558fc2722955b8906dd4596e9b00302b2",
+    "registrable-root-k12-us": "f79430eab39abac26515ba59dbd764662558ec26ad68105f0d3c62dc58c4587c",
+    "registrable-root-alabel": "99ee59c04aadb99f14c783723dee18b61ae58e86bad9b01dc8cb26ff9c4ca29b",
 }
 
 OLD_RELIABILITY_REASON = (
