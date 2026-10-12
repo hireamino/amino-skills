@@ -26,6 +26,21 @@ def verify(root: Path, artifact: Path | None = None) -> list[str]:
             "artifact SHA-256 does not match provenance: "
             f"got {digest(data)}, expected {provenance.get('artifact_sha256')}"
         )
+    shipping_copy = (
+        root.parent
+        / "amino-deliverability-audit"
+        / "skills"
+        / "amino-deliverability-audit"
+        / "scripts"
+        / "public_suffix_rules.tsv"
+    )
+    if not shipping_copy.is_file():
+        problems.append(f"shipping PSL copy is missing: {shipping_copy}")
+    elif shipping_copy.read_bytes() != data:
+        problems.append(
+            "shipping PSL copy differs byte-for-byte from the pinned artifact: "
+            f"{shipping_copy}"
+        )
     counts = {"ICANN": 0, "PRIVATE": 0}
     for number, raw in enumerate(data.decode("utf-8").splitlines(), 1):
         if not raw or raw.startswith("//"):
@@ -84,6 +99,7 @@ def main() -> int:
             f"{record['total_rule_count']} tagged A-label rules, "
             f"sha256={record['artifact_sha256']}"
         )
+        print("PSL SHIPPING COPY PASS: byte-identical to pinned artifact")
         print(f"PSL OFFICIAL VECTORS PASS: {len(cases)}/{len(cases)}")
         return 0
     except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:

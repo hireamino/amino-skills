@@ -313,32 +313,67 @@ def mta_sts_txt_lookup(domain):
     return txt, lookup_failed
 
 
-# A pragmatic subset of the Public Suffix List: registry suffixes where the registrable
-# domain is the last THREE labels, not two. Not exhaustive (the full PSL is a ~200 KB data
-# dependency); it fixes the cases that matter for same-org checks — e.g. good.co.uk and
-# evil.co.uk must read as DIFFERENT orgs, not both "co.uk".
-PUBLIC_SUFFIX_2 = {
-    "co.uk", "org.uk", "gov.uk", "ac.uk", "me.uk", "net.uk", "ltd.uk", "plc.uk", "sch.uk",
-    "com.au", "net.au", "org.au", "edu.au", "gov.au", "id.au",
-    "co.nz", "net.nz", "org.nz", "govt.nz", "ac.nz",
-    "co.jp", "or.jp", "ne.jp", "ac.jp", "go.jp", "ad.jp",
-    "co.za", "org.za", "gov.za", "ac.za",
-    "co.in", "net.in", "org.in", "gen.in", "firm.in", "ind.in",
-    "com.br", "net.br", "org.br", "gov.br",
-    "com.cn", "net.cn", "org.cn", "gov.cn", "ac.cn",
-    "co.kr", "or.kr", "com.mx", "com.sg", "com.hk", "com.tw",
-    "co.il", "com.tr", "co.id", "com.my", "co.th", "or.th",
-}
+def _load_public_suffix_rules():
+    """Load the generated, pinned PSL copy shipped beside this module."""
+    exact, wildcards, exceptions = set(), set(), set()
+    path = Path(__file__).with_name("public_suffix_rules.tsv")
+    for line_number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not raw or raw.startswith("//"):
+            continue
+        try:
+            section, rule = raw.split("\t", 1)
+        except ValueError as exc:
+            raise RuntimeError(f"invalid public-suffix artifact row {line_number}") from exc
+        if section not in {"ICANN", "PRIVATE"} or not rule.isascii():
+            raise RuntimeError(f"invalid public-suffix artifact row {line_number}: {raw!r}")
+        if rule.startswith("!"):
+            exceptions.add(rule[1:])
+        elif rule.startswith("*."):
+            wildcards.add(rule[2:])
+        else:
+            exact.add(rule)
+    return exact, wildcards, exceptions
+
+
+_PSL_EXACT, _PSL_WILDCARDS, _PSL_EXCEPTIONS = _load_public_suffix_rules()
 
 
 def org_base(host):
-    """Registrable base (eTLD+1): last two labels, or last three when the last two are a
-    known multi-label public suffix — so good.co.uk and evil.co.uk read as different orgs."""
-    labels = [x for x in host.rstrip(".").lower().split(".") if x]
-    if len(labels) <= 2:
-        return ".".join(labels)
-    last_two = ".".join(labels[-2:])
-    return ".".join(labels[-3:] if last_two in PUBLIC_SUFFIX_2 else labels[-2:])
+    """Return the registrable domain under the pinned full Public Suffix List.
+
+    Matching uses A-labels because the generated artifact is A-label encoded. The
+    returned value preserves normalized display labels, matching the official PSL
+    vectors for both Unicode and A-label input.
+    """
+    if not isinstance(host, str) or host.startswith("."):
+        return None
+    normalized = host.rstrip(".").lower()
+    if not normalized:
+        return None
+    display = normalized.split(".")
+    if any(not label for label in display):
+        return None
+    try:
+        labels = [label.encode("idna").decode("ascii").lower() for label in display]
+    except UnicodeError:
+        return None
+
+    exception_length = 0
+    match_length = 1  # prevailing PSL default rule: *
+    for index in range(len(labels)):
+        candidate = ".".join(labels[index:])
+        length = len(labels) - index
+        if candidate in _PSL_EXCEPTIONS:
+            exception_length = max(exception_length, length)
+        if candidate in _PSL_EXACT:
+            match_length = max(match_length, length)
+        if index + 1 < len(labels) and ".".join(labels[index + 1:]) in _PSL_WILDCARDS:
+            match_length = max(match_length, length)
+
+    suffix_length = exception_length - 1 if exception_length else match_length
+    if len(labels) <= suffix_length:
+        return None
+    return ".".join(display[-(suffix_length + 1):])
 
 
 def count_spf_lookups(domain, seen=None, depth=0):
@@ -548,6 +583,11 @@ def discover_dmarc(domain):
     if own:
         return own, domain, False
     base = org_base(domain)
+    # A registrable root has no organizational ancestor to inherit from. Without
+    # this boundary, a multi-label public suffix such as nhs.uk could be queried
+    # as though it were an organization when auditing trust.nhs.uk.
+    if not base or domain == base:
+        return None, None, False
     labels = domain.split(".")
     for i in range(1, min(len(labels) - 1, 6)):
         parent = ".".join(labels[i:])

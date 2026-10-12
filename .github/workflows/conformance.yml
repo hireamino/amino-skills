@@ -54,3 +54,7 @@ jobs:
         run: |
           python3 public-suffix/verify.py
           python3 public-suffix/test_generator.py
+      - name: Python skill official public-suffix vectors
+        run: python3 public-suffix/run_vectors.py --name python-skill -- python3 public-suffix/adapters/skill.py amino-deliverability-audit/skills/amino-deliverability-audit/scripts/audit.py
+      - name: Python public-suffix fallback mutation canary
+        run: python3 public-suffix/adoption_canary.py
