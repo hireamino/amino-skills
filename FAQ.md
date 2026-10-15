@@ -154,8 +154,11 @@ DMARCbis is the modernized DMARC standard, **published as RFC 9989** (May 2026),
 obsoletes the original DMARC (RFC 7489) and RFC 9091. The original was only Informational;
 this is the first Standards-Track DMARC. The changes that matter to operators:
 
-- **A DNS "Tree Walk" replaces the Public Suffix List** for determining organizational
-  domains — this changes how alignment and policy discovery work, especially for subdomains.
+- **RFC 9989 specifies a DNS Tree Walk instead of Public Suffix List discovery.** Amino's
+  audit remains bounded at the registrable domain from its pinned Public Suffix List because
+  that is the organizational-domain method RFC 7489 defined, for compatibility with receivers
+  that still follow it.
+  **This is a deliberate compatibility divergence, not a claim of full RFC 9989 tree-walk compliance.**
 - **`np=` is new** — a policy for *non-existent* subdomains of **your own** domain (set
   `np=reject` so nobody can send as a subdomain you never created). `sp=` still governs
   existing subdomains. Note what it does **not** do: a lookalike "cousin" domain is a
