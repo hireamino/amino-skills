@@ -16,8 +16,9 @@ DMARC. (Verified against rfc-editor.org/info/rfc9989 + IETF datatracker. Still r
 What changes that matters to a sender:
 - **RFC 9989 specifies a DNS Tree Walk instead of Public Suffix List discovery.** Amino's
   audit remains bounded at the registrable domain from its pinned Public Suffix List because
-  that matches the organizational-domain behaviour still used by deployed receivers. This is
-  a deliberate compatibility divergence, not a claim of full RFC 9989 tree-walk compliance.
+  that is the organizational-domain method RFC 7489 defined, for compatibility with receivers
+  that still follow it.
+  **This is a deliberate compatibility divergence, not a claim of full RFC 9989 tree-walk compliance.**
 - **`np=` (non-existent-subdomain policy) is new** — set `np=reject` to cover subdomains
   that don't exist (a common cousin-domain spoofing vector). `sp=` still covers existing
   subdomains.

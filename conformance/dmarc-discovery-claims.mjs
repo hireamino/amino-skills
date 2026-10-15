@@ -30,48 +30,86 @@ function check(name, condition, detail = "") {
   }
 }
 
-// Written from the claim, not from the exact sentence that exposed it. A
-// replacement assertion is acceptable only when the same local context both
-// attributes the rule to RFC 9989 and discloses Amino's PSL-bounded divergence.
-const REPLACEMENT = [
-  /(?:dns\s+)?tree[ -]?walk[\s\S]{0,180}(?:replac(?:e|es|ed)|instead\s+of|rather\s+than)[\s\S]{0,180}(?:public\s+suffix\s+list|\bpsl\b)/i,
-  /(?:public\s+suffix\s+list|\bpsl\b)[\s\S]{0,180}(?:replac(?:e|es|ed)\s+by|gives?\s+way\s+to)[\s\S]{0,180}(?:dns\s+)?tree[ -]?walk/i,
-  /(?:amino|the\s+audit|we)[\s\S]{0,140}(?:discover|resolve|determine)[\s\S]{0,140}(?:organizational|policy)[\s\S]{0,140}(?:tree[ -]?walk)/i,
-  /RFC\s*9989[\s\S]{0,100}tree[ -]?walk[\s\S]{0,240}(?:applicable\s+DMARC\s+record|walking\s+up\s+to\s+the\s+organizational\s+domain|nearest\s+ancestor)/i,
-];
-const SPEC_ATTRIBUTION = /RFC\s*9989/i;
-const AMINO_SUBJECT = /(?:Amino(?:'s)?|this\s+audit|the\s+audit|current\s+implementation|product)/i;
-const PSL_BOUND = /(?:PSL|Public\s+Suffix\s+List)[\s\S]{0,100}(?:bound(?:ed|ary)|uses?|remains?|compatib)|(?:uses?|remains?|is|stays?)[\s\S]{0,100}(?:PSL|Public\s+Suffix\s+List)[ -]?bound(?:ed|ary)/i;
-const NOT_FULL_WALK = /(?:does\s+not|doesn't|not|has\s+not|hasn't|yet\s+to)[\s\S]{0,100}(?:full(?:y)?[ -]?)?(?:RFC\s*9989[ -]?)?(?:DNS[ -]?)?tree[ -]?walk/i;
+// This is deliberately an allowlist, not a clever claim regex. Any public
+// sentence using the sensitive trigger term must be reviewed and added here.
+// That makes adjacency, negation and new assertion forms fail closed.
+const TREE_WALK = /\btree[ -]walk\b/i;
+
+function normalizeSentence(value) {
+  return value
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&(?:nbsp|#160);/gi, " ")
+    .replace(/&quot;|&#34;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&amp;/gi, "&")
+    .replace(/\\(["'])/g, "$1")
+    .replace(/\*\*|__|`/g, "")
+    .replace(/^\s*(?:[-#>*]+\s*)+/, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+const APPROVED_TREE_WALK_SENTENCES = new Set([
+  "RFC 9989 specifies a DNS Tree Walk instead of Public Suffix List discovery.",
+  "This is a deliberate compatibility divergence, not a claim of full RFC 9989 tree-walk compliance.",
+  "RFC 9989 specifies a broader DNS Tree Walk; this compatibility implementation deliberately does not cross the PSL boundary.",
+  "No _dmarc at this subdomain: it inherits the org domain's policy — the sp (subdomain policy) tag if set, otherwise p (RFC 9989 tree walk).",
+  "RFC 9989 replaced Public-Suffix-List org-domain discovery with a live DNS Tree Walk (it depends on where DMARC records + psd= tags actually exist), which an offline tool can't reproduce.",
+  'This heuristic is good enough for relaxed-alignment previews; a true tree-walk needs a live DNS lookup (future "live domain" mode).',
+].map(normalizeSentence));
+
+function treeWalkSentences(text) {
+  const lines = text
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\\n/g, "\n")
+    .replace(/\*\*|__|`/g, "")
+    .split(/\r?\n/);
+  const blocks = [];
+  const used = new Set();
+  for (let index = 0; index < lines.length; index++) {
+    if (used.has(index) || !TREE_WALK.test(lines[index])) continue;
+    const comment = lines[index].match(/^\s*(\/\/|#)\s?/);
+    if (!comment) {
+      blocks.push(lines[index]);
+      continue;
+    }
+    const marker = comment[1];
+    let start = index;
+    let end = index;
+    while (start > 0 && new RegExp(`^\\s*${marker === "//" ? "\\/\\/" : "#"}\\s?`).test(lines[start - 1])) start--;
+    while (end + 1 < lines.length && new RegExp(`^\\s*${marker === "//" ? "\\/\\/" : "#"}\\s?`).test(lines[end + 1])) end++;
+    const prefix = new RegExp(`^\\s*${marker === "//" ? "\\/\\/" : "#"}\\s?`);
+    blocks.push(lines.slice(start, end + 1).map((line) => line.replace(prefix, "")).join(" "));
+    for (let line = start; line <= end; line++) used.add(line);
+  }
+  return blocks
+    .flatMap((block) => block.split(/(?<=[.!?])\s+/))
+    .filter((sentence) => TREE_WALK.test(sentence))
+    .map(normalizeSentence);
+}
 
 export function falseDmarcDiscoveryClaims(text) {
-  const findings = [];
-  for (const pattern of REPLACEMENT) {
-    const matcher = new RegExp(pattern.source, `${pattern.flags}g`);
-    for (const match of text.matchAll(matcher)) {
-      const start = Math.max(0, match.index - 320);
-      const end = Math.min(text.length, match.index + match[0].length + 420);
-      const context = text.slice(start, end);
-      const bounded = SPEC_ATTRIBUTION.test(context)
-        && AMINO_SUBJECT.test(context)
-        && (PSL_BOUND.test(context) || NOT_FULL_WALK.test(context));
-      if (!bounded) findings.push(match[0].replace(/\s+/g, " ").trim());
-    }
-  }
-  return [...new Set(findings)];
+  return [...new Set(
+    treeWalkSentences(text).filter((sentence) => !APPROVED_TREE_WALK_SENTENCES.has(sentence)),
+  )];
 }
 
 const MUST_FLAG = [
   "A DNS Tree Walk replaces the Public Suffix List for determining organizational domains.",
-  "We no longer use the PSL; Amino discovers the organizational domain with a DNS tree-walk.",
-  "Policy discovery uses RFC 9989's tree walk instead of the Public Suffix List.",
-  "The Public Suffix List gives way to a DNS Tree Walk for policy resolution.",
-  "RFC 9989 tree walk: use the nearest ancestor policy up to the organizational domain.",
+  "The audit follows the complete DMARCbis tree-walk when locating organization policy.",
+  "The product switched from PSL boundaries to a DNS tree walk.",
+  "Amino uses RFC 9989's tree walk and is not PSL-bounded.",
+  "RFC 9989 specifies a DNS Tree Walk instead of Public Suffix List discovery. In Amino, a DNS tree walk now replaces the PSL boundary.",
 ];
 const MUST_NOT_FLAG = [
-  "RFC 9989 specifies a DNS Tree Walk rather than PSL discovery. Amino's current implementation remains bounded by the pinned Public Suffix List for compatibility with deployed receivers.",
-  "The audit uses PSL-bounded organizational-domain discovery and does not claim full RFC 9989 tree-walk compliance.",
-  "Amino remains Public Suffix List bounded; RFC 9989's broader DNS Tree Walk is a named compatibility divergence.",
+  "RFC 9989 specifies a DNS Tree Walk instead of Public Suffix List discovery.",
+  "This is a deliberate compatibility divergence, not a claim of full RFC 9989 tree-walk compliance.",
+  "RFC 9989 specifies a broader DNS Tree Walk; this compatibility implementation deliberately does not cross the PSL boundary.",
+  "No _dmarc at this subdomain: it inherits the org domain's policy — the sp (subdomain policy) tag if set, otherwise p (RFC 9989 tree walk).",
+  "RFC 9989 replaced Public-Suffix-List org-domain discovery with a live DNS Tree Walk (it depends on where DMARC records + psd= tags actually exist), which an offline tool can't reproduce.",
+  'This heuristic is good enough for relaxed-alignment previews; a true tree-walk needs a live DNS lookup (future "live domain" mode).',
+  "Amino's audit remains bounded at the registrable domain from its pinned Public Suffix List.",
 ];
 
 function detectorSelfCheck() {

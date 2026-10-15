@@ -579,8 +579,8 @@ def discover_dmarc(domain):
 
     Check the domain's own _dmarc record, then the nearest ancestor only as far as
     the registrable domain from the pinned Public Suffix List (at most 5 lookups).
-    RFC 9989 specifies a broader DNS Tree Walk; this compatibility implementation
-    deliberately does not cross the PSL boundary. Returns (rec, source, inherited).
+    RFC 9989 specifies a broader DNS Tree Walk; this compatibility implementation deliberately does not cross the PSL boundary.
+    Returns (rec, source, inherited).
     """
     domain = domain.rstrip(".").lower()
     own = confirm_txt(f"_dmarc.{domain}", "v=dmarc1")
