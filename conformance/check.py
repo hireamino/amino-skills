@@ -903,6 +903,9 @@ chk("WHI-79 CI runs for Python engine/scorer changes",
     True)
 chk("WHI-79 CI includes Python 3.12", "python-version: ['3.12', '3.14']" in _WF, True)
 chk("WHI-79 CI includes Python 3.14", "python-version: ['3.12', '3.14']" in _WF, True)
+chk("WHI-251 CI runs the public DMARC-discovery claim gate",
+    "node conformance/dmarc-discovery-claims.mjs --surface skill" in _WF,
+    True)
 _RUNNER = open(os.path.join(HERE, "run_py.py"), encoding="utf-8").read()
 chk("WHI-175 runner does not replace the shipping MTA-STS reader",
     "audit._fetch_mta_sts_policy =" in _RUNNER, False)
