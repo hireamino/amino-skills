@@ -33,7 +33,7 @@ function check(name, condition, detail = "") {
 // This is deliberately an allowlist, not a clever claim regex. Any public
 // sentence using the sensitive trigger term must be reviewed and added here.
 // That makes adjacency, negation and new assertion forms fail closed.
-const TREE_WALK = /\btree[ -]walk\b/i;
+const TREE_WALK = /\btree(?:\s|[-‐‑‒–—])+walk/i;
 
 function normalizeSentence(value) {
   return value
@@ -66,27 +66,36 @@ function treeWalkSentences(text) {
     .replace(/\*\*|__|`/g, "")
     .split(/\r?\n/);
   const blocks = [];
-  const used = new Set();
-  for (let index = 0; index < lines.length; index++) {
-    if (used.has(index) || !TREE_WALK.test(lines[index])) continue;
-    const comment = lines[index].match(/^\s*(\/\/|#)\s?/);
-    if (!comment) {
-      blocks.push(lines[index]);
+  let current = [];
+  let currentKind = null;
+  function flush() {
+    if (current.length) blocks.push(current.join(" "));
+    current = [];
+    currentKind = null;
+  }
+  for (const line of lines) {
+    if (!line.trim()) {
+      flush();
       continue;
     }
-    const marker = comment[1];
-    let start = index;
-    let end = index;
-    while (start > 0 && new RegExp(`^\\s*${marker === "//" ? "\\/\\/" : "#"}\\s?`).test(lines[start - 1])) start--;
-    while (end + 1 < lines.length && new RegExp(`^\\s*${marker === "//" ? "\\/\\/" : "#"}\\s?`).test(lines[end + 1])) end++;
-    const prefix = new RegExp(`^\\s*${marker === "//" ? "\\/\\/" : "#"}\\s?`);
-    blocks.push(lines.slice(start, end + 1).map((line) => line.replace(prefix, "")).join(" "));
-    for (let line = start; line <= end; line++) used.add(line);
+    const listItem = line.match(/^\s*(?:[-*+]|\d+\.)\s+(.*)$/);
+    if (listItem) {
+      flush();
+      currentKind = "prose";
+      current.push(listItem[1]);
+      continue;
+    }
+    const comment = line.match(/^\s*(\/\/|#)\s?(.*)$/);
+    const kind = comment ? `comment:${comment[1]}` : "prose";
+    if (currentKind && currentKind !== kind) flush();
+    currentKind = kind;
+    current.push(comment ? comment[2] : line.trim());
   }
+  flush();
   return blocks
+    .map(normalizeSentence)
     .flatMap((block) => block.split(/(?<=[.!?])\s+/))
-    .filter((sentence) => TREE_WALK.test(sentence))
-    .map(normalizeSentence);
+    .filter((sentence) => TREE_WALK.test(sentence));
 }
 
 export function falseDmarcDiscoveryClaims(text) {
@@ -101,6 +110,10 @@ const MUST_FLAG = [
   "The product switched from PSL boundaries to a DNS tree walk.",
   "Amino uses RFC 9989's tree walk and is not PSL-bounded.",
   "RFC 9989 specifies a DNS Tree Walk instead of Public Suffix List discovery. In Amino, a DNS tree walk now replaces the PSL boundary.",
+  "The audit follows the RFC 9989 DNS tree\nwalk all the way to the root.",
+  "The implementation now follows DMARCbis without qualification:\nRFC 9989 specifies a DNS Tree Walk instead of Public Suffix List discovery.",
+  "We support complete organizational discovery by tree-walking DNS under RFC 9989.",
+  "The resolver tree walks through every parent label under DMARCbis.",
 ];
 const MUST_NOT_FLAG = [
   "RFC 9989 specifies a DNS Tree Walk instead of Public Suffix List discovery.",
@@ -110,6 +123,7 @@ const MUST_NOT_FLAG = [
   "RFC 9989 replaced Public-Suffix-List org-domain discovery with a live DNS Tree Walk (it depends on where DMARC records + psd= tags actually exist), which an offline tool can't reproduce.",
   'This heuristic is good enough for relaxed-alignment previews; a true tree-walk needs a live DNS lookup (future "live domain" mode).',
   "Amino's audit remains bounded at the registrable domain from its pinned Public Suffix List.",
+  "RFC 9989 specifies a DNS Tree Walk instead of\nPublic Suffix List discovery.",
 ];
 
 function detectorSelfCheck() {
