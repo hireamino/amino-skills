@@ -27,6 +27,8 @@ NEW_IDS = (
     "dmarc-parent-none-above-root",
     "dmarc-parent-psd-u-before-psd-y",
     "dmarc-parent-psd-y-existence-failure",
+    "dmarc-parent-tld-psd-y-sp-none",
+    "dmarc-parent-tld-psd-y-np-reject",
 )
 CHANGED_IDS = (
     "registrable-root-nhs-uk",
@@ -45,6 +47,8 @@ NEW_DIGESTS = {
     "dmarc-parent-none-above-root": "776df7d946f76d1aa68a30b8000fc7fd27e42999021ceb0fc84c7df6290bb616",
     "dmarc-parent-psd-u-before-psd-y": "12edf723c91ee22d6f72a8c948df070ca0ac4ee25712297bcb8c7a101b3be0e1",
     "dmarc-parent-psd-y-existence-failure": "88ae193e48a1b79db642c49da2ba5132f72bc3ddb0ab85fb11ec94e364111977",
+    "dmarc-parent-tld-psd-y-sp-none": "2a835472673b2381961b4f529f331d3a5343ffe3f94ebea3a3353ee21f8bb035",
+    "dmarc-parent-tld-psd-y-np-reject": "2765334d1733385cb246704a4935066bd4904f2c8efc7bc67615728c1498f45f",
 }
 CHANGED_DIGESTS = {
     "registrable-root-nhs-uk": "2a0c85be080fae66392e177b9c9de70a0a9f3e5f80f3974718657239541faec4",
@@ -147,7 +151,7 @@ def main():
     current_document = json.loads((ROOT / FIXTURES_PATH).read_text(encoding="utf-8"))
     base = base_document["fixtures"]
     current = current_document["fixtures"]
-    if set(base_document) != set(current_document) or len(base) != 66 or len(current) != 72:
+    if set(base_document) != set(current_document) or len(base) != 66 or len(current) != 74:
         print("UNEXPECTED_FIXTURE_SHAPE", file=sys.stderr)
         return 1
     if [f["id"] for f in current[:len(base)]] != [f["id"] for f in base]:

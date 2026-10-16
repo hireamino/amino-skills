@@ -582,7 +582,7 @@ def _dmarc_tags(record):
 
 
 def discover_dmarc(domain):
-    """Discover the nearest DMARC record within the existing five-lookup bound.
+    """Discover the applicable DMARC record with RFC 9989's bounded walk.
 
     Normal organizational-domain inheritance remains bounded by the pinned Public
     Suffix List. One or more bounded lookups above that boundary are observations
@@ -601,7 +601,12 @@ def discover_dmarc(domain):
     base_labels = len(base.split("."))
     parent_observation = None
     records_above_root = {}
-    for i in range(1, min(len(labels) - 1, 6)):
+    # RFC 9989 section 4.10 includes the TLD and caps the complete walk at
+    # eight queries. The audited name above was query one. For names with
+    # more than eight labels, jump directly to the seven-label suffix, then
+    # remove one label per query through the single-label TLD.
+    start_index = max(1, len(labels) - 7)
+    for i in range(start_index, len(labels)):
         parent = ".".join(labels[i:])
         rec = confirm_txt(f"_dmarc.{parent}", "v=dmarc1")
         if rec:

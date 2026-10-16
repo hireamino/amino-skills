@@ -61,6 +61,11 @@ establish policy for the audited domain, and the existing `No DMARC record`
 finding and score remain unchanged. The observation names `sp` and `np`, and
 explains that an opted-in PSD's `np=reject` can govern nonexistent names.
 
+The RFC 9989 section 4.10 walk includes the single-label TLD. It is capped at
+eight total queries: the audited name first, then (for names with eight or fewer
+labels) its immediate parent through the TLD; for longer names, the walk jumps
+to the seven-label suffix and continues through the TLD.
+
 When a record above the boundary explicitly carries `psd=y`, RFC 9989 makes the
 name one label below it the Organizational Domain. A record on that name supplies
 the policy; the PSD's own policy is used only when the Organizational Domain has
@@ -77,11 +82,13 @@ exists and authoritative NXDOMAIN means it does not. Any other response is
 unknown and selects the weaker of the possible `sp` and `np` outcomes; a failed
 lookup never becomes nonexistence. Six new fixtures bind strong `sp`, weak `sp`,
 enforced `np`, no-parent, organizational-record-before-`psd=y`, and failed
-existence-lookup cases; the eight WHI-215 registrable-root fixtures gain only the
-reviewed parent observation. Eight new mutation canaries take the Python total
-from 59 to 67 and prove the opt-in boundary, severity cap, weak-policy treatment,
-`np` selection, NODATA existence, organizational-record precedence,
-failure-not-absence, and score credit. The corpus now has 67 executable cases
+existence-lookup cases, plus existing and nonexistent names governed by a
+TLD-level PSD; the eight WHI-215 registrable-root fixtures gain only the reviewed
+parent observation. Ten new mutation canaries take the Python total from 59 to
+69 and prove the opt-in boundary, severity cap, weak-policy treatment, `np`
+selection, NODATA existence, organizational-record precedence,
+failure-not-absence, TLD inclusion, the eight-query bound, and score credit. The
+corpus now has 69 executable cases
 and five explicit skips. Engine adoption
 and contract 1.7.0 follow only after this skills change has an immutable merge SHA.
 
@@ -417,12 +424,12 @@ The web and Action pin files must name the same full amino-skills commit before 
 
 ## Fixtures
 
-See `fixtures.json`. It contains 72 known-answer cases: 67 executable contract
+See `fixtures.json`. It contains 74 known-answer cases: 69 executable contract
 cases and five explicitly skipped pure/HTTP/wrapper cases covered by per-surface
 tests or later work. Eight WHI-215 rows additionally assert the exact registrable
 root and the DMARC tree-walk boundary. Each fixture is language-neutral and every
 harness adapts it to its own resolver/HTTP mock without ambient network access.
-Step 2 gates the Python runner with 67 mutation canaries plus two independent
+Step 2 gates the Python runner with 69 mutation canaries plus two independent
 public-suffix adoption canaries. Step 2b will activate the shared
 JavaScript assertion, official vectors, mutation gate, and cross-runtime
 differential.

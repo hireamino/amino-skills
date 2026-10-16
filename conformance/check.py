@@ -105,6 +105,26 @@ _context = audit.dmarc_policy_context("uncertain.myshopify.com")
 chk("WHI-251 failed existence lookup cannot select stronger np",
     (_context["domain_exists"], _context["tag"], _context["effective"]),
     (None, "sp", "none"))
+_MOCK = {"_dmarc.gov": "v=DMARC1; p=reject; sp=none; np=reject; psd=y"}
+audit.confirm_txt = lambda name, prefix: _MOCK.get(name.rstrip(".").lower())
+audit.dns_meta = lambda *_args, **_kwargs: {"status": 0, "error": False, "ad": False}
+_context = audit.dmarc_policy_context("example.gov")
+chk("WHI-251 RFC 9989 walk reaches a TLD-level psd=y record",
+    (_context["source"], _context["relationship"], _context["tag"], _context["effective"]),
+    ("gov", "psd", "sp", "none"))
+_QUERIES = []
+audit.confirm_txt = lambda name, prefix: (_QUERIES.append(name.rstrip(".").lower()) or None)
+audit.discover_dmarc("a.b.c.d.e.f.g.h.i.j.mail.example.com")
+chk("WHI-251 RFC 9989 walk is capped at eight queries", _QUERIES, [
+    "_dmarc.a.b.c.d.e.f.g.h.i.j.mail.example.com",
+    "_dmarc.g.h.i.j.mail.example.com",
+    "_dmarc.h.i.j.mail.example.com",
+    "_dmarc.i.j.mail.example.com",
+    "_dmarc.j.mail.example.com",
+    "_dmarc.mail.example.com",
+    "_dmarc.example.com",
+    "_dmarc.com",
+])
 audit.confirm_txt = _SHIPPING_CONFIRM_TXT
 audit.dig = _SHIPPING_DIG
 audit.dns_meta = _SHIPPING_DNS_META

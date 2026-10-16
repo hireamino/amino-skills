@@ -353,6 +353,23 @@ def whi251_dmarc_canary(name, fixture, anchor, replacement, diagnostic):
         expect_red_comparison(name, execute_with_scripts(target, selected), diagnostic)
 
 
+def whi251_dmarc_check_canary(name, anchor, replacement, diagnostic):
+    """Mutate the shipping walk and require a named pure-check verdict."""
+    require_green(name, execute_check())
+    with tempfile.TemporaryDirectory(prefix="amino-whi251-dmarc-check-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py", "verify.py",
+                         "address-contract.json"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        audit_path.write_text(
+            replace_exactly_once(source, anchor, replacement, name),
+            encoding="utf-8",
+        )
+        expect_red_comparison(name, execute_check_with_scripts(target), diagnostic)
+
+
 try:
     with tempfile.TemporaryDirectory(prefix="amino-whi8-skill-") as temporary:
         target = Path(temporary)
@@ -1539,6 +1556,18 @@ try:
         '    if metadata.get("error"):\n        return False  # WHI-251 failure-as-absence canary\n',
         "dmarc-parent-psd-y-existence-failure.findings[DMARC|DMARC platform policy is sp=none from myshopify.com].identity: expected finding, got missing",
     )
+    whi251_dmarc_canary(
+        "WHI-251 walk reaches a TLD-level psd=y record", "dmarc-parent-tld-psd-y-sp-none",
+        '    for i in range(start_index, len(labels)):\n',
+        '    for i in range(start_index, len(labels) - 1):  # WHI-251 omit-TLD canary\n',
+        "dmarc-parent-tld-psd-y-sp-none.findings[DMARC|DMARC platform policy is sp=none from gov].identity: expected finding, got missing",
+    )
+    whi251_dmarc_check_canary(
+        "WHI-251 long-name walk keeps the RFC eight-query bound",
+        '    start_index = max(1, len(labels) - 7)\n',
+        '    start_index = 1  # WHI-251 unbounded-walk canary\n',
+        "FAIL WHI-251 RFC 9989 walk is capped at eight queries",
+    )
     with tempfile.TemporaryDirectory(prefix="amino-whi251-score-") as temporary:
         target = Path(temporary)
         for filename in ("audit.py", "batch_score.py", "resolver.py"):
@@ -1567,8 +1596,8 @@ except Exception as error:
     print(f"FAIL  canary setup — {error}")
     FAILED += 1
 
-print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 67 cases.")
-if PASSED + FAILED != 67:
-    print(f"FAIL  canary count: expected 67, got {PASSED + FAILED}", file=sys.stderr)
+print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 69 cases.")
+if PASSED + FAILED != 69:
+    print(f"FAIL  canary count: expected 69, got {PASSED + FAILED}", file=sys.stderr)
     sys.exit(1)
 sys.exit(1 if FAILED else 0)
