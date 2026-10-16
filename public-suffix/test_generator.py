@@ -55,6 +55,16 @@ def main() -> int:
     expect_refused("missing VERSION/COMMIT", sample(version=False), "VERSION")
     expect_refused("truncated download", sample(complete=False), "truncated")
     expect_refused("unencodable rule", sample(rule="a" * 64 + ".cn"), "cannot A-label encode rule")
+    expect_refused(
+        "wildcard outside the leftmost label",
+        sample(rule="mail.*.example"),
+        "outside the leftmost label",
+    )
+    expect_refused(
+        "more than one wildcard",
+        sample(rule="*.mail.*.example"),
+        "more than one wildcard",
+    )
 
     root = Path(__file__).resolve().parent
     assert not verify.verify(root)
@@ -68,7 +78,17 @@ def main() -> int:
         assert any("SHA-256 does not match provenance" in problem for problem in problems), problems
         print("PASS provenance detects a hand-edited artifact")
 
-    print("PSL GENERATOR CANARIES PASS: 6/6")
+    with tempfile.TemporaryDirectory(prefix="amino-psl-wildcard-edit-") as temporary:
+        changed = Path(temporary) / "public_suffix_rules.tsv"
+        artifact = (root / "public_suffix_rules.tsv").read_bytes()
+        anchor = b"ICANN\tcom\n"
+        assert artifact.count(anchor) == 1
+        changed.write_bytes(artifact.replace(anchor, b"ICANN\tmail.*.example\n", 1))
+        problems = verify.verify(root, changed)
+        assert any("invalid wildcard shape" in problem for problem in problems), problems
+        print("PASS verifier refuses a synthetic invalid wildcard artifact row")
+
+    print("PSL GENERATOR CANARIES PASS: 9/9")
     return 0
 
 

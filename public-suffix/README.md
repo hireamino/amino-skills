@@ -5,13 +5,12 @@ this DNS name is registrable?” It contains the full Public Suffix List—ICANN
 PRIVATE sections—with every row tagged by section and converted to A-label form
 at generation time.
 
-The Python audit skill consumes a byte-identical sibling copy of this artifact
-and is release-blocked by the official vectors plus fallback and DMARC-boundary
-mutation canaries. The canonical JavaScript engine will embed the same reviewed
-bytes in WHI-215 Step 2b so it can preserve its single-file distribution contract;
-its vector gate and the cross-runtime differential are likewise deferred to that
-step. Consumer adoption remains staged: the console follows, then Watchtower
-deletes its smaller `MULTI_TLD` table.
+The Python audit skill consumes a byte-identical sibling copy of this artifact,
+and the canonical JavaScript engine embeds the same reviewed bytes to preserve
+its single-file distribution contract. Both are release-blocked by official
+vectors and mutation gates. This change implements the normalization contract
+on the Python surface; the WHI-254 engine change adopts it and activates the
+widened cross-runtime differential as a release blocker.
 
 ## Files
 
@@ -25,6 +24,23 @@ deletes its smaller `MULTI_TLD` table.
   reference lookup used to prove the artifact against all 78 official cases.
 - `freshness.py` — the networked comparison used only by the weekly workflow.
 
+## Normalization contract
+
+Registrable-domain lookup is DNS-name matching, not URL parsing. Both shipping
+runtimes must therefore apply the same fail-closed boundary before consulting
+the pinned artifact:
+
+- reject any label longer than 63 octets after A-label conversion;
+- reject invalid punycode, including a bare `xn--` label;
+- reject whitespace anywhere in the input;
+- reject alternate non-ASCII label separators (`。`, `．`, `｡`) rather than
+  silently changing the label count; and
+- never reinterpret IPv4 numeric shortcuts such as `0x7f.1` as an IP address.
+
+The cross-runtime differential derives five domain shapes from every pinned
+artifact rule and adds one probe for each boundary above. Any disagreement is a
+release blocker.
+
 ## Licensing and downstream attribution
 
 The Public Suffix List is distributed under the Mozilla Public License 2.0. The
@@ -34,9 +50,9 @@ generated artifact. The official test vectors retain their CC0 dedication.
 Any later consumer—including the public `amino-audit-action` repository—must copy
 the artifact byte-for-byte together with `provenance.json`, retain the MPL notice,
 and include attribution pointing to `https://publicsuffix.org/list/` and the MPL
-2.0. The engine's future generated embedding is the sole exception permitted to
-preserve its one-file distribution contract; Step 2b must verify it byte-for-byte
-against this artifact.
+2.0. The engine's generated embedding is the sole exception permitted to
+preserve its one-file distribution contract, and its gate verifies the embedded
+bytes against this artifact.
 A consumer must not maintain a second editable table.
 
 ## Refresh

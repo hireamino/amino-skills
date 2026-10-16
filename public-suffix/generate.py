@@ -56,7 +56,21 @@ def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def wildcard_shape_error(rule: str) -> str | None:
+    """Describe an invalid PSL wildcard shape, or return ``None``."""
+    value = rule[1:] if rule.startswith("!") else rule
+    wildcard_count = value.count("*")
+    if wildcard_count > 1:
+        return "contains more than one wildcard"
+    if wildcard_count == 1 and not value.startswith("*."):
+        return "places a wildcard outside the leftmost label"
+    return None
+
+
 def alabel_rule(rule: str) -> tuple[str, bool]:
+    wildcard_error = wildcard_shape_error(rule)
+    if wildcard_error:
+        raise GenerationError(f"invalid public-suffix rule {rule!r}: {wildcard_error}")
     prefix = ""
     value = rule
     if value.startswith("!"):

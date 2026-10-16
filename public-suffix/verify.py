@@ -10,6 +10,7 @@ from pathlib import Path
 import sys
 
 from run_vectors import ReferenceLookup, load_cases
+import generate
 
 
 def digest(data: bytes) -> str:
@@ -51,6 +52,12 @@ def verify(root: Path, artifact: Path | None = None) -> list[str]:
             continue
         if not fields[1].isascii():
             problems.append(f"artifact row {number} is not A-label ready: {fields[1]!r}")
+        wildcard_error = generate.wildcard_shape_error(fields[1])
+        if wildcard_error:
+            problems.append(
+                f"artifact row {number} has an invalid wildcard shape: "
+                f"{fields[1]!r} {wildcard_error}"
+            )
         counts[fields[0]] += 1
     expected_counts = {
         section: details["rule_count"] for section, details in provenance.get("sections", {}).items()

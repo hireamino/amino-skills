@@ -353,6 +353,23 @@ def whi251_dmarc_canary(name, fixture, anchor, replacement, diagnostic):
         expect_red_comparison(name, execute_with_scripts(target, selected), diagnostic)
 
 
+def whi254_contract_canary(name, fixture, anchor, replacement, diagnostic):
+    """Mutate a WHI-254 shipping decision and require its new corpus row to fail."""
+    selected = {"CONFORMANCE_FIXTURE": fixture}
+    require_green(name, execute(selected))
+    with tempfile.TemporaryDirectory(prefix="amino-whi254-contract-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        audit_path.write_text(
+            replace_exactly_once(source, anchor, replacement, name),
+            encoding="utf-8",
+        )
+        expect_red_comparison(name, execute_with_scripts(target, selected), diagnostic)
+
+
 def whi251_dmarc_check_canary(name, anchor, replacement, diagnostic):
     """Mutate the shipping walk and require a named pure-check verdict."""
     require_green(name, execute_check())
@@ -1591,13 +1608,28 @@ try:
             "dmarc-parent-psd-y-sp-reject.score.DMARC: expected True, got False",
         )
 
+    whi254_contract_canary(
+        "WHI-254 MX provider identity uses the pinned public-suffix artifact",
+        "mx-provider-psl-distinct",
+        "            provider = org_base(host) or host\n",
+        "            provider = \".\".join(host.split(\".\")[-2:])  # WHI-254 last-two-label canary\n",
+        "mx-provider-psl-distinct.findings[MX|Mixed MX providers (2)].identity: expected finding, got missing",
+    )
+    whi254_contract_canary(
+        "WHI-254 null organizational domains cannot bypass report authorization",
+        "dmarc-external-null-organizations",
+        "            same_org = domain_org is not None and dest_org is not None and domain_org == dest_org\n",
+        "            same_org = domain_org == dest_org  # WHI-254 null-equality canary\n",
+        "dmarc-external-null-organizations.findings[DMARC|DMARC report destination not authorized].identity: expected finding, got missing",
+    )
+
     prove_crashing_checker_rejected()
 except Exception as error:
     print(f"FAIL  canary setup — {error}")
     FAILED += 1
 
-print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 69 cases.")
-if PASSED + FAILED != 69:
-    print(f"FAIL  canary count: expected 69, got {PASSED + FAILED}", file=sys.stderr)
+print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 71 cases.")
+if PASSED + FAILED != 71:
+    print(f"FAIL  canary count: expected 71, got {PASSED + FAILED}", file=sys.stderr)
     sys.exit(1)
 sys.exit(1 if FAILED else 0)

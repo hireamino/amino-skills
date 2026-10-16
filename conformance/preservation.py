@@ -30,6 +30,11 @@ NEW_IDS = (
     "dmarc-parent-tld-psd-y-sp-none",
     "dmarc-parent-tld-psd-y-np-reject",
 )
+WHI254_NEW_IDS = (
+    "mx-provider-psl-distinct",
+    "mx-provider-psl-same",
+    "dmarc-external-null-organizations",
+)
 CHANGED_IDS = (
     "registrable-root-nhs-uk",
     "registrable-root-sch-uk-wildcard",
@@ -49,6 +54,11 @@ NEW_DIGESTS = {
     "dmarc-parent-psd-y-existence-failure": "88ae193e48a1b79db642c49da2ba5132f72bc3ddb0ab85fb11ec94e364111977",
     "dmarc-parent-tld-psd-y-sp-none": "2a835472673b2381961b4f529f331d3a5343ffe3f94ebea3a3353ee21f8bb035",
     "dmarc-parent-tld-psd-y-np-reject": "2765334d1733385cb246704a4935066bd4904f2c8efc7bc67615728c1498f45f",
+}
+WHI254_NEW_DIGESTS = {
+    "mx-provider-psl-distinct": "70fa4782db8c09ce4bcd9546564932df6df23c433a27109b3da15f71a2049891",
+    "mx-provider-psl-same": "424b7fcec8f74074c57febed0e419d7b2d4f8ed42179ea4f2b3b8b20cda8e179",
+    "dmarc-external-null-organizations": "ae6121f6e7f76058d239b051175d42378e3c7b6418dc7243055bfe92a42f4146",
 }
 CHANGED_DIGESTS = {
     "registrable-root-nhs-uk": "2a0c85be080fae66392e177b9c9de70a0a9f3e5f80f3974718657239541faec4",
@@ -151,13 +161,13 @@ def main():
     current_document = json.loads((ROOT / FIXTURES_PATH).read_text(encoding="utf-8"))
     base = base_document["fixtures"]
     current = current_document["fixtures"]
-    if set(base_document) != set(current_document) or len(base) != 66 or len(current) != 74:
+    if set(base_document) != set(current_document) or len(base) != 66 or len(current) != 77:
         print("UNEXPECTED_FIXTURE_SHAPE", file=sys.stderr)
         return 1
     if [f["id"] for f in current[:len(base)]] != [f["id"] for f in base]:
         print("UNEXPECTED_EXISTING_FIXTURE_ORDER", file=sys.stderr)
         return 1
-    if tuple(f["id"] for f in current[len(base):]) != NEW_IDS:
+    if tuple(f["id"] for f in current[len(base):]) != NEW_IDS + WHI254_NEW_IDS:
         print("UNEXPECTED_NEW_FIXTURE_IDS", file=sys.stderr)
         return 1
 
@@ -180,17 +190,31 @@ def main():
         return 1
 
     current_by_id = {fixture["id"]: fixture for fixture in current}
-    digests = {f["id"]: hashlib.sha256(canonical(f)).hexdigest() for f in current[len(base):]}
+    digests = {
+        f["id"]: hashlib.sha256(canonical(f)).hexdigest()
+        for f in current[len(base):len(base) + len(NEW_IDS)]
+    }
     if digests != NEW_DIGESTS:
         print(f"UNEXPECTED_NEW_FIXTURE_CHANGE {digests}", file=sys.stderr)
         return 1
     table_same = git_show(TABLE_PATH) == (ROOT / TABLE_PATH).read_bytes()
     print(
-        f"FIXTURE_CHANGE_PROOF existing={len(base)} changed={len(CHANGED_IDS)} added={len(NEW_IDS)} "
+        f"FIXTURE_CHANGE_PROOF existing={len(base)} changed={len(CHANGED_IDS)} "
+        f"added={len(NEW_IDS) + len(WHI254_NEW_IDS)} "
         "allowed_existing_changes=one parent observation each "
         f"address_table_unchanged={str(table_same).lower()}"
     )
     print("NEW_FIXTURE_DIGESTS " + ",".join(f"{key}:{digests[key]}" for key in NEW_IDS))
+    whi254_digests = {
+        f["id"]: hashlib.sha256(canonical(f)).hexdigest()
+        for f in current[len(base) + len(NEW_IDS):]
+    }
+    if whi254_digests != WHI254_NEW_DIGESTS:
+        print(f"UNEXPECTED_WHI254_FIXTURE_CHANGE {whi254_digests}", file=sys.stderr)
+        return 1
+    print("WHI254_NEW_FIXTURE_DIGESTS " + ",".join(
+        f"{key}:{whi254_digests[key]}" for key in WHI254_NEW_IDS
+    ))
     changed_digests = {
         key: hashlib.sha256(canonical(current_by_id[key])).hexdigest()
         for key in CHANGED_IDS
