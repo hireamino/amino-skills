@@ -31,6 +31,8 @@ another surface or a regenerated snapshot. For every `dns-engine` or
 - `present` and `absent` retain the original positive/negative guards;
 - `findings` is a closed list: missing, duplicate, and additional findings fail;
 - finding identity, severity, lane, action, and fix substring are asserted;
+- every finding is asserted for the presence or absence of the additive
+  `unconfirmed` lookup-reason marker;
 - every non-pass expected finding must declare a non-null fix substring;
 - exact detail and effort+value are asserted only where a fixture declares them, and
   effort and value must be declared together;
@@ -52,6 +54,17 @@ review. The corpus has no expectation regeneration mode; reviewed answers cannot
 replaced by current output.
 
 ## Current status
+
+**v1.19 / WHI-280 — per-finding inconclusive precision:** when one of the three
+critical DNS lookups fails, only findings whose verdict depends on that lookup
+carry `unconfirmed`, whose value is the exact non-empty result-level
+`inconclusive_reason`. Apex TXT marks `SPF: No SPF record`; `_dmarc` TXT marks
+`DMARC: No DMARC record`; apex MX marks `Transport: No MX records`,
+`MTA-STS: No MTA-STS policy`, and `TLS-RPT: No TLS-RPT` because MX determines
+their applicability. Every other finding omits the field. Severity, score,
+title, ordering and the result-level inconclusive fields are unchanged. Two
+mutation canaries bring the Python total from 72 to 74 and prove both the
+closed-world non-marking rule and the MX applicability dependency.
 
 **WHI-246 — lane-scoped published batch output:** `batch_score.py` no longer
 publishes an unlabelled blended Gap. Its TSV names `Outbound_gaps`,

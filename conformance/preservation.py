@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""WHI-251 Step 2: bound the deliberate parent-DMARC contract changes.
+"""Bound the deliberate reviewed corpus and output-contract changes.
 
 BASE is a commit, never a mutable branch. A shallow clone without BASE fails
 closed at git show/checkout; the workflow fetches full history for this proof.
@@ -45,6 +45,42 @@ CHANGED_IDS = (
     "registrable-root-k12-us",
     "registrable-root-alabel",
 )
+WHI280_CHANGED_IDS = (
+    "inconclusive-apex-txt-servfail",
+    "inconclusive-dmarc-txt-refused",
+    "inconclusive-apex-mx-servfail",
+    "inconclusive-apex-txt-before-mx",
+    "inconclusive-apex-txt-notimp",
+    "inconclusive-dmarc-txt-formerr",
+    "inconclusive-apex-mx-notimp",
+)
+WHI280_MARKERS = {
+    "inconclusive-apex-txt-servfail": {
+        ("SPF", "No SPF record"): "TXT ex.com: SERVFAIL/REFUSED",
+    },
+    "inconclusive-dmarc-txt-refused": {
+        ("DMARC", "No DMARC record"): "TXT _dmarc.ex.com: SERVFAIL/REFUSED",
+    },
+    "inconclusive-apex-mx-servfail": {
+        ("Transport", "No MX records"): "MX ex.com: SERVFAIL/REFUSED",
+        ("MTA-STS", "No MTA-STS policy"): "MX ex.com: SERVFAIL/REFUSED",
+        ("TLS-RPT", "No TLS-RPT"): "MX ex.com: SERVFAIL/REFUSED",
+    },
+    "inconclusive-apex-txt-before-mx": {
+        ("SPF", "No SPF record"): "TXT ex.com: SERVFAIL/REFUSED",
+    },
+    "inconclusive-apex-txt-notimp": {
+        ("SPF", "No SPF record"): "TXT ex.com: lookup error",
+    },
+    "inconclusive-dmarc-txt-formerr": {
+        ("DMARC", "No DMARC record"): "TXT _dmarc.ex.com: lookup error",
+    },
+    "inconclusive-apex-mx-notimp": {
+        ("Transport", "No MX records"): "MX ex.com: lookup error",
+        ("MTA-STS", "No MTA-STS policy"): "MX ex.com: lookup error",
+        ("TLS-RPT", "No TLS-RPT"): "MX ex.com: lookup error",
+    },
+}
 NEW_DIGESTS = {
     "dmarc-parent-psd-y-sp-reject": "8b82ccc8ce6664e0d44f6269bbc8438bba40f8c2b0e3ed2d550f52b66844ad1d",
     "dmarc-parent-psd-y-sp-none": "114762297afbc90c9d4f4794b84b4d49abbf4bfbe43b89137e718d07babd3bfc",
@@ -182,6 +218,19 @@ def main():
             ]
             if len(candidate["expect"]["findings"]) != len(findings) - 1:
                 fixture_changes.append((old["id"], "missing one parent observation"))
+        if old["id"] in WHI280_CHANGED_IDS:
+            findings = candidate["expect"]["findings"]
+            actual_markers = {
+                (finding["area"], finding["title"]): finding["unconfirmed"]
+                for finding in findings if "unconfirmed" in finding
+            }
+            if actual_markers != WHI280_MARKERS[old["id"]]:
+                fixture_changes.append((old["id"], {
+                    "unconfirmed": actual_markers,
+                    "expected": WHI280_MARKERS[old["id"]],
+                }))
+            for finding in findings:
+                finding.pop("unconfirmed", None)
         delta = list(changes(old, candidate))
         if delta:
             fixture_changes.append((old["id"], delta))
@@ -235,14 +284,20 @@ def main():
             check=True,
         )
         subprocess.run(["git", "checkout", "--quiet", BASE], cwd=old_repository, check=True)
-        preserved_ids = {fixture["id"] for fixture in base} - set(CHANGED_IDS)
+        preserved_ids = (
+            {fixture["id"] for fixture in base}
+            - set(CHANGED_IDS)
+            - set(WHI280_CHANGED_IDS)
+        )
         old_outputs = snapshot_subprocess(old_repository, preserved_ids)
         current_outputs = snapshot_subprocess(ROOT, preserved_ids)
+        old_whi280 = snapshot_subprocess(old_repository, set(WHI280_CHANGED_IDS))
+        current_whi280 = snapshot_subprocess(ROOT, set(WHI280_CHANGED_IDS))
 
     output_changes = list(changes(old_outputs, current_outputs))
     grouped = Counter(path[-1] for path, _before, _after in output_changes)
     expected_ids = set(old_outputs)
-    valid = set(current_outputs) == expected_ids and len(expected_ids) == 53 and not output_changes
+    valid = set(current_outputs) == expected_ids and len(expected_ids) == 46 and not output_changes
     print(
         f"OUTPUT_PRESERVATION fixtures={len(current_outputs)} changed_keys={len(output_changes)} "
         f"by_key={dict(sorted(grouped.items()))} "
@@ -251,6 +306,34 @@ def main():
     if not valid:
         for path, before, after in output_changes:
             print(f"UNEXPECTED_OUTPUT_CHANGE {path}: {before!r} -> {after!r}", file=sys.stderr)
+        return 1
+    whi280_changes = list(changes(old_whi280, current_whi280))
+    whi280_marker_changes = [
+        (path, before, after) for path, before, after in whi280_changes
+        if path[-1:] == ("unconfirmed",) and before is None
+    ]
+    output_markers = {}
+    for fixture_id, output in current_whi280.items():
+        output_markers[fixture_id] = {
+            (finding["area"], finding["title"]): finding["unconfirmed"]
+            for finding in output["result"]["findings"]
+            if "unconfirmed" in finding
+        }
+    whi280_valid = (
+        len(whi280_changes) == 11
+        and len(whi280_marker_changes) == 11
+        and output_markers == WHI280_MARKERS
+    )
+    print(
+        f"WHI280_OUTPUT_CHANGE_PROOF fixtures={len(current_whi280)} "
+        f"changed_keys={len(whi280_changes)} "
+        f"unconfirmed_only={str(len(whi280_marker_changes) == len(whi280_changes)).lower()} "
+        f"sha256={hashlib.sha256(canonical(current_whi280)).hexdigest()}"
+    )
+    if not whi280_valid:
+        for path, before, after in whi280_changes:
+            print(f"UNEXPECTED_WHI280_OUTPUT_CHANGE {path}: {before!r} -> {after!r}", file=sys.stderr)
+        print(f"UNEXPECTED_WHI280_MARKERS {output_markers!r}", file=sys.stderr)
         return 1
     return 0
 

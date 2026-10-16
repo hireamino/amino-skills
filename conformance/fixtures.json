@@ -6898,7 +6898,8 @@
             "severity": "high",
             "action": "Publish an SPF record",
             "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with",
-            "lane": "outbound_auth"
+            "lane": "outbound_auth",
+            "unconfirmed": "TXT ex.com: SERVFAIL/REFUSED"
           },
           {
             "area": "MTA-STS",
@@ -7044,7 +7045,8 @@
             "severity": "critical",
             "action": "Publish a DMARC policy",
             "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to",
-            "lane": "outbound_auth"
+            "lane": "outbound_auth",
+            "unconfirmed": "TXT _dmarc.ex.com: SERVFAIL/REFUSED"
           },
           {
             "area": "SPF",
@@ -7220,7 +7222,8 @@
             "severity": "medium",
             "action": "Publish an MTA-STS policy",
             "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
-            "lane": "inbound_transport"
+            "lane": "inbound_transport",
+            "unconfirmed": "MX ex.com: SERVFAIL/REFUSED"
           },
           {
             "area": "TLS-RPT",
@@ -7228,7 +7231,8 @@
             "severity": "low",
             "action": "Add a TLS-RPT record",
             "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
-            "lane": "inbound_transport"
+            "lane": "inbound_transport",
+            "unconfirmed": "MX ex.com: SERVFAIL/REFUSED"
           },
           {
             "area": "BIMI",
@@ -7246,7 +7250,8 @@
             "severity": "low",
             "action": "Confirm whether this domain should receive mail",
             "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
-            "lane": "inbound_transport"
+            "lane": "inbound_transport",
+            "unconfirmed": "MX ex.com: SERVFAIL/REFUSED"
           },
           {
             "area": "DNSSEC",
@@ -7346,7 +7351,8 @@
             "severity": "high",
             "action": "Publish an SPF record",
             "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with",
-            "lane": "outbound_auth"
+            "lane": "outbound_auth",
+            "unconfirmed": "TXT ex.com: SERVFAIL/REFUSED"
           },
           {
             "area": "DKIM",
@@ -7643,7 +7649,8 @@
             "severity": "high",
             "action": "Publish an SPF record",
             "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with",
-            "lane": "outbound_auth"
+            "lane": "outbound_auth",
+            "unconfirmed": "TXT ex.com: lookup error"
           },
           {
             "area": "MTA-STS",
@@ -7789,7 +7796,8 @@
             "severity": "critical",
             "action": "Publish a DMARC policy",
             "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to",
-            "lane": "outbound_auth"
+            "lane": "outbound_auth",
+            "unconfirmed": "TXT _dmarc.ex.com: lookup error"
           },
           {
             "area": "SPF",
@@ -7965,7 +7973,8 @@
             "severity": "medium",
             "action": "Publish an MTA-STS policy",
             "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
-            "lane": "inbound_transport"
+            "lane": "inbound_transport",
+            "unconfirmed": "MX ex.com: lookup error"
           },
           {
             "area": "TLS-RPT",
@@ -7973,7 +7982,8 @@
             "severity": "low",
             "action": "Add a TLS-RPT record",
             "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
-            "lane": "inbound_transport"
+            "lane": "inbound_transport",
+            "unconfirmed": "MX ex.com: lookup error"
           },
           {
             "area": "BIMI",
@@ -7991,7 +8001,8 @@
             "severity": "low",
             "action": "Confirm whether this domain should receive mail",
             "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
-            "lane": "inbound_transport"
+            "lane": "inbound_transport",
+            "unconfirmed": "MX ex.com: lookup error"
           },
           {
             "area": "DNSSEC",

@@ -287,6 +287,31 @@ def inconclusive_state(domain):
     return False, None
 
 
+def mark_unconfirmed_findings(domain, findings, inconclusive_reason):
+    """Mark only findings whose verdict depends on the failed critical lookup.
+
+    The marker carries the shared result-level reason verbatim so consumers can
+    display it without rebuilding the lookup-to-finding dependency contract.
+    """
+    if not inconclusive_reason:
+        return
+    if inconclusive_reason.startswith(f"TXT _dmarc.{domain}:"):
+        affected = {("DMARC", "No DMARC record")}
+    elif inconclusive_reason.startswith(f"TXT {domain}:"):
+        affected = {("SPF", "No SPF record")}
+    elif inconclusive_reason.startswith(f"MX {domain}:"):
+        affected = {
+            ("Transport", "No MX records"),
+            ("MTA-STS", "No MTA-STS policy"),
+            ("TLS-RPT", "No TLS-RPT"),
+        }
+    else:
+        return
+    for finding in findings:
+        if (finding.get("area"), finding.get("title")) in affected:
+            finding["unconfirmed"] = inconclusive_reason
+
+
 def is_void(name):
     """A 'void' SPF lookup (RFC 7208 §4.6.4) ~ a name that resolves to nothing — a dead
     include/redirect target. Cheap proxy: void only if BOTH TXT and A are empty. TXT is
@@ -1646,6 +1671,7 @@ def main():
     # I20: inspect only the three critical DNS lookups, in the engine's order.
     # The resolver records the final metadata after its existing retry policy.
     inconclusive, inconclusive_reason = inconclusive_state(domain)
+    mark_unconfirmed_findings(domain, F, inconclusive_reason)
     print(json.dumps({
         "domain": domain,
         "primary_mx": mx_host,

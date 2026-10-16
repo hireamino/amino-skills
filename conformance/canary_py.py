@@ -1522,6 +1522,24 @@ try:
         'inconclusive-apex-txt-servfail.inconclusive_reason: expected "TXT ex.com: SERVFAIL/REFUSED", got "TXT ex.com: lookup error"',
     )
     whi180_inconclusive_canary(
+        "WHI-280 failure does not mark every finding", "inconclusive-apex-txt-servfail",
+        '        if (finding.get("area"), finding.get("title")) in affected:\n',
+        '        if True:  # WHI-280 over-marking canary\n',
+        "inconclusive-apex-txt-servfail.findings[DMARC|No DMARC record].unconfirmed: expected 'missing', got 'TXT ex.com: SERVFAIL/REFUSED'",
+    )
+    whi180_inconclusive_canary(
+        "WHI-280 MX applicability findings stay marked", "inconclusive-apex-mx-notimp",
+        '    elif inconclusive_reason.startswith(f"MX {domain}:"):\n'
+        '        affected = {\n'
+        '            ("Transport", "No MX records"),\n'
+        '            ("MTA-STS", "No MTA-STS policy"),\n'
+        '            ("TLS-RPT", "No TLS-RPT"),\n'
+        '        }\n',
+        '    elif inconclusive_reason.startswith(f"MX {domain}:"):\n'
+        '        affected = set()  # WHI-280 dropped MX markers canary\n',
+        "inconclusive-apex-mx-notimp.findings[MTA-STS|No MTA-STS policy].unconfirmed: expected 'MX ex.com: lookup error', got 'missing'",
+    )
+    whi180_inconclusive_canary(
         "I20 website consults both address-family metadata", "robots-aaaa-lookup-failed",
         '        if dns_meta(host, "A").get("error") or dns_meta(host, "AAAA").get("error"):\n',
         '        if dns_meta(host, "A").get("error"):  # I20 A-only metadata canary\n',
@@ -1667,8 +1685,8 @@ except Exception as error:
     print(f"FAIL  canary setup — {error}")
     FAILED += 1
 
-print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 72 cases.")
-if PASSED + FAILED != 72:
-    print(f"FAIL  canary count: expected 72, got {PASSED + FAILED}", file=sys.stderr)
+print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 74 cases.")
+if PASSED + FAILED != 74:
+    print(f"FAIL  canary count: expected 74, got {PASSED + FAILED}", file=sys.stderr)
     sys.exit(1)
 sys.exit(1 if FAILED else 0)
