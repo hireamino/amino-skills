@@ -259,13 +259,32 @@ def dkim_lookup(domain):
 
 
 def resolves(domain):
-    """True if the domain exists in DNS at all (has NS/SOA/A). Distinguishes a
-    real-but-silent domain from a typo/NXDOMAIN — critical for lead scoring, where
-    a non-existent domain must NOT read as a maximally-broken (high-pain) lead."""
+    """False only when every existence probe authoritatively says NXDOMAIN.
+
+    A resolver failure is not proof that the domain does not exist.  Keep such
+    domains in the normal scoring path, where the shared inconclusive classifier
+    can disclose any failed critical lookup instead of mislabelling the row NR.
+    """
+    metadata = []
     for rr in ("NS", "SOA", "A"):
         if dig(domain, rr):
             return True
-    return False
+        metadata.append(dns_meta(domain, rr))
+    return not all(not row.get("error") and row.get("status") == 3
+                   for row in metadata)
+
+
+def inconclusive_state(domain):
+    """Return the shipping audit's one critical-DNS uncertainty decision."""
+    for name, rrtype in ((domain, "TXT"), (f"_dmarc.{domain}", "TXT"), (domain, "MX")):
+        metadata = dns_meta(name, rrtype)
+        status = metadata.get("status")
+        if metadata.get("error") or status in (2, 5):
+            # Python's normalized_meta marks SERVFAIL/REFUSED as error too;
+            # unlike the engine's fetch-error bit, that must not change the reason.
+            reason = "SERVFAIL/REFUSED" if status in (2, 5) else "lookup error"
+            return True, f"{rrtype} {name}: {reason}"
+    return False, None
 
 
 def is_void(name):
@@ -1626,17 +1645,7 @@ def main():
                for s in ["critical", "high", "medium", "low", "pass"]}
     # I20: inspect only the three critical DNS lookups, in the engine's order.
     # The resolver records the final metadata after its existing retry policy.
-    inconclusive, inconclusive_reason = False, None
-    for name, rrtype in ((domain, "TXT"), (f"_dmarc.{domain}", "TXT"), (domain, "MX")):
-        metadata = dns_meta(name, rrtype)
-        status = metadata.get("status")
-        if metadata.get("error") or status in (2, 5):
-            inconclusive = True
-            # Python's normalized_meta marks SERVFAIL/REFUSED as error too;
-            # unlike the engine's fetch-error bit, that must not change the reason.
-            reason = "SERVFAIL/REFUSED" if status in (2, 5) else "lookup error"
-            inconclusive_reason = f"{rrtype} {name}: {reason}"
-            break
+    inconclusive, inconclusive_reason = inconclusive_state(domain)
     print(json.dumps({
         "domain": domain,
         "primary_mx": mx_host,

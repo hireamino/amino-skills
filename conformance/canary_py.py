@@ -1478,8 +1478,11 @@ try:
     )
     whi180_inconclusive_canary(
         "I20 flag forced true", "dane-unvalidated-tlsa",
-        '    inconclusive, inconclusive_reason = False, None\n',
-        '    inconclusive, inconclusive_reason = True, "TXT ex.com: lookup error"\n',
+        'def inconclusive_state(domain):\n'
+        '    """Return the shipping audit\'s one critical-DNS uncertainty decision."""\n',
+        'def inconclusive_state(domain):\n'
+        '    """Return the shipping audit\'s one critical-DNS uncertainty decision."""\n'
+        '    return True, "TXT ex.com: lookup error"  # I20 forced-true canary\n',
         "dane-unvalidated-tlsa.inconclusive: expected false, got true",
     )
     whi180_inconclusive_canary(

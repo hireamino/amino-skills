@@ -53,6 +53,18 @@ replaced by current output.
 
 ## Current status
 
+**WHI-246 — lane-scoped published batch output:** `batch_score.py` no longer
+publishes an unlabelled blended Gap. Its TSV names `Outbound_gaps`,
+`Inbound_gaps`, and `Brand_gaps`; each count is the number of confirmed `N`
+cells in that lane, while an all-not-applicable lane (the true-null-MX inbound
+case) remains `—`. Revoked or malformed DKIM is an outbound gap. Authoritative
+NXDOMAIN across the NS/SOA/A existence probes is the only `NR` outcome;
+resolver failures remain scored and disclose the audit's single shared
+`inconclusive_reason` in `Unconfirmed`. A clean highlights cell is explicitly
+`none`. The seven-case `batch-fixtures.json` corpus executes the published TSV
+surface, and five mutations bind the lane map, null-MX rendering, failure versus
+NXDOMAIN boundary, Unconfirmed disclosure, and named clean state.
+
 **v1.18 / WHI-251 Step 2 — bounded PSD DMARC discovery:** normal DMARC
 inheritance remains bounded by the registrable domain from the pinned Public
 Suffix List. Within the existing five-ancestor lookup limit, a record above that

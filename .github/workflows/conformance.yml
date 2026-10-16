@@ -59,6 +59,10 @@ jobs:
         run: python3 conformance/preservation.py
       - name: Fixtures-driven conformance runner (shared corpus)
         run: python3 conformance/run_py.py
+      - name: Published batch lane-output corpus
+        run: |
+          python3 conformance/batch_contract.py
+          python3 conformance/batch_canary.py
       - name: Mutation canaries (material contract + network kill switch)
         run: python3 conformance/canary_py.py
       - name: Pinned public-suffix artifact (offline)

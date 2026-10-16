@@ -107,7 +107,7 @@ def install_resolver(dns):
     # so the scorer cannot silently escape the fixture resolver.
     for name in (
         "first_txt", "count_spf_lookups", "effective_terminator", "resolves",
-        "dkim_lookup", "mx_providers",
+        "dkim_lookup", "mx_providers", "inconclusive_state",
     ):
         setattr(batch_score, name, getattr(audit, name))
     batch_score.dig = recs
