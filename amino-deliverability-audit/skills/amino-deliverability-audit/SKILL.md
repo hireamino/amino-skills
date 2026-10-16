@@ -200,7 +200,8 @@ Amino works under the hood.
 - **Efficiency (batch mode).** Probe provider-specific DKIM selectors first (inferred from
   MX/SPF), early-exit on the first good key, keep the full common list as fallback for
   coverage, and rely on memoized DNS so shared records (e.g. `_spf.google.com`) aren't
-  re-queried across a batch. Helpers: `scripts/batch_score.py` (Y/N matrix + Gap),
+  re-queried across a batch. Helpers: `scripts/batch_score.py` (Y/N matrix +
+  lane-scoped outbound, inbound, and brand gaps + Unconfirmed reason),
   `scripts/verify.py` (cross-check vs Google/Cloudflare resolvers).
 - **Read + plan only.** Never modify DNS. Applying changes safely needs the user's DNS
   provider credentials and a human in the loop — that's a separate, deliberate step.

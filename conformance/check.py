@@ -969,6 +969,10 @@ chk("WHI-273 CI runs the FAQ generator contract",
 chk("WHI-273 CI runs the FAQ claim-detector canary",
     "node faq/claim-canary.mjs" in _WF,
     True)
+chk("WHI-246 CI runs the published batch lane-output corpus",
+    "python3 conformance/batch_contract.py" in _WF, True)
+chk("WHI-246 CI runs batch lane-output mutation canaries",
+    "python3 conformance/batch_canary.py" in _WF, True)
 _RUNNER = open(os.path.join(HERE, "run_py.py"), encoding="utf-8").read()
 chk("WHI-175 runner does not replace the shipping MTA-STS reader",
     "audit._fetch_mta_sts_policy =" in _RUNNER, False)

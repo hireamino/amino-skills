@@ -1,0 +1,68 @@
+{
+  "notes": "Reviewed closed-world output corpus for the published batch_score.py TSV surface. Scores are injected only at the scorer seam; existence and inconclusive decisions execute the shipping audit.py classifiers.",
+  "fixtures": [
+    {
+      "id": "lane-split",
+      "domain": "lane-split.invalid",
+      "existenceStatus": {"NS": 0, "SOA": 0, "A": 0},
+      "criticalStatus": {"TXT": 0, "DMARC_TXT": 0, "MX": 0},
+      "score": {"SPF": false, "DKIM": "good", "DMARC": true, "DMARC_enforced": false, "DMARC_rua": true, "MTA_STS": false, "TLS_RPT": true, "DANE": false, "BIMI": false},
+      "note": "no SPF",
+      "expect": {"Outbound_gaps": "2", "Inbound_gaps": "2", "Brand_gaps": "1", "Unconfirmed": "—", "Highlights": "no SPF"}
+    },
+    {
+      "id": "bimi-is-brand-only",
+      "domain": "bimi-lane.invalid",
+      "existenceStatus": {"NS": 0, "SOA": 0, "A": 0},
+      "criticalStatus": {"TXT": 0, "DMARC_TXT": 0, "MX": 0},
+      "score": {"SPF": true, "DKIM": "good", "DMARC": true, "DMARC_enforced": true, "DMARC_rua": true, "MTA_STS": true, "TLS_RPT": true, "DANE": true, "BIMI": false},
+      "note": "no BIMI",
+      "expect": {"Outbound_gaps": "0", "Inbound_gaps": "0", "Brand_gaps": "1", "Unconfirmed": "—", "Highlights": "no BIMI"}
+    },
+    {
+      "id": "null-mx-inbound-not-applicable",
+      "domain": "null-mx.invalid",
+      "existenceStatus": {"NS": 0, "SOA": 0, "A": 0},
+      "criticalStatus": {"TXT": 0, "DMARC_TXT": 0, "MX": 0},
+      "score": {"SPF": true, "DKIM": "unknown", "DMARC": true, "DMARC_enforced": true, "DMARC_rua": true, "MTA_STS": null, "TLS_RPT": null, "DANE": null, "BIMI": true},
+      "note": "no DKIM key at common/provider selectors",
+      "expect": {"Outbound_gaps": "0", "Inbound_gaps": "—", "Brand_gaps": "0", "Unconfirmed": "—", "Highlights": "no DKIM key at common/provider selectors"}
+    },
+    {
+      "id": "revoked-dkim-is-outbound-gap",
+      "domain": "revoked-dkim.invalid",
+      "existenceStatus": {"NS": 0, "SOA": 0, "A": 0},
+      "criticalStatus": {"TXT": 0, "DMARC_TXT": 0, "MX": 0},
+      "score": {"SPF": true, "DKIM": "invalid", "DMARC": true, "DMARC_enforced": true, "DMARC_rua": true, "MTA_STS": true, "TLS_RPT": true, "DANE": true, "BIMI": true},
+      "note": "DKIM selector1 revoked (empty p=)",
+      "expect": {"Outbound_gaps": "1", "Inbound_gaps": "0", "Brand_gaps": "0", "Unconfirmed": "—", "Highlights": "DKIM selector1 revoked (empty p=)"}
+    },
+    {
+      "id": "authoritative-nxdomain-is-nr",
+      "domain": "does-not-exist.invalid",
+      "existenceStatus": {"NS": 3, "SOA": 3, "A": 3},
+      "criticalStatus": {"TXT": 0, "DMARC_TXT": 0, "MX": 0},
+      "score": {"SPF": true, "DKIM": "good", "DMARC": true, "DMARC_enforced": true, "DMARC_rua": true, "MTA_STS": true, "TLS_RPT": true, "DANE": true, "BIMI": true},
+      "note": "clean",
+      "expect": {"Outbound_gaps": "NR", "Inbound_gaps": "NR", "Brand_gaps": "NR", "Unconfirmed": "—", "Highlights": "DOMAIN DID NOT RESOLVE (authoritative NXDOMAIN) — verify the domain"}
+    },
+    {
+      "id": "servfail-is-scored-and-unconfirmed",
+      "domain": "servfail.invalid",
+      "existenceStatus": {"NS": 2, "SOA": 2, "A": 2},
+      "criticalStatus": {"TXT": 2, "DMARC_TXT": 0, "MX": 0},
+      "score": {"SPF": true, "DKIM": "good", "DMARC": true, "DMARC_enforced": true, "DMARC_rua": true, "MTA_STS": true, "TLS_RPT": true, "DANE": true, "BIMI": true},
+      "note": "clean",
+      "expect": {"Outbound_gaps": "0", "Inbound_gaps": "0", "Brand_gaps": "0", "Unconfirmed": "TXT servfail.invalid: SERVFAIL/REFUSED", "Highlights": "none"}
+    },
+    {
+      "id": "clean-highlight-is-named-none",
+      "domain": "clean.invalid",
+      "existenceStatus": {"NS": 0, "SOA": 0, "A": 0},
+      "criticalStatus": {"TXT": 0, "DMARC_TXT": 0, "MX": 0},
+      "score": {"SPF": true, "DKIM": "good", "DMARC": true, "DMARC_enforced": true, "DMARC_rua": true, "MTA_STS": true, "TLS_RPT": true, "DANE": true, "BIMI": true},
+      "note": "clean",
+      "expect": {"Outbound_gaps": "0", "Inbound_gaps": "0", "Brand_gaps": "0", "Unconfirmed": "—", "Highlights": "none"}
+    }
+  ]
+}
