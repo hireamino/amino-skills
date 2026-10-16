@@ -46,8 +46,9 @@ enforcement actually means, the Gmail/Yahoo sender rules, MTA-STS/TLS-RPT/DANE, 
 DMARCbis, and what "post-quantum ready" means for email.
 
 The compact FAQ rendered by the public `/audit` page has one ordered source in
-[`faq/audit-faq.json`](./faq/audit-faq.json). A deterministic generator makes the
-site's committed copy from its immutable skills pin; the consumer gate refuses drift.
+[`faq/audit-faq.json`](./faq/audit-faq.json). The next site repin adopts it: a
+deterministic generator makes the site's committed copy from its immutable skills pin,
+and the consumer gate then refuses drift.
 
 ## Correctness
 

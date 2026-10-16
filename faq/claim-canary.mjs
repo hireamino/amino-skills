@@ -35,8 +35,14 @@ try {
 
   const artifactPath = join(temporary, "faq", "audit-faq.json");
   const artifact = JSON.parse(readFileSync(artifactPath, "utf8"));
-  const row = artifact.find((entry) => entry.question === "What is DMARCbis?");
-  if (!row) throw new Error("FAIL WHI-273 FAQ claim canary mutation anchor: DMARCbis row missing");
+  const rows = artifact.filter((entry) => entry.question === "What is DMARCbis?");
+  if (rows.length !== 1) {
+    throw new Error(`FAIL WHI-273 FAQ claim canary mutation anchor: expected 1 DMARCbis row, got ${rows.length}`);
+  }
+  const [row] = rows;
+  if (!row.answer.includes("This is a deliberate compatibility divergence")) {
+    throw new Error("FAIL WHI-273 FAQ claim canary mutation anchor: reviewed DMARCbis answer missing");
+  }
   row.answer = "The audit follows the complete DMARCbis DNS Tree Walk all the way to the root.";
   writeFileSync(artifactPath, `${JSON.stringify(artifact, null, 2)}\n`);
 
