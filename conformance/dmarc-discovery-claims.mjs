@@ -53,7 +53,9 @@ function normalizeSentence(value) {
 const APPROVED_TREE_WALK_SENTENCES = new Set([
   "RFC 9989 specifies a DNS Tree Walk instead of Public Suffix List discovery.",
   "This is a deliberate compatibility divergence, not a claim of full RFC 9989 tree-walk compliance.",
-  "RFC 9989 specifies a broader DNS Tree Walk; this compatibility implementation deliberately does not cross the PSL boundary.",
+  "Normal organizational-domain inheritance remains bounded by the pinned Public Suffix List.",
+  "One or more bounded lookups above that boundary are observations unless the ancestor explicitly opts in as a PSD with psd=y; that case is honored under RFC 9989.",
+  "Amino honors an ancestor that explicitly opts in with psd=y under RFC 9989, while otherwise keeping organizational-domain inheritance bounded by its pinned Public Suffix List.",
   "No _dmarc at this subdomain: it inherits the org domain's policy — the sp (subdomain policy) tag if set, otherwise p (RFC 9989 tree walk).",
   "RFC 9989 replaced Public-Suffix-List org-domain discovery with a live DNS Tree Walk (it depends on where DMARC records + psd= tags actually exist), which an offline tool can't reproduce.",
   'This heuristic is good enough for relaxed-alignment previews; a true tree-walk needs a live DNS lookup (future "live domain" mode).',
@@ -118,11 +120,10 @@ const MUST_FLAG = [
 const MUST_NOT_FLAG = [
   "RFC 9989 specifies a DNS Tree Walk instead of Public Suffix List discovery.",
   "This is a deliberate compatibility divergence, not a claim of full RFC 9989 tree-walk compliance.",
-  "RFC 9989 specifies a broader DNS Tree Walk; this compatibility implementation deliberately does not cross the PSL boundary.",
   "No _dmarc at this subdomain: it inherits the org domain's policy — the sp (subdomain policy) tag if set, otherwise p (RFC 9989 tree walk).",
   "RFC 9989 replaced Public-Suffix-List org-domain discovery with a live DNS Tree Walk (it depends on where DMARC records + psd= tags actually exist), which an offline tool can't reproduce.",
   'This heuristic is good enough for relaxed-alignment previews; a true tree-walk needs a live DNS lookup (future "live domain" mode).',
-  "Amino's audit remains bounded at the registrable domain from its pinned Public Suffix List.",
+  "Amino honors an ancestor that explicitly opts in with psd=y under RFC 9989, while otherwise keeping organizational-domain inheritance bounded by its pinned Public Suffix List.",
   "RFC 9989 specifies a DNS Tree Walk instead of\nPublic Suffix List discovery.",
 ];
 
@@ -182,10 +183,10 @@ print(json.dumps({"base": audit.org_base("tenant.github.io"), "calls": calls, "r
   const ancestor = "_dmarc.github.io";
   check("skill identifies the pinned-PSL registrable root", observation.base === "tenant.github.io", observation.base);
   check("skill queries the registrable root's own DMARC name", observation.calls.includes(own), JSON.stringify(observation.calls));
-  check("skill makes no ancestor DMARC lookup beyond that root", !observation.calls.includes(ancestor), JSON.stringify(observation.calls));
+  check("skill performs the bounded ancestor observation lookup", observation.calls.includes(ancestor), JSON.stringify(observation.calls));
   return observation.base === "tenant.github.io"
     && observation.calls.includes(own)
-    && !observation.calls.includes(ancestor);
+    && observation.calls.includes(ancestor);
 }
 
 async function observeWebEngine() {
@@ -213,8 +214,8 @@ async function observeWebEngine() {
   const own = "_dmarc.tenant.github.io";
   const ancestor = "_dmarc.github.io";
   check("web engine queries the registrable root's own DMARC name", txtNames.includes(own), JSON.stringify(txtNames));
-  check("web engine makes no ancestor DMARC lookup beyond that root", !txtNames.includes(ancestor), JSON.stringify(txtNames));
-  return txtNames.includes(own) && !txtNames.includes(ancestor);
+  check("web engine performs the bounded ancestor observation lookup", txtNames.includes(ancestor), JSON.stringify(txtNames));
+  return txtNames.includes(own) && txtNames.includes(ancestor);
 }
 
 async function runSkill() {

@@ -336,6 +336,23 @@ def whi180_inconclusive_canary(name, fixture, anchor, replacement, diagnostic):
         expect_red_comparison(name, execute_with_scripts(target, selected), diagnostic)
 
 
+def whi251_dmarc_canary(name, fixture, anchor, replacement, diagnostic):
+    """Mutate the shipping discovery/policy path and require a fixture-level verdict."""
+    selected = {"CONFORMANCE_FIXTURE": fixture}
+    require_green(name, execute(selected))
+    with tempfile.TemporaryDirectory(prefix="amino-whi251-dmarc-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        audit_path.write_text(
+            replace_exactly_once(source, anchor, replacement, name),
+            encoding="utf-8",
+        )
+        expect_red_comparison(name, execute_with_scripts(target, selected), diagnostic)
+
+
 try:
     with tempfile.TemporaryDirectory(prefix="amino-whi8-skill-") as temporary:
         target = Path(temporary)
@@ -1480,13 +1497,72 @@ try:
         "robots-apex-nxdomain.observations: expected {'mta_sts_policy': 'not_applicable', 'robots': 'not_applicable', 'rdap': 'unavailable'}, got {'mta_sts_policy': 'not_applicable', 'robots': 'unavailable', 'rdap': 'unavailable'}",
     )
 
+    whi251_dmarc_canary(
+        "WHI-251 no-psd parent is never effective", "registrable-root-nhs-uk",
+        '            if psd == "y":\n',
+        '            if True:  # WHI-251 removed psd=y opt-in canary\n',
+        "registrable-root-nhs-uk.findings[DMARC|No DMARC record].identity: expected finding, got missing",
+    )
+    whi251_dmarc_canary(
+        "WHI-251 enforced platform policy is capped below pass", "dmarc-parent-psd-y-sp-reject",
+        '        severity = "low" if strong else "high"\n',
+        '        severity = "pass" if strong else "high"  # WHI-251 cap canary\n',
+        "dmarc-parent-psd-y-sp-reject.findings[DMARC|DMARC enforced by platform policy (sp=reject from myshopify.com)].severity: expected 'low', got 'pass'",
+    )
+    whi251_dmarc_canary(
+        "WHI-251 weak platform policy remains weak", "dmarc-parent-psd-y-sp-none",
+        '        severity = "low" if strong else "high"\n',
+        '        severity = "low"  # WHI-251 weak-policy canary\n',
+        "dmarc-parent-psd-y-sp-none.findings[DMARC|DMARC platform policy is sp=none from myshopify.com].severity: expected 'high', got 'low'",
+    )
+    whi251_dmarc_canary(
+        "WHI-251 nonexistent name uses np", "dmarc-parent-psd-y-np-reject",
+        '        preferred = "sp" if domain_exists else "np"\n',
+        '        preferred = "sp"  # WHI-251 np-selection canary\n',
+        "dmarc-parent-psd-y-np-reject.findings[DMARC|DMARC enforced by platform policy (np=reject from myshopify.com)].identity: expected finding, got missing",
+    )
+    whi251_dmarc_canary(
+        "WHI-251 NOERROR/NODATA means the domain exists", "dmarc-parent-psd-y-sp-none",
+        '    if status == 0:\n        return True\n',
+        '    if status == 0:\n        return False  # WHI-251 NODATA-existence canary\n',
+        "dmarc-parent-psd-y-sp-none.findings[DMARC|DMARC platform policy is sp=none from myshopify.com].identity: expected finding, got missing",
+    )
+    whi251_dmarc_canary(
+        "WHI-251 unqualified parent does not stop the bounded walk", "dmarc-parent-psd-u-before-psd-y",
+        '            if psd == "n":\n                break\n',
+        '            if psd != "y":  # WHI-251 premature-stop canary\n                break\n',
+        "dmarc-parent-psd-u-before-psd-y.findings[DMARC|DMARC enforced by platform policy (sp=reject from gov.uk)].identity: expected finding, got missing",
+    )
+    with tempfile.TemporaryDirectory(prefix="amino-whi251-score-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        score_path = target / "batch_score.py"
+        source = score_path.read_text(encoding="utf-8")
+        score_path.write_text(
+            replace_exactly_once(
+                source,
+                '    if dmarc and dmarc_context["relationship"] in ("self", "psd"):\n',
+                '    if dmarc and dmarc_context["relationship"] == "self":  # WHI-251 score canary\n',
+                "WHI-251 platform score credit",
+            ),
+            encoding="utf-8",
+        )
+        expect_red_comparison(
+            "WHI-251 platform policy is credited in the score",
+            execute_with_scripts(target, {
+                "CONFORMANCE_FIXTURE": "dmarc-parent-psd-y-sp-reject",
+            }),
+            "dmarc-parent-psd-y-sp-reject.score.DMARC: expected True, got False",
+        )
+
     prove_crashing_checker_rejected()
 except Exception as error:
     print(f"FAIL  canary setup — {error}")
     FAILED += 1
 
-print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 59 cases.")
-if PASSED + FAILED != 59:
-    print(f"FAIL  canary count: expected 59, got {PASSED + FAILED}", file=sys.stderr)
+print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 66 cases.")
+if PASSED + FAILED != 66:
+    print(f"FAIL  canary count: expected 66, got {PASSED + FAILED}", file=sys.stderr)
     sys.exit(1)
 sys.exit(1 if FAILED else 0)

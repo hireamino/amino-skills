@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""WHI-215 Step 2a: prove existing reviewed rows and Python outputs are preserved.
+"""WHI-251 Step 2: bound the deliberate parent-DMARC contract changes.
 
 BASE is a commit, never a mutable branch. A shallow clone without BASE fails
 closed at git show/checkout; the workflow fetches full history for this proof.
@@ -17,10 +17,17 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
-BASE = "e61b74ebe84116f30eb24aa70db64e81ab1db9c7"
+BASE = "ef557911d381073991ba907f46c2e67c1780ba24"
 FIXTURES_PATH = "conformance/fixtures.json"
 TABLE_PATH = "conformance/address-contract.json"
 NEW_IDS = (
+    "dmarc-parent-psd-y-sp-reject",
+    "dmarc-parent-psd-y-sp-none",
+    "dmarc-parent-psd-y-np-reject",
+    "dmarc-parent-none-above-root",
+    "dmarc-parent-psd-u-before-psd-y",
+)
+CHANGED_IDS = (
     "registrable-root-nhs-uk",
     "registrable-root-sch-uk-wildcard",
     "registrable-root-police-uk",
@@ -30,16 +37,22 @@ NEW_IDS = (
     "registrable-root-k12-us",
     "registrable-root-alabel",
 )
-# Deliberately re-pin only after reviewing the new fixture bodies.
 NEW_DIGESTS = {
-    "registrable-root-nhs-uk": "2de63b1150fb19285191641939c8b7d19d2f991c547097c3bb49e8b46110e529",
-    "registrable-root-sch-uk-wildcard": "b88cc4ebae3b41aa840e5840cede47ecbfddfbec9b9ff0be09988d973a9ff9e2",
-    "registrable-root-police-uk": "db10b58effc944a11af306e423f9c943c56ae36095f9ac5805327453a45e8ee9",
-    "registrable-root-gov-uk": "c06b4b1618d2a6affad8597514307c2fb3b7bbeff3f16c68d223c54fb3db0e87",
-    "registrable-root-com-es": "d990830915197d9576b662a8d47a6e137eab9ef75deca074802f370bf3565366",
-    "registrable-root-ac-in": "f592e5f6699d225bc517520a5ff2fc2558fc2722955b8906dd4596e9b00302b2",
-    "registrable-root-k12-us": "f79430eab39abac26515ba59dbd764662558ec26ad68105f0d3c62dc58c4587c",
-    "registrable-root-alabel": "99ee59c04aadb99f14c783723dee18b61ae58e86bad9b01dc8cb26ff9c4ca29b",
+    "dmarc-parent-psd-y-sp-reject": "8b82ccc8ce6664e0d44f6269bbc8438bba40f8c2b0e3ed2d550f52b66844ad1d",
+    "dmarc-parent-psd-y-sp-none": "114762297afbc90c9d4f4794b84b4d49abbf4bfbe43b89137e718d07babd3bfc",
+    "dmarc-parent-psd-y-np-reject": "a4ca274aea02511dec85e87ab8dc61ec7a19d6a7c0f92ddcb59047cfd9795480",
+    "dmarc-parent-none-above-root": "776df7d946f76d1aa68a30b8000fc7fd27e42999021ceb0fc84c7df6290bb616",
+    "dmarc-parent-psd-u-before-psd-y": "268eaaf4a82ee63f60da4aa9d08c77084ac6ba4e9acb0ef7ecb9e418a0450561",
+}
+CHANGED_DIGESTS = {
+    "registrable-root-nhs-uk": "2a0c85be080fae66392e177b9c9de70a0a9f3e5f80f3974718657239541faec4",
+    "registrable-root-sch-uk-wildcard": "affc8e1485291c19a32fc31749fa805c071188b1fd2820873b2dc9f7afd15fec",
+    "registrable-root-police-uk": "bb70a82644d7abf19a3df31a8c003e31e30a5d4388ca2ac40a12d7912cbd8209",
+    "registrable-root-gov-uk": "cf72327eab49c23c779750163fc6210c7c4a1d8839a4e8a316974a0d8a2354cf",
+    "registrable-root-com-es": "f55a272c8d42c35542a73d45207d9c49f1f97ec91918ac066c03df3f266f0a93",
+    "registrable-root-ac-in": "f0fbcad11c879e93738f644f408b3cb94eb1325ca084dade9ba9c8a496334b04",
+    "registrable-root-k12-us": "f83018290dbfa31e4ae61752f2ee8e1938bdd52547348bf9c23ba8a949fe0143",
+    "registrable-root-alabel": "d33ecbfa04cf2b8ee6425a78332d060cc1322735bceed88ba1e0ad0993ad16ce",
 }
 
 OLD_RELIABILITY_REASON = (
@@ -82,15 +95,17 @@ def git_show(path):
     ).stdout
 
 
-def snapshot(repository, count):
+def snapshot(repository, included_ids):
     conformance = repository / "conformance"
     sys.path.insert(0, str(conformance))
     spec = importlib.util.spec_from_file_location("preservation_runner", conformance / "run_py.py")
     runner = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(runner)
-    fixtures = json.loads((conformance / "fixtures.json").read_text())["fixtures"][:count]
+    fixtures = json.loads((conformance / "fixtures.json").read_text())["fixtures"]
     outputs = {}
     for fixture in fixtures:
+        if fixture["id"] not in included_ids:
+            continue
         if fixture.get("mode") not in runner.CONTRACT_MODES:
             continue
         runner.NETWORK_ATTEMPTS.clear()
@@ -111,9 +126,9 @@ def snapshot(repository, count):
     return outputs
 
 
-def snapshot_subprocess(repository, count):
+def snapshot_subprocess(repository, included_ids):
     result = subprocess.run(
-        [sys.executable, str(Path(__file__).resolve()), "--snapshot", str(repository), str(count)],
+        [sys.executable, str(Path(__file__).resolve()), "--snapshot", str(repository), json.dumps(sorted(included_ids))],
         cwd=repository,
         env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
         capture_output=True, check=True,
@@ -123,14 +138,14 @@ def snapshot_subprocess(repository, count):
 
 def main():
     if len(sys.argv) == 4 and sys.argv[1] == "--snapshot":
-        sys.stdout.buffer.write(canonical(snapshot(Path(sys.argv[2]).resolve(), int(sys.argv[3]))))
+        sys.stdout.buffer.write(canonical(snapshot(Path(sys.argv[2]).resolve(), set(json.loads(sys.argv[3])))))
         return 0
 
     base_document = json.loads(git_show(FIXTURES_PATH))
     current_document = json.loads((ROOT / FIXTURES_PATH).read_text(encoding="utf-8"))
     base = base_document["fixtures"]
     current = current_document["fixtures"]
-    if set(base_document) != set(current_document) or len(base) != 58 or len(current) != 66:
+    if set(base_document) != set(current_document) or len(base) != 66 or len(current) != 71:
         print("UNEXPECTED_FIXTURE_SHAPE", file=sys.stderr)
         return 1
     if [f["id"] for f in current[:len(base)]] != [f["id"] for f in base]:
@@ -142,25 +157,44 @@ def main():
 
     fixture_changes = []
     for old, new in zip(base, current):
-        delta = list(changes(old, new))
-        expected = []
-        if delta != expected:
-            fixture_changes.append((old["id"], delta, expected))
+        candidate = json.loads(json.dumps(new))
+        if old["id"] in CHANGED_IDS:
+            findings = candidate["expect"]["findings"]
+            candidate["expect"]["findings"] = [
+                finding for finding in findings
+                if finding["title"] != "Parent DMARC record observed above registrable root"
+            ]
+            if len(candidate["expect"]["findings"]) != len(findings) - 1:
+                fixture_changes.append((old["id"], "missing one parent observation"))
+        delta = list(changes(old, candidate))
+        if delta:
+            fixture_changes.append((old["id"], delta))
     if fixture_changes:
         print(f"UNEXPECTED_EXISTING_FIXTURE_CHANGE {fixture_changes}", file=sys.stderr)
         return 1
 
+    current_by_id = {fixture["id"]: fixture for fixture in current}
     digests = {f["id"]: hashlib.sha256(canonical(f)).hexdigest() for f in current[len(base):]}
     if digests != NEW_DIGESTS:
         print(f"UNEXPECTED_NEW_FIXTURE_CHANGE {digests}", file=sys.stderr)
         return 1
     table_same = git_show(TABLE_PATH) == (ROOT / TABLE_PATH).read_bytes()
     print(
-        f"FIXTURE_CHANGE_PROOF existing={len(base)} added={len(NEW_IDS)} "
-        "allowed_existing_changes=none "
+        f"FIXTURE_CHANGE_PROOF existing={len(base)} changed={len(CHANGED_IDS)} added={len(NEW_IDS)} "
+        "allowed_existing_changes=one parent observation each "
         f"address_table_unchanged={str(table_same).lower()}"
     )
     print("NEW_FIXTURE_DIGESTS " + ",".join(f"{key}:{digests[key]}" for key in NEW_IDS))
+    changed_digests = {
+        key: hashlib.sha256(canonical(current_by_id[key])).hexdigest()
+        for key in CHANGED_IDS
+    }
+    if changed_digests != CHANGED_DIGESTS:
+        print(f"UNEXPECTED_CHANGED_FIXTURE_CHANGE {changed_digests}", file=sys.stderr)
+        return 1
+    print("CHANGED_FIXTURE_DIGESTS " + ",".join(
+        f"{key}:{changed_digests[key]}" for key in CHANGED_IDS
+    ))
     if not table_same:
         return 1
 
@@ -171,8 +205,9 @@ def main():
             check=True,
         )
         subprocess.run(["git", "checkout", "--quiet", BASE], cwd=old_repository, check=True)
-        old_outputs = snapshot_subprocess(old_repository, len(base))
-        current_outputs = snapshot_subprocess(ROOT, len(base))
+        preserved_ids = {fixture["id"] for fixture in base} - set(CHANGED_IDS)
+        old_outputs = snapshot_subprocess(old_repository, preserved_ids)
+        current_outputs = snapshot_subprocess(ROOT, preserved_ids)
 
     output_changes = list(changes(old_outputs, current_outputs))
     grouped = Counter(path[-1] for path, _before, _after in output_changes)

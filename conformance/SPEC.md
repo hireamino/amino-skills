@@ -1,4 +1,4 @@
-# Amino Deliverability — Correctness Conformance Spec (v1.17)
+# Amino Deliverability — Correctness Conformance Spec (v1.18)
 
 **Status:** proposed · **Owner:** hireamino · **Canonical home:** `amino-skills/conformance/`
 
@@ -52,6 +52,33 @@ review. The corpus has no expectation regeneration mode; reviewed answers cannot
 replaced by current output.
 
 ## Current status
+
+**v1.18 / WHI-251 Step 2 — bounded PSD DMARC discovery:** normal DMARC
+inheritance remains bounded by the registrable domain from the pinned Public
+Suffix List. Within the existing five-ancestor lookup limit, a record above that
+boundary is also observed. Without `psd=y`, it is quoted as context, does not
+establish policy for the audited domain, and the existing `No DMARC record`
+finding and score remain unchanged. The observation names `sp` and `np`, and
+explains that an opted-in PSD's `np=reject` can govern nonexistent names.
+
+When the nearest record above the boundary explicitly carries `psd=y`, RFC 9989
+policy is effective: `sp` applies to an existing audited name, `np` to a
+nonexistent name, and either falls back to `p` when absent. The result is a
+distinct platform-controlled finding which quotes the record and explains that
+the platform can change it without notice. `none` remains high severity;
+`quarantine` or `reject` is capped at low, the existing scale's lowest non-pass
+severity, and is never rendered as a pass. The score credits the effective DMARC
+record, enforcement, and `rua` exactly as it would for an owner record. The
+bounded walk continues past an unqualified record; only `psd=n` stops it early.
+For the `sp`/`np` choice, NOERROR/NODATA means the audited name exists and
+NXDOMAIN means it does not. Five new fixtures bind strong `sp`, weak `sp`,
+enforced `np`, no-parent, and unqualified-parent-before-`psd=y` cases; the eight
+WHI-215 registrable-root fixtures gain only the reviewed parent observation.
+Seven new mutation canaries take the Python total from 59 to 66 and prove the
+opt-in boundary, severity cap, weak-policy treatment, `np` selection, NODATA
+existence, continued bounded walking, and score credit. The corpus now has 66
+executable cases and five explicit skips. Engine adoption
+and contract 1.7.0 follow only after this skills change has an immutable merge SHA.
 
 **v1.17 / WHI-215 Step 2a — Python registrable-domain contract:** the Python
 skill loads the byte-identical sibling copy of

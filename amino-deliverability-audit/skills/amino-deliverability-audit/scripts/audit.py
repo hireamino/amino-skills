@@ -574,52 +574,160 @@ def check_dkim(domain, F):
                       fix="Remove the t=y flag from the DKIM TXT record once you've confirmed signing works."))
 
 
-def discover_dmarc(domain):
-    """PSL-bounded DMARC policy discovery used by this audit.
+def _dmarc_tags(record):
+    return {
+        key.lower(): value.strip().lower()
+        for key, value in re.findall(r"(\w+)=\s*([^;]+)", record or "")
+    }
 
-    Check the domain's own _dmarc record, then the nearest ancestor only as far as
-    the registrable domain from the pinned Public Suffix List (at most 5 lookups).
-    RFC 9989 specifies a broader DNS Tree Walk; this compatibility implementation deliberately does not cross the PSL boundary.
-    Returns (rec, source, inherited).
+
+def discover_dmarc(domain):
+    """Discover the nearest DMARC record within the existing five-lookup bound.
+
+    Normal organizational-domain inheritance remains bounded by the pinned Public
+    Suffix List. One or more bounded lookups above that boundary are observations
+    unless the ancestor explicitly opts in as a PSD with ``psd=y``; that case is
+    honored under RFC 9989. Returns ``(record, source, relationship)`` where the
+    relationship is self, organizational, psd, parent_observation, or None.
     """
     domain = domain.rstrip(".").lower()
     own = confirm_txt(f"_dmarc.{domain}", "v=dmarc1")
     if own:
-        return own, domain, False
+        return own, domain, "self"
     base = org_base(domain)
-    # A registrable root has no organizational ancestor to inherit from. Without
-    # this boundary, a multi-label public suffix such as nhs.uk could be queried
-    # as though it were an organization when auditing trust.nhs.uk.
-    if not base or domain == base:
-        return None, None, False
+    if not base:
+        return None, None, None
     labels = domain.split(".")
+    base_labels = len(base.split("."))
+    parent_observation = None
     for i in range(1, min(len(labels) - 1, 6)):
         parent = ".".join(labels[i:])
         rec = confirm_txt(f"_dmarc.{parent}", "v=dmarc1")
         if rec:
-            return rec, parent, True
-        if parent == base:
-            break
-    return None, None, False
+            above_root = len(parent.split(".")) < base_labels
+            if not above_root:
+                return rec, parent, "organizational"
+            psd = _dmarc_tags(rec).get("psd", "u")
+            if psd == "y":
+                return rec, parent, "psd"
+            if parent_observation is None:
+                parent_observation = (rec, parent, "parent_observation")
+            if psd == "n":
+                break
+    return parent_observation or (None, None, None)
+
+
+def dmarc_domain_exists(domain):
+    """RFC 9989 existence: NXDOMAIN is absent; NOERROR/NODATA still exists."""
+    dig(domain, "A")
+    status = dns_meta(domain, "A").get("status")
+    if status == 3:
+        return False
+    if status == 0:
+        return True
+    # A lookup failure is not authoritative. Reuse the skill's established broad
+    # existence probe rather than inventing a second failure classifier here.
+    return resolves(domain)
+
+
+def dmarc_policy_context(domain):
+    """Resolve one DMARC discovery result into the policy that applies here."""
+    rec, source, relationship = discover_dmarc(domain)
+    tags = _dmarc_tags(rec)
+    effective = tag = None
+    domain_exists = None
+    if relationship == "self":
+        effective, tag = tags.get("p", ""), "p"
+    elif relationship == "organizational":
+        effective = tags.get("sp") or tags.get("p", "")
+        tag = "sp" if tags.get("sp") else "p"
+    elif relationship == "psd":
+        domain_exists = dmarc_domain_exists(domain)
+        preferred = "sp" if domain_exists else "np"
+        effective = tags.get(preferred) or tags.get("p", "")
+        tag = preferred if tags.get(preferred) else "p"
+    return {
+        "record": rec,
+        "source": source,
+        "relationship": relationship,
+        "tags": tags,
+        "effective": effective,
+        "tag": tag,
+        "domain_exists": domain_exists,
+    }
+
+
+def _append_no_dmarc(F):
+    F.append(dict(area="DMARC", severity="critical", title="No DMARC record",
+                  detail="No policy at _dmarc. Receivers have no instruction on how to handle unauthenticated mail in your name — and as of 2024-25, Gmail/Yahoo/Microsoft require DMARC for bulk senders. This is both a spoofing exposure and a hard deliverability blocker.",
+                  fix='Publish TXT at _dmarc: start with "v=DMARC1; p=none; rua=mailto:dmarc@<domain>" to collect reports. Review those reports before any enforcement, then stage p=quarantine; whether p=reject is appropriate depends on your mail flows (RFC 9989 §7.4).'))
 
 
 def check_dmarc(domain, F):
-    rec, source, inherited = discover_dmarc(domain)
+    context = dmarc_policy_context(domain)
+    rec = context["record"]
+    source = context["source"]
+    relationship = context["relationship"]
     if not rec:
-        F.append(dict(area="DMARC", severity="critical", title="No DMARC record",
-                      detail="No policy at _dmarc. Receivers have no instruction on how to handle unauthenticated mail in your name — and as of 2024-25, Gmail/Yahoo/Microsoft require DMARC for bulk senders. This is both a spoofing exposure and a hard deliverability blocker.",
-                      fix='Publish TXT at _dmarc: start with "v=DMARC1; p=none; rua=mailto:dmarc@<domain>" to collect reports. Review those reports before any enforcement, then stage p=quarantine; whether p=reject is appropriate depends on your mail flows (RFC 9989 §7.4).'))
+        _append_no_dmarc(F)
         return
-    kv = {k.lower(): v for k, v in re.findall(r"(\w+)=\s*([^;]+)", rec)}
-    p = kv.get("p", "").strip().lower()
-    sp = kv.get("sp", "").strip().lower()
-    np_ = kv.get("np", "").strip().lower()
+    kv = context["tags"]
+    p = kv.get("p", "")
+    sp = kv.get("sp", "")
+    np_ = kv.get("np", "")
 
-    if inherited:
+    if relationship == "parent_observation":
+        _append_no_dmarc(F)
+        F.append(dict(
+            area="DMARC", severity="low",
+            title="Parent DMARC record observed above registrable root",
+            detail=(
+                f'The parent {source} publishes "{rec}" (sp={sp or "<missing>"}; '
+                f'np={np_ or "<missing>"}). Without psd=y, it does not establish '
+                f'policy for {domain} under this audit\'s PSL-based organizational-domain '
+                "resolution. RFC 9989 can apply an opted-in PSD record via its DNS Tree "
+                "Walk. Separately, np=reject on the parent still covers nonexistent names "
+                "beneath that parent."
+            ),
+            fix=(
+                f"Publish the domain's own record at _dmarc.{domain} if you want its "
+                "DMARC policy under the domain owner's control."
+            ),
+            record=rec,
+        ))
+        return
+
+    if relationship == "psd":
+        eff = context["effective"]
+        tag = context["tag"]
+        strong = eff in ("quarantine", "reject")
+        severity = "low" if strong else "high"
+        title = (
+            f"DMARC enforced by platform policy ({tag}={eff} from {source})"
+            if strong else
+            f"DMARC platform policy is {tag}={eff or '<missing>'} from {source}"
+        )
+        F.append(dict(
+            area="DMARC", severity=severity, title=title,
+            detail=(
+                f'The PSD {source} publishes "{rec}". RFC 9989 applies its '
+                f'{tag}={eff or "<missing>"} policy to {domain}. This policy is set '
+                "and controlled by the platform, not the domain owner, and can change "
+                "without notice to them."
+            ),
+            fix=(
+                f"Publish the domain's own record at _dmarc.{domain} to put policy under "
+                "the domain owner's control, when you control that DNS name."
+            ),
+            record=rec,
+        ))
+        return
+
+    if relationship == "organizational":
         # No _dmarc at this subdomain: it inherits the org domain's policy — the sp
         # (subdomain policy) tag if set, otherwise p (RFC 9989 tree walk).
-        eff = sp or p
-        tag = "sp" if sp else "p"
+        eff = context["effective"]
+        tag = context["tag"]
         if eff not in ("quarantine", "reject"):
             F.append(dict(area="DMARC", severity="high",
                           title=f"DMARC subdomain not enforced (inherited {tag}={eff or '<missing>'} from {source})",
@@ -1316,6 +1424,8 @@ def action(f):
     if a == "DMARC":
         if "no dmarc" in t:
             return "Publish a DMARC policy"
+        if "platform policy" in t or "parent dmarc record observed" in t:
+            return "Publish your own DMARC policy for control"
         if "multiple dmarc" in t:
             return "Merge to a single DMARC record"
         if "p=none (monitor" in t:

@@ -25,6 +25,8 @@ import verify  # noqa: E402
 from socket_fixture import SocketTlsFixture, http_response, request_path  # noqa: E402
 
 _SHIPPING_CONFIRM_TXT = audit.confirm_txt
+_SHIPPING_DIG = audit.dig
+_SHIPPING_DNS_META = audit.dns_meta
 
 ok = True
 
@@ -60,20 +62,35 @@ chk("WHI-215 non-Latin registrable root", audit.org_base("食狮.公司.cn"), "�
 # I10 — tree walk: subdomain inherits nearest ancestor policy (mock resolver, no network)
 _MOCK = {"_dmarc.example.co.uk": "v=DMARC1; p=reject"}
 audit.confirm_txt = lambda name, prefix: _MOCK.get(name.rstrip(".").lower())
-_rec, _source, _inherited = audit.discover_dmarc("send.example.co.uk")
-chk("I10 treewalk finds ancestor", (_source, _inherited), ("example.co.uk", True))
+_rec, _source, _relationship = audit.discover_dmarc("send.example.co.uk")
+chk("I10 treewalk finds ancestor", (_source, _relationship), ("example.co.uk", "organizational"))
 chk("I10 treewalk returns record", _rec, "v=DMARC1; p=reject")
 _MOCK = {"_dmarc.nhs.uk": "v=DMARC1; p=reject"}
-_rec, _source, _inherited = audit.discover_dmarc("trust.nhs.uk")
-chk("WHI-215 treewalk stops at registrable root", (_rec, _source, _inherited), (None, None, False))
+_rec, _source, _relationship = audit.discover_dmarc("trust.nhs.uk")
+chk("WHI-251 parent without psd=y is observation only",
+    (_rec, _source, _relationship),
+    ("v=DMARC1; p=reject", "nhs.uk", "parent_observation"))
 _MOCK = {"_dmarc.trust.nhs.uk": "v=DMARC1; p=reject"}
-_rec, _source, _inherited = audit.discover_dmarc("mail.trust.nhs.uk")
+_rec, _source, _relationship = audit.discover_dmarc("mail.trust.nhs.uk")
 chk(
     "WHI-215 subdomain inherits registrable-root policy",
-    (_rec, _source, _inherited),
-    ("v=DMARC1; p=reject", "trust.nhs.uk", True),
+    (_rec, _source, _relationship),
+    ("v=DMARC1; p=reject", "trust.nhs.uk", "organizational"),
 )
+_MOCK = {"_dmarc.myshopify.com": "v=DMARC1; p=none; sp=reject; np=quarantine; psd=y"}
+audit.dig = lambda name, rrtype="A": ["ns.example"] if (name, rrtype) == ("shop.myshopify.com", "NS") else []
+audit.dns_meta = lambda *_args, **_kwargs: {"status": 0, "error": False, "ad": False}
+_context = audit.dmarc_policy_context("shop.myshopify.com")
+chk("WHI-251 psd=y existing domain uses sp", (_context["relationship"], _context["tag"], _context["effective"]),
+    ("psd", "sp", "reject"))
+audit.dig = lambda *_args, **_kwargs: []
+audit.dns_meta = lambda *_args, **_kwargs: {"status": 3, "error": False, "ad": False}
+_context = audit.dmarc_policy_context("missing.myshopify.com")
+chk("WHI-251 psd=y nonexistent domain uses np", (_context["relationship"], _context["tag"], _context["effective"]),
+    ("psd", "np", "quarantine"))
 audit.confirm_txt = _SHIPPING_CONFIRM_TXT
+audit.dig = _SHIPPING_DIG
+audit.dns_meta = _SHIPPING_DNS_META
 # I15 — MTA-STS strict field validation (RFC 8461)
 chk("I15 valid enforce → no problems", audit.mta_sts_policy_problems("version: STSv1\nmode: enforce\nmax_age: 604800\nmx: mx.ex.com\n")[0], [])
 chk("I15 enforce missing fields → problems", len(audit.mta_sts_policy_problems("mode: enforce\n")[0]) > 0, True)
