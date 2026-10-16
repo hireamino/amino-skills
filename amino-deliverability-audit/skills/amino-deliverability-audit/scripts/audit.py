@@ -337,6 +337,40 @@ def _load_public_suffix_rules():
 
 _PSL_EXACT, _PSL_WILDCARDS, _PSL_EXCEPTIONS = _load_public_suffix_rules()
 
+_NON_ASCII_DOTS = {"\u3002", "\uff0e", "\uff61"}
+
+
+def _domain_labels(host):
+    """Return normalized display labels and strict A-labels, or ``None``.
+
+    PSL matching is a DNS operation, not URL parsing: alternate Unicode dot
+    separators and IPv4-number shorthands are never normalized for callers.
+    """
+    if not isinstance(host, str) or host.startswith("."):
+        return None
+    normalized = host.rstrip(".").lower()
+    if not normalized or any(char.isspace() for char in normalized):
+        return None
+    if any(separator in normalized for separator in _NON_ASCII_DOTS):
+        return None
+    display = normalized.split(".")
+    if any(not label for label in display):
+        return None
+    labels = []
+    try:
+        for label in display:
+            encoded = label.encode("idna").decode("ascii").lower()
+            if len(encoded.encode("ascii")) > 63:
+                return None
+            if encoded.startswith("xn--"):
+                decoded = encoded.encode("ascii").decode("idna")
+                if decoded.encode("idna").decode("ascii").lower() != encoded:
+                    return None
+            labels.append(encoded)
+    except UnicodeError:
+        return None
+    return display, labels
+
 
 def org_base(host):
     """Return the registrable domain under the pinned full Public Suffix List.
@@ -345,18 +379,10 @@ def org_base(host):
     returned value preserves normalized display labels, matching the official PSL
     vectors for both Unicode and A-label input.
     """
-    if not isinstance(host, str) or host.startswith("."):
+    normalized = _domain_labels(host)
+    if normalized is None:
         return None
-    normalized = host.rstrip(".").lower()
-    if not normalized:
-        return None
-    display = normalized.split(".")
-    if any(not label for label in display):
-        return None
-    try:
-        labels = [label.encode("idna").decode("ascii").lower() for label in display]
-    except UnicodeError:
-        return None
+    display, labels = normalized
 
     exception_length = 0
     match_length = 1  # prevailing PSL default rule: *
@@ -835,7 +861,10 @@ def check_dmarc(domain, F):
         dests = re.findall(r"mailto:[^@\s;,]+@([^\s;,!]+)", rec, re.I)
         unauth = []
         for dest in {d.rstrip(".").lower() for d in dests}:
-            if org_base(dest) != org_base(domain):
+            domain_org = org_base(domain)
+            dest_org = org_base(dest)
+            same_org = domain_org is not None and dest_org is not None and domain_org == dest_org
+            if not same_org:
                 auth = first_txt(f"{domain}._report._dmarc.{dest}", "v=dmarc1")
                 if not auth:
                     unauth.append(dest)
@@ -1125,8 +1154,12 @@ def _bad_tlsa(rows):
 
 
 def mx_providers(domain):
-    """[(priority, host, provider)] for each MX. provider = the registrable-ish base
-    (last two labels) so aspmx.l.google.com and alt1.aspmx.l.google.com both -> google.com."""
+    """Return ``(priority, host, provider)`` rows for each MX.
+
+    Provider identity is the registrable domain under the pinned PSL.  A host
+    without a registrable domain remains its own provider rather than being
+    collapsed with other invalid or public-suffix-only hostnames.
+    """
     out = []
     for r in dig(domain, "MX"):
         parts = r.split()
@@ -1134,8 +1167,7 @@ def mx_providers(domain):
             host = parts[-1].rstrip(".").lower()
             if not host:
                 continue  # null MX
-            labels = host.split(".")
-            provider = ".".join(labels[-2:]) if len(labels) >= 2 else host
+            provider = org_base(host) or host
             out.append((int(parts[0]), host, provider))
     return out
 

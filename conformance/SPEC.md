@@ -92,6 +92,17 @@ corpus now has 69 executable cases
 and five explicit skips. Engine adoption
 and contract 1.7.0 follow only after this skills change has an immutable merge SHA.
 
+**WHI-254 — public-suffix leftovers:** MX-provider identity is the registrable
+domain returned by the pinned full PSL, not the last two labels. Two MX hosts
+below `uk.com` bind the distinct-provider and same-provider outcomes. An
+external DMARC report destination is same-organization only when both
+registrable-domain lookups are non-null and equal; the both-null case therefore
+runs the RFC report-authorization check and fails closed when it is absent.
+Three appended rows bring the corpus to 72 executable cases plus five skips.
+The public-suffix generator refuses a wildcard outside the leftmost label and
+more than one wildcard. The normalization contract and its artifact-derived
+cross-runtime differential live in `public-suffix/README.md`.
+
 **v1.17 / WHI-215 Step 2a — Python registrable-domain contract:** the Python
 skill loads the byte-identical sibling copy of
 `public-suffix/public_suffix_rules.tsv`, deletes its hand-written two-label
@@ -424,12 +435,13 @@ The web and Action pin files must name the same full amino-skills commit before 
 
 ## Fixtures
 
-See `fixtures.json`. It contains 74 known-answer cases: 69 executable contract
+See `fixtures.json`. It contains 77 known-answer cases: 72 executable contract
 cases and five explicitly skipped pure/HTTP/wrapper cases covered by per-surface
 tests or later work. Eight WHI-215 rows additionally assert the exact registrable
 root and the DMARC tree-walk boundary. Each fixture is language-neutral and every
 harness adapts it to its own resolver/HTTP mock without ambient network access.
-Step 2 gates the Python runner with 69 mutation canaries plus two independent
-public-suffix adoption canaries. Step 2b will activate the shared
-JavaScript assertion, official vectors, mutation gate, and cross-runtime
-differential.
+Step 2 gates the Python runner with 71 mutation canaries plus two independent
+public-suffix adoption canaries. The JavaScript surface already gates its
+embedded artifact, official vectors and mutation proof; WHI-254 activates the
+widened cross-runtime differential after its normalization contract matches the
+Python surface.
