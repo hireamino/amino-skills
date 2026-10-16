@@ -18,7 +18,7 @@ import re
 import sys
 from audit import (dig, first_txt, count_spf_lookups, effective_terminator,
                    resolves, dkim_lookup, mx_providers, is_null_mx,
-                   mta_sts_txt_lookup)
+                   mta_sts_txt_lookup, dmarc_policy_context)
 
 # Deterministic boolean buckets (DKIM is handled separately as a 3-state). The
 # three inbound-only buckets are None/N/A for a true null-MX domain.
@@ -66,11 +66,16 @@ def score(domain):
     if dkim_state != "good":
         note.append(dkim_note)
 
-    dmarc = first_txt(f"_dmarc.{domain}", "v=dmarc1")
-    if dmarc:
+    dmarc_context = dmarc_policy_context(domain)
+    dmarc = dmarc_context["record"]
+    if dmarc and dmarc_context["relationship"] in ("self", "psd"):
         r["DMARC"] = True
-        m = re.search(r"p=\s*(\w+)", dmarc)
-        p = m.group(1).lower() if m else ""
+        if dmarc_context["relationship"] == "psd":
+            p = dmarc_context["effective"]
+        else:
+            # Preserve the pre-WHI-251 scorer's exact parsing outside the new PSD case.
+            m = re.search(r"p=\s*(\w+)", dmarc)
+            p = m.group(1).lower() if m else ""
         r["DMARC_enforced"] = p in ("quarantine", "reject")
         r["DMARC_rua"] = "rua=" in dmarc.replace(" ", "")
         if p == "none":

@@ -1,6 +1,6 @@
 {
   "$schema": "amino-conformance/v4",
-  "notes": "Single shared reviewed-answer corpus consumed by conformance/run.mjs (web and Action) and conformance/run_py.py (published skill). For every dns-engine fixture, legacy present/absent assertions remain active and expect.findings is a closed list: area, title, severity, action, and fixIncludes are asserted; every non-pass finding must declare a non-null fixIncludes. Optional exact detail and optional effort+value pairs are asserted only where declared. expect.score is the exact bucket + DKIM-state + gap + note object; a true null MX uses explicit null for the inbound-only MTA_STS, TLS_RPT, and DANE buckets. expect.registrable_root, when present, asserts the exact full-PSL registrable-domain decision on an adopting surface; Step 2a gates Python and Step 2b activates the JavaScript assertion. Surface-specific findings require surfaces plus a documented notApplicable reason for every omitted shipping surface. No expectation-regeneration mode exists. Non-dns-engine modes remain explicitly skipped with a reason.",
+  "notes": "Single shared reviewed-answer corpus consumed by conformance/run.mjs (web and Action) and conformance/run_py.py (published skill). For every dns-engine fixture, legacy present/absent assertions remain active and expect.findings is a closed list: area, title, severity, action, and fixIncludes are asserted; every non-pass finding must declare a non-null fixIncludes. Optional exact detail and optional effort+value pairs are asserted only where declared. expect.score is the exact bucket + DKIM-state + gap + note object; a true null MX uses explicit null for the inbound-only MTA_STS, TLS_RPT, and DANE buckets. expect.registrable_root, when present, asserts the exact full-PSL registrable-domain decision on an adopting surface. WHI-251 adds the parent-DMARC observation and the psd=y effective-policy contract; Python adopts it first and the JavaScript assertion activates with engine contract 1.7.0. Surface-specific findings require surfaces plus a documented notApplicable reason for every omitted shipping surface. No expectation-regeneration mode exists. Non-dns-engine modes remain explicitly skipped with a reason.",
   "fixtures": [
     {
       "id": "dkim-revoked-empty-p",
@@ -8734,6 +8734,15 @@
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
             "lane": "domain_posture"
+          },
+          {
+            "area": "DMARC",
+            "title": "Parent DMARC record observed above registrable root",
+            "severity": "low",
+            "action": "Publish your own DMARC policy for control",
+            "fixIncludes": "Publish the domain's own record at _dmarc.trust.nhs.uk if you want its DMARC policy under the domain owner's control.",
+            "lane": "outbound_auth",
+            "detail": "The parent nhs.uk publishes \"v=DMARC1; p=reject\" (sp=<missing>; np=<missing>). Without psd=y, it does not establish policy for trust.nhs.uk under this audit's PSL-based organizational-domain resolution. RFC 9989 can apply an opted-in PSD record via its DNS Tree Walk. Separately, np=reject on the parent still covers nonexistent names beneath that parent."
           }
         ],
         "score": {
@@ -8871,6 +8880,15 @@
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
             "lane": "domain_posture"
+          },
+          {
+            "area": "DMARC",
+            "title": "Parent DMARC record observed above registrable root",
+            "severity": "low",
+            "action": "Publish your own DMARC policy for control",
+            "fixIncludes": "Publish the domain's own record at _dmarc.myschool.devon.sch.uk if you want its DMARC policy under the domain owner's control.",
+            "lane": "outbound_auth",
+            "detail": "The parent devon.sch.uk publishes \"v=DMARC1; p=reject\" (sp=<missing>; np=<missing>). Without psd=y, it does not establish policy for myschool.devon.sch.uk under this audit's PSL-based organizational-domain resolution. RFC 9989 can apply an opted-in PSD record via its DNS Tree Walk. Separately, np=reject on the parent still covers nonexistent names beneath that parent."
           }
         ],
         "score": {
@@ -9008,6 +9026,15 @@
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
             "lane": "domain_posture"
+          },
+          {
+            "area": "DMARC",
+            "title": "Parent DMARC record observed above registrable root",
+            "severity": "low",
+            "action": "Publish your own DMARC policy for control",
+            "fixIncludes": "Publish the domain's own record at _dmarc.force.police.uk if you want its DMARC policy under the domain owner's control.",
+            "lane": "outbound_auth",
+            "detail": "The parent police.uk publishes \"v=DMARC1; p=reject\" (sp=<missing>; np=<missing>). Without psd=y, it does not establish policy for force.police.uk under this audit's PSL-based organizational-domain resolution. RFC 9989 can apply an opted-in PSD record via its DNS Tree Walk. Separately, np=reject on the parent still covers nonexistent names beneath that parent."
           }
         ],
         "score": {
@@ -9145,6 +9172,15 @@
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
             "lane": "domain_posture"
+          },
+          {
+            "area": "DMARC",
+            "title": "Parent DMARC record observed above registrable root",
+            "severity": "low",
+            "action": "Publish your own DMARC policy for control",
+            "fixIncludes": "Publish the domain's own record at _dmarc.tax.service.gov.uk if you want its DMARC policy under the domain owner's control.",
+            "lane": "outbound_auth",
+            "detail": "The parent service.gov.uk publishes \"v=DMARC1; p=reject\" (sp=<missing>; np=<missing>). Without psd=y, it does not establish policy for tax.service.gov.uk under this audit's PSL-based organizational-domain resolution. RFC 9989 can apply an opted-in PSD record via its DNS Tree Walk. Separately, np=reject on the parent still covers nonexistent names beneath that parent."
           }
         ],
         "score": {
@@ -9282,6 +9318,15 @@
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
             "lane": "domain_posture"
+          },
+          {
+            "area": "DMARC",
+            "title": "Parent DMARC record observed above registrable root",
+            "severity": "low",
+            "action": "Publish your own DMARC policy for control",
+            "fixIncludes": "Publish the domain's own record at _dmarc.acme.com.es if you want its DMARC policy under the domain owner's control.",
+            "lane": "outbound_auth",
+            "detail": "The parent com.es publishes \"v=DMARC1; p=reject\" (sp=<missing>; np=<missing>). Without psd=y, it does not establish policy for acme.com.es under this audit's PSL-based organizational-domain resolution. RFC 9989 can apply an opted-in PSD record via its DNS Tree Walk. Separately, np=reject on the parent still covers nonexistent names beneath that parent."
           }
         ],
         "score": {
@@ -9419,6 +9464,15 @@
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
             "lane": "domain_posture"
+          },
+          {
+            "area": "DMARC",
+            "title": "Parent DMARC record observed above registrable root",
+            "severity": "low",
+            "action": "Publish your own DMARC policy for control",
+            "fixIncludes": "Publish the domain's own record at _dmarc.dept.ac.in if you want its DMARC policy under the domain owner's control.",
+            "lane": "outbound_auth",
+            "detail": "The parent ac.in publishes \"v=DMARC1; p=reject\" (sp=<missing>; np=<missing>). Without psd=y, it does not establish policy for dept.ac.in under this audit's PSL-based organizational-domain resolution. RFC 9989 can apply an opted-in PSD record via its DNS Tree Walk. Separately, np=reject on the parent still covers nonexistent names beneath that parent."
           }
         ],
         "score": {
@@ -9556,6 +9610,15 @@
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
             "lane": "domain_posture"
+          },
+          {
+            "area": "DMARC",
+            "title": "Parent DMARC record observed above registrable root",
+            "severity": "low",
+            "action": "Publish your own DMARC policy for control",
+            "fixIncludes": "Publish the domain's own record at _dmarc.school.k12.ak.us if you want its DMARC policy under the domain owner's control.",
+            "lane": "outbound_auth",
+            "detail": "The parent k12.ak.us publishes \"v=DMARC1; p=reject\" (sp=<missing>; np=<missing>). Without psd=y, it does not establish policy for school.k12.ak.us under this audit's PSL-based organizational-domain resolution. RFC 9989 can apply an opted-in PSD record via its DNS Tree Walk. Separately, np=reject on the parent still covers nonexistent names beneath that parent."
           }
         ],
         "score": {
@@ -9693,6 +9756,15 @@
             "action": "Add a CAA record",
             "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
             "lane": "domain_posture"
+          },
+          {
+            "area": "DMARC",
+            "title": "Parent DMARC record observed above registrable root",
+            "severity": "low",
+            "action": "Publish your own DMARC policy for control",
+            "fixIncludes": "Publish the domain's own record at _dmarc.xn--85x722f.xn--55qx5d.cn if you want its DMARC policy under the domain owner's control.",
+            "lane": "outbound_auth",
+            "detail": "The parent xn--55qx5d.cn publishes \"v=DMARC1; p=reject\" (sp=<missing>; np=<missing>). Without psd=y, it does not establish policy for xn--85x722f.xn--55qx5d.cn under this audit's PSL-based organizational-domain resolution. RFC 9989 can apply an opted-in PSD record via its DNS Tree Walk. Separately, np=reject on the parent still covers nonexistent names beneath that parent."
           }
         ],
         "score": {
@@ -9727,6 +9799,1130 @@
         "inconclusive": false,
         "inconclusive_reason": null,
         "registrable_root": "xn--85x722f.xn--55qx5d.cn"
+      }
+    },
+    {
+      "id": "dmarc-parent-psd-y-sp-reject",
+      "invariant": "WHI-251",
+      "mode": "dns-engine",
+      "desc": "An existing registrable-root domain inherits an enforced sp policy from an explicitly opted-in PSD, but the platform-controlled result is capped at low rather than pass.",
+      "input": {
+        "domain": "shop.myshopify.com",
+        "dns": {
+          "shop.myshopify.com": {
+            "DNSKEY": [],
+            "ad": false,
+            "NS": [
+              "ns1.myshopify.com."
+            ]
+          },
+          "_dmarc.myshopify.com": {
+            "TXT": [
+              "v=DMARC1; p=reject; sp=reject; np=reject; psd=y; rua=mailto:d@myshopify.com"
+            ]
+          }
+        }
+      },
+      "expect": {
+        "present": [
+          {
+            "area": "DMARC",
+            "includes": "platform policy"
+          }
+        ],
+        "absent": [
+          "No DMARC record"
+        ],
+        "findings": [
+          {
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "domain_posture"
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "domain_posture"
+          },
+          {
+            "area": "DMARC",
+            "title": "DMARC enforced by platform policy (sp=reject from myshopify.com)",
+            "severity": "low",
+            "action": "Publish your own DMARC policy for control",
+            "fixIncludes": "Publish the domain's own record at _dmarc.shop.myshopify.com to put policy under the domain owner's control, when you control that DNS name.",
+            "lane": "outbound_auth",
+            "detail": "The PSD myshopify.com publishes \"v=DMARC1; p=reject; sp=reject; np=reject; psd=y; rua=mailto:d@myshopify.com\". RFC 9989 applies its sp=reject policy to shop.myshopify.com. This policy is set and controlled by the platform, not the domain owner, and can change without notice to them."
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": true,
+          "DMARC_enforced": true,
+          "DMARC_rua": true,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 5,
+          "note": "no SPF; no DKIM key at common/provider selectors",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "not_applicable",
+          "rdap": "unavailable"
+        },
+        "inconclusive": false,
+        "inconclusive_reason": null,
+        "registrable_root": "shop.myshopify.com"
+      }
+    },
+    {
+      "id": "dmarc-parent-psd-y-sp-none",
+      "invariant": "WHI-251",
+      "mode": "dns-engine",
+      "desc": "An existing registrable-root domain inherits a weak sp=none policy from an explicitly opted-in PSD; psd=y presence alone is not credited as enforcement.",
+      "input": {
+        "domain": "preview.myshopify.com",
+        "dns": {
+          "preview.myshopify.com": {
+            "DNSKEY": [],
+            "ad": false,
+            "status": {
+              "A": 0
+            }
+          },
+          "_dmarc.myshopify.com": {
+            "TXT": [
+              "v=DMARC1; p=none; sp=none; np=none; psd=y; rua=mailto:d@myshopify.com"
+            ]
+          }
+        }
+      },
+      "expect": {
+        "present": [
+          {
+            "area": "DMARC",
+            "includes": "platform policy"
+          }
+        ],
+        "absent": [
+          "No DMARC record"
+        ],
+        "findings": [
+          {
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "domain_posture"
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "domain_posture"
+          },
+          {
+            "area": "DMARC",
+            "title": "DMARC platform policy is sp=none from myshopify.com",
+            "severity": "high",
+            "action": "Publish your own DMARC policy for control",
+            "fixIncludes": "Publish the domain's own record at _dmarc.preview.myshopify.com to put policy under the domain owner's control, when you control that DNS name.",
+            "lane": "outbound_auth",
+            "detail": "The PSD myshopify.com publishes \"v=DMARC1; p=none; sp=none; np=none; psd=y; rua=mailto:d@myshopify.com\". RFC 9989 applies its sp=none policy to preview.myshopify.com. This policy is set and controlled by the platform, not the domain owner, and can change without notice to them."
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": true,
+          "DMARC_enforced": false,
+          "DMARC_rua": true,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 6,
+          "note": "no SPF; no DKIM key at common/provider selectors; DMARC p=none",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "not_applicable",
+          "rdap": "unavailable"
+        },
+        "inconclusive": false,
+        "inconclusive_reason": null,
+        "registrable_root": "preview.myshopify.com"
+      }
+    },
+    {
+      "id": "dmarc-parent-psd-y-np-reject",
+      "invariant": "WHI-251",
+      "mode": "dns-engine",
+      "desc": "A nonexistent registrable-root name uses the explicitly opted-in PSD's np policy rather than sp or p.",
+      "input": {
+        "domain": "unused.myshopify.com",
+        "dns": {
+          "unused.myshopify.com": {
+            "DNSKEY": [],
+            "ad": false,
+            "status": {
+              "A": 3
+            }
+          },
+          "_dmarc.myshopify.com": {
+            "TXT": [
+              "v=DMARC1; p=none; sp=none; np=reject; psd=y; rua=mailto:d@myshopify.com"
+            ]
+          }
+        }
+      },
+      "expect": {
+        "present": [
+          {
+            "area": "DMARC",
+            "includes": "platform policy"
+          }
+        ],
+        "absent": [
+          "No DMARC record"
+        ],
+        "findings": [
+          {
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "domain_posture"
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "domain_posture"
+          },
+          {
+            "area": "DMARC",
+            "title": "DMARC enforced by platform policy (np=reject from myshopify.com)",
+            "severity": "low",
+            "action": "Publish your own DMARC policy for control",
+            "fixIncludes": "Publish the domain's own record at _dmarc.unused.myshopify.com to put policy under the domain owner's control, when you control that DNS name.",
+            "lane": "outbound_auth",
+            "detail": "The PSD myshopify.com publishes \"v=DMARC1; p=none; sp=none; np=reject; psd=y; rua=mailto:d@myshopify.com\". RFC 9989 applies its np=reject policy to unused.myshopify.com. This policy is set and controlled by the platform, not the domain owner, and can change without notice to them."
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": true,
+          "DMARC_enforced": true,
+          "DMARC_rua": true,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 5,
+          "note": "no SPF; no DKIM key at common/provider selectors",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "not_applicable",
+          "rdap": "unavailable"
+        },
+        "inconclusive": false,
+        "inconclusive_reason": null,
+        "registrable_root": "unused.myshopify.com"
+      }
+    },
+    {
+      "id": "dmarc-parent-none-above-root",
+      "invariant": "WHI-251",
+      "mode": "dns-engine",
+      "desc": "No DMARC record above a registrable root adds no parent observation and preserves the existing missing-record result.",
+      "input": {
+        "domain": "tenant.github.io",
+        "dns": {
+          "tenant.github.io": {
+            "DNSKEY": [],
+            "ad": false
+          }
+        }
+      },
+      "expect": {
+        "present": [
+          {
+            "area": "DNSSEC",
+            "includes": "DNSSEC not enabled"
+          }
+        ],
+        "absent": [
+          "DNSSEC enabled"
+        ],
+        "findings": [
+          {
+            "area": "DMARC",
+            "title": "No DMARC record",
+            "severity": "critical",
+            "action": "Publish a DMARC policy",
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "domain_posture"
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "domain_posture"
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": false,
+          "DMARC_enforced": false,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 8,
+          "note": "no SPF; no DKIM key at common/provider selectors; no DMARC",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "not_applicable",
+          "rdap": "unavailable"
+        },
+        "inconclusive": false,
+        "inconclusive_reason": null,
+        "registrable_root": "tenant.github.io"
+      }
+    },
+    {
+      "id": "dmarc-parent-psd-u-before-psd-y",
+      "invariant": "WHI-251",
+      "mode": "dns-engine",
+      "desc": "A record on the organizational domain wins over a farther psd=y ancestor; the PSD record establishes the boundary but does not replace the organizational record.",
+      "input": {
+        "domain": "tenant.service.gov.uk",
+        "dns": {
+          "tenant.service.gov.uk": {
+            "DNSKEY": [],
+            "ad": false,
+            "status": {
+              "A": 0
+            }
+          },
+          "_dmarc.service.gov.uk": {
+            "TXT": [
+              "v=DMARC1; p=none"
+            ]
+          },
+          "_dmarc.gov.uk": {
+            "TXT": [
+              "v=DMARC1; p=reject; sp=reject; np=reject; psd=y; rua=mailto:d@gov.uk"
+            ]
+          }
+        }
+      },
+      "expect": {
+        "present": [
+          {
+            "area": "DMARC",
+            "includes": "platform policy"
+          }
+        ],
+        "absent": [
+          "No DMARC record"
+        ],
+        "findings": [
+          {
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "domain_posture"
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "domain_posture"
+          },
+          {
+            "area": "DMARC",
+            "title": "DMARC platform policy is p=none from service.gov.uk",
+            "severity": "high",
+            "action": "Publish your own DMARC policy for control",
+            "fixIncludes": "Publish the domain's own record at _dmarc.tenant.service.gov.uk to put policy under the domain owner's control, when you control that DNS name.",
+            "lane": "outbound_auth",
+            "detail": "The organizational domain service.gov.uk publishes \"v=DMARC1; p=none\". A farther ancestor's psd=y record makes this the applicable organizational-domain policy. RFC 9989 applies its p=none policy to tenant.service.gov.uk. This policy is set and controlled by the platform, not the domain owner, and can change without notice to them."
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": true,
+          "DMARC_enforced": false,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 7,
+          "note": "no SPF; no DKIM key at common/provider selectors; DMARC p=none; no rua",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "not_applicable",
+          "rdap": "unavailable"
+        },
+        "inconclusive": false,
+        "inconclusive_reason": null,
+        "registrable_root": "tenant.service.gov.uk"
+      }
+    },
+    {
+      "id": "dmarc-parent-psd-y-existence-failure",
+      "invariant": "WHI-251",
+      "mode": "dns-engine",
+      "desc": "A failed audited-name existence lookup cannot select a stronger np policy from an opted-in PSD; the weaker possible policy is reported.",
+      "input": {
+        "domain": "uncertain.myshopify.com",
+        "dns": {
+          "uncertain.myshopify.com": {
+            "DNSKEY": [],
+            "ad": false,
+            "status": {
+              "A": 2
+            }
+          },
+          "_dmarc.myshopify.com": {
+            "TXT": [
+              "v=DMARC1; p=none; sp=none; np=reject; psd=y; rua=mailto:d@myshopify.com"
+            ]
+          }
+        }
+      },
+      "expect": {
+        "present": [
+          {
+            "area": "DMARC",
+            "includes": "platform policy"
+          }
+        ],
+        "absent": [
+          "No DMARC record"
+        ],
+        "findings": [
+          {
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "domain_posture"
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "domain_posture"
+          },
+          {
+            "area": "DMARC",
+            "title": "DMARC platform policy is sp=none from myshopify.com",
+            "severity": "high",
+            "action": "Publish your own DMARC policy for control",
+            "fixIncludes": "Publish the domain's own record at _dmarc.uncertain.myshopify.com to put policy under the domain owner's control, when you control that DNS name.",
+            "lane": "outbound_auth",
+            "detail": "The PSD myshopify.com publishes \"v=DMARC1; p=none; sp=none; np=reject; psd=y; rua=mailto:d@myshopify.com\". RFC 9989 applies its sp=none policy to uncertain.myshopify.com. The audited name's existence lookup was inconclusive, so Amino reports the weaker of its possible sp and np outcomes rather than treating the name as nonexistent. This policy is set and controlled by the platform, not the domain owner, and can change without notice to them."
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": true,
+          "DMARC_enforced": false,
+          "DMARC_rua": true,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 6,
+          "note": "no SPF; no DKIM key at common/provider selectors; DMARC p=none",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "unavailable",
+          "rdap": "unavailable"
+        },
+        "inconclusive": false,
+        "inconclusive_reason": null,
+        "registrable_root": "uncertain.myshopify.com"
+      }
+    },
+    {
+      "id": "dmarc-parent-tld-psd-y-sp-none",
+      "invariant": "WHI-251",
+      "mode": "dns-engine",
+      "desc": "An existing name with no organizational-domain record inherits sp=none from an explicitly opted-in TLD PSD; the RFC 9989 walk reaches the TLD.",
+      "input": {
+        "domain": "example.gov",
+        "dns": {
+          "example.gov": {
+            "DNSKEY": [],
+            "ad": false,
+            "status": {
+              "A": 0
+            }
+          },
+          "_dmarc.gov": {
+            "TXT": [
+              "v=DMARC1; p=reject; sp=none; np=reject; psd=y; rua=mailto:d@gov"
+            ]
+          }
+        }
+      },
+      "expect": {
+        "present": [
+          {
+            "area": "DMARC",
+            "includes": "platform policy"
+          }
+        ],
+        "absent": [
+          "No DMARC record"
+        ],
+        "findings": [
+          {
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "domain_posture"
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "domain_posture"
+          },
+          {
+            "area": "DMARC",
+            "title": "DMARC platform policy is sp=none from gov",
+            "severity": "high",
+            "action": "Publish your own DMARC policy for control",
+            "fixIncludes": "Publish the domain's own record at _dmarc.example.gov to put policy under the domain owner's control, when you control that DNS name.",
+            "lane": "outbound_auth",
+            "detail": "The PSD gov publishes \"v=DMARC1; p=reject; sp=none; np=reject; psd=y; rua=mailto:d@gov\". RFC 9989 applies its sp=none policy to example.gov. This policy is set and controlled by the platform, not the domain owner, and can change without notice to them."
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": true,
+          "DMARC_enforced": false,
+          "DMARC_rua": true,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 6,
+          "note": "no SPF; no DKIM key at common/provider selectors; DMARC p=none",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "not_applicable",
+          "rdap": "unavailable"
+        },
+        "inconclusive": false,
+        "inconclusive_reason": null,
+        "registrable_root": "example.gov"
+      }
+    },
+    {
+      "id": "dmarc-parent-tld-psd-y-np-reject",
+      "invariant": "WHI-251",
+      "mode": "dns-engine",
+      "desc": "A nonexistent name with no organizational-domain record inherits np=reject from an explicitly opted-in TLD PSD; the RFC 9989 walk reaches the TLD.",
+      "input": {
+        "domain": "unused.gov",
+        "dns": {
+          "unused.gov": {
+            "DNSKEY": [],
+            "ad": false,
+            "status": {
+              "A": 3
+            }
+          },
+          "_dmarc.gov": {
+            "TXT": [
+              "v=DMARC1; p=reject; sp=none; np=reject; psd=y; rua=mailto:d@gov"
+            ]
+          }
+        }
+      },
+      "expect": {
+        "present": [
+          {
+            "area": "DMARC",
+            "includes": "platform policy"
+          }
+        ],
+        "absent": [
+          "No DMARC record"
+        ],
+        "findings": [
+          {
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at",
+            "lane": "outbound_auth"
+          },
+          {
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
+          },
+          {
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
+          },
+          {
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "domain_posture"
+          },
+          {
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "domain_posture"
+          },
+          {
+            "area": "DMARC",
+            "title": "DMARC enforced by platform policy (np=reject from gov)",
+            "severity": "low",
+            "action": "Publish your own DMARC policy for control",
+            "fixIncludes": "Publish the domain's own record at _dmarc.unused.gov to put policy under the domain owner's control, when you control that DNS name.",
+            "lane": "outbound_auth",
+            "detail": "The PSD gov publishes \"v=DMARC1; p=reject; sp=none; np=reject; psd=y; rua=mailto:d@gov\". RFC 9989 applies its np=reject policy to unused.gov. This policy is set and controlled by the platform, not the domain owner, and can change without notice to them."
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": true,
+          "DMARC_enforced": true,
+          "DMARC_rua": true,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "gap": 5,
+          "note": "no SPF; no DKIM key at common/provider selectors",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          }
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "not_applicable",
+          "rdap": "unavailable"
+        },
+        "inconclusive": false,
+        "inconclusive_reason": null,
+        "registrable_root": "unused.gov"
       }
     }
   ]

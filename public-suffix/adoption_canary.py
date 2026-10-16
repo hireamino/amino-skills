@@ -46,8 +46,9 @@ import audit
 audit.confirm_txt = lambda qname, _prefix: {
     "_dmarc.nhs.uk": "v=DMARC1; p=reject",
 }.get(qname.rstrip(".").lower())
-actual = audit.discover_dmarc("trust.nhs.uk")
-expected = (None, None, False)
+context = audit.dmarc_policy_context("trust.nhs.uk")
+actual = (context["source"], context["relationship"], context["effective"])
+expected = ("nhs.uk", "parent_observation", None)
 if actual != expected:
     print(
         f"FAIL {sys.argv[2]} registrable-root-nhs-uk DMARC boundary: "
@@ -114,7 +115,7 @@ def count_spf_lookups'''
         shutil.copytree(SCRIPTS, target)
         mutated = target / "audit.py"
         source = mutated.read_text(encoding="utf-8")
-        anchor = "    if not base or domain == base:\n"
+        anchor = '            if psd == "y":\n'
         if source.count(anchor) != 1:
             print(
                 "FAIL Python DMARC boundary canary mutation anchor: "
@@ -122,11 +123,17 @@ def count_spf_lookups'''
                 file=sys.stderr,
             )
             return 1
-        mutated.write_text(source.replace(anchor, "    if not base:\n"), encoding="utf-8")
+        mutated.write_text(
+            source.replace(
+                anchor,
+                '            if True:  # WHI-251 removed psd=y opt-in canary\n',
+            ),
+            encoding="utf-8",
+        )
         boundary_result = run_dmarc_boundary(mutated, "python-dmarc-boundary-canary")
         boundary_diagnostic = (
             "FAIL python-dmarc-boundary-canary registrable-root-nhs-uk DMARC boundary: "
-            "expected (None, None, False), got ('v=DMARC1; p=reject', 'nhs.uk', True)"
+            "expected ('nhs.uk', 'parent_observation', None), got ('nhs.uk', 'psd', 'reject')"
         )
         if boundary_result.returncode == 0 or boundary_diagnostic not in boundary_result.stdout:
             print("FAIL Python DMARC boundary mutation was not rejected", file=sys.stderr)
