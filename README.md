@@ -45,6 +45,11 @@ New to deliverability, or want the questions answered before you run anything? S
 enforcement actually means, the Gmail/Yahoo sender rules, MTA-STS/TLS-RPT/DANE, BIMI,
 DMARCbis, and what "post-quantum ready" means for email.
 
+The compact FAQ rendered by the public `/audit` page has one ordered source in
+[`faq/audit-faq.json`](./faq/audit-faq.json). The next site repin adopts it: a
+deterministic generator makes the site's committed copy from its immutable skills pin,
+and the consumer gate then refuses drift.
+
 ## Correctness
 
 Deliverability checks are easy to get subtly wrong — a "pass" that isn't really a pass

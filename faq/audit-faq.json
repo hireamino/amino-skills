@@ -1,0 +1,58 @@
+[
+  {
+    "question": "Why are my emails going to spam?",
+    "answer": "Almost always one of three things, in order of likelihood: authentication gaps (no aligned SPF, DKIM, and DMARC — the #1 cause and easiest to fix), sender reputation (a history of complaints, spam traps, or sending to dead addresses), and content/list hygiene (spammy copy, no unsubscribe, or unengaged recipients). A posture audit catches the authentication problems immediately."
+  },
+  {
+    "question": "What's the difference between SPF, DKIM, and DMARC?",
+    "answer": "They are three layers of proving an email is really from you. SPF lists which servers may send for your domain. DKIM cryptographically signs each message against a public key in your DNS. DMARC ties SPF and DKIM together with alignment (the authenticated domain must match the visible From: address) and tells receivers what to do when checks fail. You need all three — SPF and DKIM without an enforcing DMARC policy still leaves you spoofable."
+  },
+  {
+    "question": "What is the difference between p=none, p=quarantine, and p=reject?",
+    "answer": "DMARC's p= policy tells receivers how to handle mail that fails authentication. p=none is monitor-only — the domain owner offers no expression of preference. p=quarantine asks receivers to treat failures as suspicious. p=reject requests rejection of DMARC-failing mail, although receivers can still apply local policy. Which policy is appropriate depends on your mail flows. RFC 9989 §7.4 says domains with users who may post to mailing lists should not publish p=reject, and any domain using p=reject must apply valid DKIM rather than relying only on SPF. Dedicated transactional domains may face fewer indirect-mail risks, but should still verify their actual flows. For affected user-mail domains considering reject, the RFC recommends at least a month at p=none and an equally long period at p=quarantine before proceeding. As of August 2026, Google's bulk-sender guidance permits p=none. Enforcement is primarily an anti-spoofing choice, not a universal deliverability requirement."
+  },
+  {
+    "question": "How do I know if my domain is ready to send cold or scaled outbound?",
+    "answer": "Valid SPF/DKIM/DMARC records are necessary but not sufficient. Watch three traps: receive-only domains (auth records do not make a forwarding-only domain send-ready), alignment (your ESP's mail must align to your domain, not the ESP's), and never sending cold or scaled outbound from your root domain — use a dedicated sending subdomain so a reputation hit on cold outreach does not poison your primary mail."
+  },
+  {
+    "question": "Do I need MTA-STS, TLS-RPT, and DANE?",
+    "answer": "These are transport-security records that ensure mail to your domain travels over encrypted, authenticated connections. MTA-STS declares 'always use TLS to reach me'; TLS-RPT reports when someone fails to connect securely; DANE pins your TLS certificate in DNS (and is only trusted when your DNSSEC chain validates). They are not a deliverability lever the way DMARC is, but they are increasingly required in regulated, government, and security-conscious contexts. Treat them as hardening — do them when the requirement or buyer calls for it."
+  },
+  {
+    "question": "What is BIMI and is it worth it?",
+    "answer": "BIMI shows your verified logo next to your emails in supporting inboxes (Gmail, Apple Mail, Yahoo). It requires a strong DMARC policy (quarantine or reject) as a prerequisite, and a VMC (Verified Mark Certificate) for the blue verified checkmark. It is worth it for brands sending real volume: it lifts recognition and open rates, and the DMARC prerequisite forces a strong authentication posture. High value — not just hardening."
+  },
+  {
+    "question": "What are the Gmail and Yahoo sender requirements?",
+    "answer": "Since 2024, Gmail and Yahoo require bulk senders (roughly 5,000+ messages/day to their users) to authenticate with SPF and DKIM, publish a DMARC policy with alignment (Google explicitly allows that policy to be p=none — authentication is the requirement, enforcement is your choice), and keep spam-complaint rates under about 0.3%. One-click unsubscribe is required for marketing and subscribed messages specifically, not for transactional mail like receipts and alerts. Microsoft has announced similar expectations. Mail that does not comply gets throttled or junked."
+  },
+  {
+    "question": "What is DMARCbis?",
+    "answer": "DMARCbis is the modernized DMARC standard, published as RFC 9989 (May 2026), which obsoletes the original DMARC (RFC 7489) and RFC 9091. RFC 9989 specifies a DNS Tree Walk instead of Public Suffix List discovery. HireAmino honors an ancestor that explicitly opts in with psd=y under RFC 9989, while otherwise keeping organizational-domain inheritance bounded by its pinned Public Suffix List for compatibility with receivers that still follow RFC 7489's method. This is a deliberate compatibility divergence, not a claim of full RFC 9989 tree-walk compliance. The standard also adds np=, a policy for NON-EXISTENT subdomains of your domain (set np=reject so nobody can send as a subdomain you never created), and removes pct, rf, and ri. A lookalike \"cousin\" domain remains a separate registration, and no DMARC policy on your domain can reach it."
+  },
+  {
+    "question": "Does email need to be post-quantum ready?",
+    "answer": "Eventually yes, and the clock is public. NIST's draft guidance on the transition (IR 8547, still an initial public draft rather than final) proposes treating today's classical crypto (RSA-2048, ECC P-256) as deprecated around 2030 and disallowed after 2035 — a direction of travel, not a settled mandate. For email this shows up in transport (TLS 1.3 is the floor for hybrid post-quantum key exchange), DKIM signing (where there is as yet NO standardized post-quantum path — the PQC signature schemes are large and the IETF work is early — so the actionable move today is classical hygiene: a domain still on RSA-1024 DKIM is behind on the standard that already exists), and DNSSEC. The cheap moves now — get to TLS 1.3, rotate off RSA-1024 DKIM — are also your PQC head start."
+  },
+  {
+    "question": "Do I need DNSSEC, and does it affect email?",
+    "answer": "DNSSEC cryptographically signs your DNS so the answers — including your mail records — can't be forged in transit, and it's the prerequisite for DANE. It's more a security/trust measure than a direct deliverability lever: enable it when a security review or compliance requirement calls for it, or as part of a strong overall posture. The audit flags whether your zone is signed (and its answers cryptographically validate)."
+  },
+  {
+    "question": "Does my domain's age affect deliverability?",
+    "answer": "Yes. A brand-new domain has no sending reputation, so mailbox providers throttle it by default — send cold or at volume from a freshly registered domain and much of it lands in spam. Warm up gradually: start with low volume to engaged recipients and ramp over a few weeks before scaling. The audit flags a domain that's only days old."
+  },
+  {
+    "question": "Can AI search engines like ChatGPT and Perplexity see my site?",
+    "answer": "Increasingly people ask AI answer engines about vendors instead of searching, and those engines use their own crawlers (GPTBot, ClaudeBot, PerplexityBot, OAI-SearchBot, Google-Extended and others). If your robots.txt blocks them, your site is invisible to those answers. The audit checks whether your robots.txt is shutting AI crawlers out, so you can decide which to allow."
+  },
+  {
+    "question": "Can I run this audit automatically in CI/CD?",
+    "answer": "Yes. The same engine that powers this page is also a free GitHub Action. Add it to a workflow and it checks your sending domain's SPF, DKIM, DMARC, MTA-STS and more on every push or pull request, writes a scorecard with the exact fix for each finding, and can fail the build when your posture regresses below a threshold you choose. Like this page it is fully read-only and needs no secrets — it only queries public DNS. Start in advisory mode (report-only), then turn on enforcement once you are clean. It is on the GitHub Marketplace as the Amino Email Deliverability Audit."
+  },
+  {
+    "question": "Is the audit really read-only? Does it change anything?",
+    "answer": "Yes, fully read-only — though \"read\" covers a little more than DNS, so here is the whole list. It queries your public DNS records; it fetches your published MTA-STS policy over HTTPS (that file is served over HTTPS by design, not DNS); it reads your robots.txt to check AI-crawler visibility; and it looks up your domain's registration date via public RDAP. All four are public information that any mail server or crawler can read. It drafts the exact changes for you to review, but it never touches your DNS, sends mail, or needs credentials. Nothing changes until you choose to apply a fix yourself."
+  }
+]
