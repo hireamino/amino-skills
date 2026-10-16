@@ -600,6 +600,7 @@ def discover_dmarc(domain):
     labels = domain.split(".")
     base_labels = len(base.split("."))
     parent_observation = None
+    records_above_root = {}
     for i in range(1, min(len(labels) - 1, 6)):
         parent = ".".join(labels[i:])
         rec = confirm_txt(f"_dmarc.{parent}", "v=dmarc1")
@@ -609,7 +610,15 @@ def discover_dmarc(domain):
                 return rec, parent, "organizational"
             psd = _dmarc_tags(rec).get("psd", "u")
             if psd == "y":
+                # RFC 9989 makes the name one label below a psd=y record the
+                # Organizational Domain. Its own record wins when present;
+                # PSD policy is used only when that record is absent.
+                organizational = ".".join(labels[i - 1:])
+                organizational_record = records_above_root.get(organizational)
+                if organizational_record:
+                    return organizational_record, organizational, "psd"
                 return rec, parent, "psd"
+            records_above_root[parent] = rec
             if parent_observation is None:
                 parent_observation = (rec, parent, "parent_observation")
             if psd == "n":
@@ -618,16 +627,40 @@ def discover_dmarc(domain):
 
 
 def dmarc_domain_exists(domain):
-    """RFC 9989 existence: NXDOMAIN is absent; NOERROR/NODATA still exists."""
+    """RFC 9989 existence: True/False when authoritative, else unknown."""
     dig(domain, "A")
-    status = dns_meta(domain, "A").get("status")
+    metadata = dns_meta(domain, "A")
+    if metadata.get("error"):
+        return None
+    status = metadata.get("status")
     if status == 3:
         return False
     if status == 0:
         return True
-    # A lookup failure is not authoritative. Reuse the skill's established broad
-    # existence probe rather than inventing a second failure classifier here.
-    return resolves(domain)
+    return None
+
+
+def _dmarc_policy_for_existence(tags, domain_exists):
+    """Return the conservative (value, tag) for a PSD-controlled result."""
+    def policy(preferred):
+        return (
+            tags.get(preferred) or tags.get("p", ""),
+            preferred if tags.get(preferred) else "p",
+        )
+
+    if domain_exists is True:
+        return policy("sp")
+    if domain_exists is False:
+        return policy("np")
+
+    # A failed existence lookup must not be converted to nonexistence. Report
+    # the weaker possible result so a transient failure can never overstate
+    # protection. none < quarantine < reject; unknown/malformed is weakest.
+    strength = {"none": 1, "quarantine": 2, "reject": 3}
+    return min(
+        (policy("sp"), policy("np")),
+        key=lambda candidate: strength.get(candidate[0], 0),
+    )
 
 
 def dmarc_policy_context(domain):
@@ -643,9 +676,7 @@ def dmarc_policy_context(domain):
         tag = "sp" if tags.get("sp") else "p"
     elif relationship == "psd":
         domain_exists = dmarc_domain_exists(domain)
-        preferred = "sp" if domain_exists else "np"
-        effective = tags.get(preferred) or tags.get("p", "")
-        tag = preferred if tags.get(preferred) else "p"
+        effective, tag = _dmarc_policy_for_existence(tags, domain_exists)
     return {
         "record": rec,
         "source": source,
@@ -707,11 +738,24 @@ def check_dmarc(domain, F):
             if strong else
             f"DMARC platform policy is {tag}={eff or '<missing>'} from {source}"
         )
+        if kv.get("psd") == "y":
+            source_detail = f'The PSD {source} publishes "{rec}".'
+        else:
+            source_detail = (
+                f'The organizational domain {source} publishes "{rec}". A farther '
+                "ancestor's psd=y record makes this the applicable organizational-domain policy."
+            )
+        existence_detail = (
+            " The audited name's existence lookup was inconclusive, so Amino reports "
+            "the weaker of its possible sp and np outcomes rather than treating the name "
+            "as nonexistent."
+            if context["domain_exists"] is None else ""
+        )
         F.append(dict(
             area="DMARC", severity=severity, title=title,
             detail=(
-                f'The PSD {source} publishes "{rec}". RFC 9989 applies its '
-                f'{tag}={eff or "<missing>"} policy to {domain}. This policy is set '
+                f'{source_detail} RFC 9989 applies its {tag}={eff or "<missing>"} '
+                f'policy to {domain}.{existence_detail} This policy is set '
                 "and controlled by the platform, not the domain owner, and can change "
                 "without notice to them."
             ),

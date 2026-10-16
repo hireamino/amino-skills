@@ -1517,8 +1517,8 @@ try:
     )
     whi251_dmarc_canary(
         "WHI-251 nonexistent name uses np", "dmarc-parent-psd-y-np-reject",
-        '        preferred = "sp" if domain_exists else "np"\n',
-        '        preferred = "sp"  # WHI-251 np-selection canary\n',
+        '    if domain_exists is False:\n        return policy("np")\n',
+        '    if domain_exists is False:\n        return policy("sp")  # WHI-251 np-selection canary\n',
         "dmarc-parent-psd-y-np-reject.findings[DMARC|DMARC enforced by platform policy (np=reject from myshopify.com)].identity: expected finding, got missing",
     )
     whi251_dmarc_canary(
@@ -1528,10 +1528,16 @@ try:
         "dmarc-parent-psd-y-sp-none.findings[DMARC|DMARC platform policy is sp=none from myshopify.com].identity: expected finding, got missing",
     )
     whi251_dmarc_canary(
-        "WHI-251 unqualified parent does not stop the bounded walk", "dmarc-parent-psd-u-before-psd-y",
-        '            if psd == "n":\n                break\n',
-        '            if psd != "y":  # WHI-251 premature-stop canary\n                break\n',
-        "dmarc-parent-psd-u-before-psd-y.findings[DMARC|DMARC enforced by platform policy (sp=reject from gov.uk)].identity: expected finding, got missing",
+        "WHI-251 organizational record wins below psd=y", "dmarc-parent-psd-u-before-psd-y",
+        '                if organizational_record:\n                    return organizational_record, organizational, "psd"\n',
+        '                if False:  # WHI-251 ignore-organizational-record canary\n                    return organizational_record, organizational, "psd"\n',
+        "dmarc-parent-psd-u-before-psd-y.findings[DMARC|DMARC platform policy is p=none from service.gov.uk].identity: expected finding, got missing",
+    )
+    whi251_dmarc_canary(
+        "WHI-251 failed existence lookup is not absence", "dmarc-parent-psd-y-existence-failure",
+        '    if metadata.get("error"):\n        return None\n',
+        '    if metadata.get("error"):\n        return False  # WHI-251 failure-as-absence canary\n',
+        "dmarc-parent-psd-y-existence-failure.findings[DMARC|DMARC platform policy is sp=none from myshopify.com].identity: expected finding, got missing",
     )
     with tempfile.TemporaryDirectory(prefix="amino-whi251-score-") as temporary:
         target = Path(temporary)
@@ -1561,8 +1567,8 @@ except Exception as error:
     print(f"FAIL  canary setup — {error}")
     FAILED += 1
 
-print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 66 cases.")
-if PASSED + FAILED != 66:
-    print(f"FAIL  canary count: expected 66, got {PASSED + FAILED}", file=sys.stderr)
+print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 67 cases.")
+if PASSED + FAILED != 67:
+    print(f"FAIL  canary count: expected 67, got {PASSED + FAILED}", file=sys.stderr)
     sys.exit(1)
 sys.exit(1 if FAILED else 0)

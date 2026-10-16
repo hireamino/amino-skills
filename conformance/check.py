@@ -88,6 +88,23 @@ audit.dns_meta = lambda *_args, **_kwargs: {"status": 3, "error": False, "ad": F
 _context = audit.dmarc_policy_context("missing.myshopify.com")
 chk("WHI-251 psd=y nonexistent domain uses np", (_context["relationship"], _context["tag"], _context["effective"]),
     ("psd", "np", "quarantine"))
+_MOCK = {
+    "_dmarc.service.gov.uk": "v=DMARC1; p=none",
+    "_dmarc.gov.uk": "v=DMARC1; p=reject; sp=reject; np=reject; psd=y",
+}
+audit.confirm_txt = lambda name, prefix: _MOCK.get(name.rstrip(".").lower())
+audit.dns_meta = lambda *_args, **_kwargs: {"status": 0, "error": False, "ad": False}
+_context = audit.dmarc_policy_context("tenant.service.gov.uk")
+chk("WHI-251 organizational record wins below psd=y",
+    (_context["source"], _context["relationship"], _context["tag"], _context["effective"]),
+    ("service.gov.uk", "psd", "p", "none"))
+_MOCK = {"_dmarc.myshopify.com": "v=DMARC1; p=none; sp=none; np=reject; psd=y"}
+audit.confirm_txt = lambda name, prefix: _MOCK.get(name.rstrip(".").lower())
+audit.dns_meta = lambda *_args, **_kwargs: {"status": 2, "error": False, "ad": False}
+_context = audit.dmarc_policy_context("uncertain.myshopify.com")
+chk("WHI-251 failed existence lookup cannot select stronger np",
+    (_context["domain_exists"], _context["tag"], _context["effective"]),
+    (None, "sp", "none"))
 audit.confirm_txt = _SHIPPING_CONFIRM_TXT
 audit.dig = _SHIPPING_DIG
 audit.dns_meta = _SHIPPING_DNS_META
