@@ -38,6 +38,31 @@ def chk(name, got, exp):
     print(("PASS" if p else "FAIL"), name, "->", repr(got), "(exp", repr(exp) + ")")
 
 
+# WHI-254 — live port-25 probing is a skill-only capability. Every reviewed
+# STARTTLS finding must say so explicitly rather than silently widening the
+# web and Action contracts.
+_fixture_document = json.loads(
+    (Path(HERE) / "fixtures.json").read_text(encoding="utf-8")
+)
+_starttls_scope_errors = []
+for _fixture in _fixture_document["fixtures"]:
+    for _finding in _fixture.get("expect", {}).get("findings", []):
+        if _finding.get("title") != "Could not establish STARTTLS to primary MX":
+            continue
+        _reasons = _finding.get("notApplicable")
+        _valid_reasons = isinstance(_reasons, dict) and all(
+            isinstance(_reasons.get(_surface), str) and _reasons[_surface].strip()
+            for _surface in ("web", "action")
+        )
+        if _finding.get("surfaces") != ["skill"] or not _valid_reasons:
+            _starttls_scope_errors.append(_fixture["id"])
+chk(
+    "WHI-254 STARTTLS findings are skill-only with shipping N/A reasons",
+    _starttls_scope_errors,
+    [],
+)
+
+
 # I1 — DKIM revoked (empty p=) is never healthy
 chk("I1 dkim empty p= -> revoked", audit.parse_dkim("v=DKIM1; k=rsa; p=")[4], "revoked")
 # I4 — Ed25519 must decode to exactly 32 bytes

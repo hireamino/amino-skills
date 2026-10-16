@@ -56,8 +56,8 @@ NEW_DIGESTS = {
     "dmarc-parent-tld-psd-y-np-reject": "2765334d1733385cb246704a4935066bd4904f2c8efc7bc67615728c1498f45f",
 }
 WHI254_NEW_DIGESTS = {
-    "mx-provider-psl-distinct": "70fa4782db8c09ce4bcd9546564932df6df23c433a27109b3da15f71a2049891",
-    "mx-provider-psl-same": "424b7fcec8f74074c57febed0e419d7b2d4f8ed42179ea4f2b3b8b20cda8e179",
+    "mx-provider-psl-distinct": "60b65cbf98a2d4a9fe297923e9edefe2e8c3961a29db2fe7b8b53482b4d2c80a",
+    "mx-provider-psl-same": "c708fd612405f8d2027a7bf83095c099292c72a5f58c6eb12a8e1a60bcfd9d63",
     "dmarc-external-null-organizations": "ae6121f6e7f76058d239b051175d42378e3c7b6418dc7243055bfe92a42f4146",
 }
 CHANGED_DIGESTS = {

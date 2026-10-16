@@ -1626,13 +1626,49 @@ try:
         "dmarc-external-null-organizations.findings[DMARC|DMARC report destination not authorized].identity: expected finding, got missing",
     )
 
+    with tempfile.TemporaryDirectory(prefix="amino-whi254-starttls-scope-") as temporary:
+        target = Path(temporary)
+        corpus = json.loads((HERE / "fixtures.json").read_text(encoding="utf-8"))
+        fixtures = [
+            fixture for fixture in corpus["fixtures"]
+            if fixture["id"] == "mx-provider-psl-distinct"
+        ]
+        if len(fixtures) != 1:
+            raise AssertionError(
+                "WHI-254 STARTTLS scope canary: expected exactly one fixture"
+            )
+        findings = [
+            finding for finding in fixtures[0]["expect"]["findings"]
+            if finding["title"] == "Could not establish STARTTLS to primary MX"
+        ]
+        if len(findings) != 1:
+            raise AssertionError(
+                "WHI-254 STARTTLS scope canary: expected exactly one finding"
+            )
+        finding = findings[0]
+        if finding.get("surfaces") != ["skill"] or "notApplicable" not in finding:
+            raise AssertionError(
+                "WHI-254 STARTTLS scope canary: healthy marking is missing"
+            )
+        del finding["surfaces"]
+        del finding["notApplicable"]
+        (target / "fixtures.json").write_text(
+            json.dumps(corpus, indent=2) + "\n", encoding="utf-8"
+        )
+        expect_red(
+            "WHI-254 deleted skill-only STARTTLS marking",
+            execute_in_repository(conformance=target, check=True),
+            "FAIL WHI-254 STARTTLS findings are skill-only with shipping N/A reasons "
+            "-> ['mx-provider-psl-distinct'] (exp [])",
+        )
+
     prove_crashing_checker_rejected()
 except Exception as error:
     print(f"FAIL  canary setup — {error}")
     FAILED += 1
 
-print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 71 cases.")
-if PASSED + FAILED != 71:
-    print(f"FAIL  canary count: expected 71, got {PASSED + FAILED}", file=sys.stderr)
+print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 72 cases.")
+if PASSED + FAILED != 72:
+    print(f"FAIL  canary count: expected 72, got {PASSED + FAILED}", file=sys.stderr)
     sys.exit(1)
 sys.exit(1 if FAILED else 0)

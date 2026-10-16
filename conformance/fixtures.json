@@ -10980,6 +10980,13 @@
             "severity": "medium",
             "action": "Confirm STARTTLS on the mail server",
             "fixIncludes": "Verify the MX offers STARTTLS with a valid certificate.",
+            "surfaces": [
+              "skill"
+            ],
+            "notApplicable": {
+              "web": "The edge engine cannot open port 25 for a live STARTTLS probe.",
+              "action": "The vendored JS engine intentionally omits live port-25 STARTTLS probing."
+            },
             "lane": "inbound_transport"
           },
           {
@@ -11124,6 +11131,13 @@
             "severity": "medium",
             "action": "Confirm STARTTLS on the mail server",
             "fixIncludes": "Verify the MX offers STARTTLS with a valid certificate.",
+            "surfaces": [
+              "skill"
+            ],
+            "notApplicable": {
+              "web": "The edge engine cannot open port 25 for a live STARTTLS probe.",
+              "action": "The vendored JS engine intentionally omits live port-25 STARTTLS probing."
+            },
             "lane": "inbound_transport"
           },
           {
