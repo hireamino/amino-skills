@@ -11,6 +11,7 @@ on:
       - 'amino-deliverability-audit/skills/amino-deliverability-audit/references/**'
       - 'conformance/**'
       - 'public-suffix/**'
+      - 'faq/**'
       - 'FAQ.md'
       - 'README.md'
       - 'CONTRIBUTING.md'
@@ -21,6 +22,7 @@ on:
       - 'amino-deliverability-audit/skills/amino-deliverability-audit/references/**'
       - 'conformance/**'
       - 'public-suffix/**'
+      - 'faq/**'
       - 'FAQ.md'
       - 'README.md'
       - 'CONTRIBUTING.md'
@@ -45,6 +47,10 @@ jobs:
           node-version: '22'
       - name: Public DMARC-discovery claims match observed behaviour
         run: node conformance/dmarc-discovery-claims.mjs --surface skill
+      - name: Canonical audit FAQ artifact, generator and claim canary
+        run: |
+          node faq/test-audit-faq.mjs
+          node faq/claim-canary.mjs
       - name: Pure-function conformance checks
         run: python3 conformance/check.py
       - name: Address contract differential against reviewed base

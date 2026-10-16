@@ -960,6 +960,15 @@ chk("WHI-79 CI includes Python 3.14", "python-version: ['3.12', '3.14']" in _WF,
 chk("WHI-251 CI runs the public DMARC-discovery claim gate",
     "node conformance/dmarc-discovery-claims.mjs --surface skill" in _WF,
     True)
+chk("WHI-273 CI runs when the canonical audit FAQ changes",
+    "- 'faq/**'" in _WF,
+    True)
+chk("WHI-273 CI runs the FAQ generator contract",
+    "node faq/test-audit-faq.mjs" in _WF,
+    True)
+chk("WHI-273 CI runs the FAQ claim-detector canary",
+    "node faq/claim-canary.mjs" in _WF,
+    True)
 _RUNNER = open(os.path.join(HERE, "run_py.py"), encoding="utf-8").read()
 chk("WHI-175 runner does not replace the shipping MTA-STS reader",
     "audit._fetch_mta_sts_policy =" in _RUNNER, False)

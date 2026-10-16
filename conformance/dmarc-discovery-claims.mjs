@@ -227,7 +227,8 @@ async function runSkill() {
     return;
   }
   const publishedRoot = path.join(root, "amino-deliverability-audit", "skills", "amino-deliverability-audit");
-  const files = [path.join(root, "FAQ.md"), ...walk(publishedRoot, new Set([".md", ".py", ".json", ".txt"]))];
+  const extensions = new Set([".md", ".py", ".json", ".txt"]);
+  const files = [path.join(root, "FAQ.md"), ...walk(publishedRoot, extensions), ...walk(path.join(root, "faq"), extensions)];
   scan("published skill", files);
 }
 
