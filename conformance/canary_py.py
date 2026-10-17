@@ -1478,11 +1478,11 @@ try:
     )
     whi180_inconclusive_canary(
         "I20 flag forced true", "dane-unvalidated-tlsa",
-        'def inconclusive_state(domain):\n'
-        '    """Return the shipping audit\'s one critical-DNS uncertainty decision."""\n',
-        'def inconclusive_state(domain):\n'
-        '    """Return the shipping audit\'s one critical-DNS uncertainty decision."""\n'
-        '    return True, "TXT ex.com: lookup error"  # I20 forced-true canary\n',
+        'def critical_lookup_failures(domain):\n'
+        '    """Return every failed critical DNS lookup in shipping precedence order."""\n',
+        'def critical_lookup_failures(domain):\n'
+        '    """Return every failed critical DNS lookup in shipping precedence order."""\n'
+        '    return [(domain, "TXT", f"TXT {domain}: lookup error")]  # I20 forced-true canary\n',
         "dane-unvalidated-tlsa.inconclusive: expected false, got true",
     )
     whi180_inconclusive_canary(
@@ -1523,21 +1523,25 @@ try:
     )
     whi180_inconclusive_canary(
         "WHI-280 failure does not mark every finding", "inconclusive-apex-txt-servfail",
-        '        if (finding.get("area"), finding.get("title")) in affected:\n',
-        '        if True:  # WHI-280 over-marking canary\n',
+        '            if (finding.get("area"), finding.get("title")) in affected:\n',
+        '            if True:  # WHI-280 over-marking canary\n',
         "inconclusive-apex-txt-servfail.findings[DMARC|No DMARC record].unconfirmed: expected 'missing', got 'TXT ex.com: SERVFAIL/REFUSED'",
     )
     whi180_inconclusive_canary(
         "WHI-280 MX applicability findings stay marked", "inconclusive-apex-mx-notimp",
-        '    elif inconclusive_reason.startswith(f"MX {domain}:"):\n'
-        '        affected = {\n'
+        '        (domain, "MX"): {\n'
         '            ("Transport", "No MX records"),\n'
         '            ("MTA-STS", "No MTA-STS policy"),\n'
         '            ("TLS-RPT", "No TLS-RPT"),\n'
-        '        }\n',
-        '    elif inconclusive_reason.startswith(f"MX {domain}:"):\n'
-        '        affected = set()  # WHI-280 dropped MX markers canary\n',
+        '        },\n',
+        '        (domain, "MX"): set(),  # WHI-280 dropped MX markers canary\n',
         "inconclusive-apex-mx-notimp.findings[MTA-STS|No MTA-STS policy].unconfirmed: expected 'MX ex.com: lookup error', got 'missing'",
+    )
+    whi180_inconclusive_canary(
+        "WHI-280 every failed lookup marks its dependents", "inconclusive-apex-txt-before-mx",
+        '    for name, rrtype, reason in lookup_failures:\n',
+        '    for name, rrtype, reason in lookup_failures[:1]:  # WHI-280 first-reason-only canary\n',
+        "inconclusive-apex-txt-before-mx.findings[MTA-STS|No MTA-STS policy].unconfirmed: expected 'MX ex.com: SERVFAIL/REFUSED', got 'missing'",
     )
     whi180_inconclusive_canary(
         "I20 website consults both address-family metadata", "robots-aaaa-lookup-failed",
@@ -1685,8 +1689,8 @@ except Exception as error:
     print(f"FAIL  canary setup — {error}")
     FAILED += 1
 
-print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 74 cases.")
-if PASSED + FAILED != 74:
-    print(f"FAIL  canary count: expected 74, got {PASSED + FAILED}", file=sys.stderr)
+print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 75 cases.")
+if PASSED + FAILED != 75:
+    print(f"FAIL  canary count: expected 75, got {PASSED + FAILED}", file=sys.stderr)
     sys.exit(1)
 sys.exit(1 if FAILED else 0)

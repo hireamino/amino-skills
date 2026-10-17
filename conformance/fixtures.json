@@ -7368,7 +7368,8 @@
             "severity": "medium",
             "action": "Publish an MTA-STS policy",
             "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host",
-            "lane": "inbound_transport"
+            "lane": "inbound_transport",
+            "unconfirmed": "MX ex.com: SERVFAIL/REFUSED"
           },
           {
             "area": "TLS-RPT",
@@ -7376,7 +7377,8 @@
             "severity": "low",
             "action": "Add a TLS-RPT record",
             "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
-            "lane": "inbound_transport"
+            "lane": "inbound_transport",
+            "unconfirmed": "MX ex.com: SERVFAIL/REFUSED"
           },
           {
             "area": "BIMI",
@@ -7394,7 +7396,8 @@
             "severity": "low",
             "action": "Confirm whether this domain should receive mail",
             "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
-            "lane": "inbound_transport"
+            "lane": "inbound_transport",
+            "unconfirmed": "MX ex.com: SERVFAIL/REFUSED"
           },
           {
             "area": "DNSSEC",

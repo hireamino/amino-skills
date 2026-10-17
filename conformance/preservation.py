@@ -68,6 +68,9 @@ WHI280_MARKERS = {
     },
     "inconclusive-apex-txt-before-mx": {
         ("SPF", "No SPF record"): "TXT ex.com: SERVFAIL/REFUSED",
+        ("Transport", "No MX records"): "MX ex.com: SERVFAIL/REFUSED",
+        ("MTA-STS", "No MTA-STS policy"): "MX ex.com: SERVFAIL/REFUSED",
+        ("TLS-RPT", "No TLS-RPT"): "MX ex.com: SERVFAIL/REFUSED",
     },
     "inconclusive-apex-txt-notimp": {
         ("SPF", "No SPF record"): "TXT ex.com: lookup error",
@@ -320,8 +323,8 @@ def main():
             if "unconfirmed" in finding
         }
     whi280_valid = (
-        len(whi280_changes) == 11
-        and len(whi280_marker_changes) == 11
+        len(whi280_changes) == 14
+        and len(whi280_marker_changes) == 14
         and output_markers == WHI280_MARKERS
     )
     print(

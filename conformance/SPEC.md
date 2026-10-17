@@ -57,14 +57,16 @@ replaced by current output.
 
 **v1.19 / WHI-280 — per-finding inconclusive precision:** when one of the three
 critical DNS lookups fails, only findings whose verdict depends on that lookup
-carry `unconfirmed`, whose value is the exact non-empty result-level
-`inconclusive_reason`. Apex TXT marks `SPF: No SPF record`; `_dmarc` TXT marks
+carry `unconfirmed`, whose value names that failed lookup and its reason. Each
+lookup is assessed independently, so multiple failures can mark different
+findings while the result-level reason still names the first. Apex TXT marks
+`SPF: No SPF record`; `_dmarc` TXT marks
 `DMARC: No DMARC record`; apex MX marks `Transport: No MX records`,
 `MTA-STS: No MTA-STS policy`, and `TLS-RPT: No TLS-RPT` because MX determines
 their applicability. Every other finding omits the field. Severity, score,
 title, ordering and the result-level inconclusive fields are unchanged. Two
-mutation canaries bring the Python total from 72 to 74 and prove both the
-closed-world non-marking rule and the MX applicability dependency.
+mutation canaries bring the Python total from 72 to 75 and prove the closed-world
+non-marking rule, the MX applicability dependency, and multi-failure coverage.
 
 **WHI-246 — lane-scoped published batch output:** `batch_score.py` no longer
 publishes an unlabelled blended Gap. Its TSV names `Outbound_gaps`,
