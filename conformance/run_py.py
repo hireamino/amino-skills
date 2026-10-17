@@ -220,6 +220,13 @@ def expected_findings(fx):
                 f"{fx['id']}.findings[{finding_label(finding)}].detail: "
                 "expected an exact string"
             )
+        if "unconfirmed" in finding and (
+                not isinstance(finding["unconfirmed"], str)
+                or not finding["unconfirmed"]):
+            raise AssertionError(
+                f"{fx['id']}.findings[{finding_label(finding)}].unconfirmed: "
+                "expected a non-empty lookup reason"
+            )
         if ("effort" in finding) != ("value" in finding):
             raise AssertionError(
                 f"{fx['id']}.findings[{finding_label(finding)}].effort/value: "
@@ -273,7 +280,7 @@ def compare_contract(fx, result, score, ledger):
 
     expected_keys = set()
     for wanted in expected:
-        for field in ("identity", "severity", "action", "fix", "lane"):
+        for field in ("identity", "severity", "action", "fix", "lane", "unconfirmed"):
             ledger[field] += 1
         if "detail" in wanted:
             ledger["detail"] += 1
@@ -302,6 +309,20 @@ def compare_contract(fx, result, score, ledger):
             problems.append(
                 f"findings[{finding_label(wanted)}].lane: "
                 f"expected {wanted['lane']!r}, got {actual.get('lane')!r}"
+            )
+        wanted_has_unconfirmed = "unconfirmed" in wanted
+        actual_has_unconfirmed = "unconfirmed" in actual
+        if wanted_has_unconfirmed != actual_has_unconfirmed:
+            wanted_value = wanted.get("unconfirmed", "missing")
+            actual_value = actual.get("unconfirmed", "missing")
+            problems.append(
+                f"findings[{finding_label(wanted)}].unconfirmed: "
+                f"expected {wanted_value!r}, got {actual_value!r}"
+            )
+        elif wanted_has_unconfirmed and actual["unconfirmed"] != wanted["unconfirmed"]:
+            problems.append(
+                f"findings[{finding_label(wanted)}].unconfirmed: "
+                f"expected {wanted['unconfirmed']!r}, got {actual['unconfirmed']!r}"
             )
         if "detail" in wanted:
             if actual.get("detail") != wanted["detail"]:
@@ -404,6 +425,7 @@ def compare_contract(fx, result, score, ledger):
 def assertion_plan(fixtures):
     plan = {
         "identity": 0, "severity": 0, "action": 0, "fix": 0, "lane": 0,
+        "unconfirmed": 0,
         "detail": 0, "effort": 0, "value": 0,
         "scoreFields": 0, "closedWorld": 0, "observations": 0,
         "inconclusive": 0, "inconclusiveReason": 0, "registrableRoot": 0,
@@ -412,7 +434,7 @@ def assertion_plan(fixtures):
         if fx.get("mode") not in CONTRACT_MODES:
             continue
         expected, _ = expected_findings(fx)
-        for field in ("identity", "severity", "action", "fix", "lane"):
+        for field in ("identity", "severity", "action", "fix", "lane", "unconfirmed"):
             plan[field] += len(expected)
         plan["detail"] += sum("detail" in finding for finding in expected)
         plan["effort"] += sum("effort" in finding for finding in expected)
@@ -448,6 +470,7 @@ def run():
     failures = []
     ledger = {
         "identity": 0, "severity": 0, "action": 0, "fix": 0, "lane": 0,
+        "unconfirmed": 0,
         "detail": 0, "effort": 0, "value": 0,
         "scoreFields": 0, "closedWorld": 0, "observations": 0,
         "inconclusive": 0, "inconclusiveReason": 0, "registrableRoot": 0,

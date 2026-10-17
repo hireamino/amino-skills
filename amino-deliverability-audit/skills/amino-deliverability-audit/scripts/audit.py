@@ -274,8 +274,9 @@ def resolves(domain):
                    for row in metadata)
 
 
-def inconclusive_state(domain):
-    """Return the shipping audit's one critical-DNS uncertainty decision."""
+def critical_lookup_failures(domain):
+    """Return every failed critical DNS lookup in shipping precedence order."""
+    failures = []
     for name, rrtype in ((domain, "TXT"), (f"_dmarc.{domain}", "TXT"), (domain, "MX")):
         metadata = dns_meta(name, rrtype)
         status = metadata.get("status")
@@ -283,8 +284,36 @@ def inconclusive_state(domain):
             # Python's normalized_meta marks SERVFAIL/REFUSED as error too;
             # unlike the engine's fetch-error bit, that must not change the reason.
             reason = "SERVFAIL/REFUSED" if status in (2, 5) else "lookup error"
-            return True, f"{rrtype} {name}: {reason}"
-    return False, None
+            failures.append((name, rrtype, f"{rrtype} {name}: {reason}"))
+    return failures
+
+
+def inconclusive_state(domain, lookup_failures=None):
+    """Return the shipping audit's one critical-DNS uncertainty decision."""
+    failures = (critical_lookup_failures(domain)
+                if lookup_failures is None else lookup_failures)
+    return (True, failures[0][2]) if failures else (False, None)
+
+
+def mark_unconfirmed_findings(domain, findings, lookup_failures):
+    """Mark findings with the reason for every failed lookup they depend on.
+
+    Consumers can display the marker without rebuilding this dependency contract.
+    """
+    dependencies = {
+        (domain, "TXT"): {("SPF", "No SPF record")},
+        (f"_dmarc.{domain}", "TXT"): {("DMARC", "No DMARC record")},
+        (domain, "MX"): {
+            ("Transport", "No MX records"),
+            ("MTA-STS", "No MTA-STS policy"),
+            ("TLS-RPT", "No TLS-RPT"),
+        },
+    }
+    for name, rrtype, reason in lookup_failures:
+        affected = dependencies.get((name, rrtype), set())
+        for finding in findings:
+            if (finding.get("area"), finding.get("title")) in affected:
+                finding["unconfirmed"] = reason
 
 
 def is_void(name):
@@ -1645,7 +1674,9 @@ def main():
                for s in ["critical", "high", "medium", "low", "pass"]}
     # I20: inspect only the three critical DNS lookups, in the engine's order.
     # The resolver records the final metadata after its existing retry policy.
-    inconclusive, inconclusive_reason = inconclusive_state(domain)
+    lookup_failures = critical_lookup_failures(domain)
+    inconclusive, inconclusive_reason = inconclusive_state(domain, lookup_failures)
+    mark_unconfirmed_findings(domain, F, lookup_failures)
     print(json.dumps({
         "domain": domain,
         "primary_mx": mx_host,

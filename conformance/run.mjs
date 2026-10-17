@@ -110,6 +110,9 @@ function expectedFindings(fx, surface) {
     if (own(finding, "detail") && typeof finding.detail !== "string") {
       throw new Error(`${fx.id}.findings[${findingLabel(finding)}].detail: expected an exact string`);
     }
+    if (own(finding, "unconfirmed") && (typeof finding.unconfirmed !== "string" || !finding.unconfirmed)) {
+      throw new Error(`${fx.id}.findings[${findingLabel(finding)}].unconfirmed: expected a non-empty lookup reason`);
+    }
     const hasEffort = own(finding, "effort");
     const hasValue = own(finding, "value");
     if (hasEffort !== hasValue) {
@@ -166,6 +169,7 @@ function compareContract(fx, result, score, surface, ledger) {
     ledger.action++;
     ledger.fix++;
     ledger.lane++;
+    ledger.unconfirmed++;
     if (own(wanted, "detail")) ledger.detail++;
     if (own(wanted, "effort")) {
       ledger.effort++;
@@ -187,6 +191,10 @@ function compareContract(fx, result, score, surface, ledger) {
     }
     if (actual.lane !== wanted.lane) {
       problems.push(`findings[${findingLabel(wanted)}].lane: expected ${shown(wanted.lane)}, got ${shown(actual.lane)}`);
+    }
+    if (own(actual, "unconfirmed") !== own(wanted, "unconfirmed")
+        || (own(wanted, "unconfirmed") && actual.unconfirmed !== wanted.unconfirmed)) {
+      problems.push(`findings[${findingLabel(wanted)}].unconfirmed: expected ${shown(own(wanted, "unconfirmed") ? wanted.unconfirmed : "missing")}, got ${shown(own(actual, "unconfirmed") ? actual.unconfirmed : "missing")}`);
     }
     if (own(wanted, "detail")) {
       if (actual.detail !== wanted.detail) {
@@ -270,7 +278,7 @@ function compareContract(fx, result, score, surface, ledger) {
 }
 
 function assertionPlan(surface) {
-  const plan = { identity: 0, severity: 0, action: 0, fix: 0, lane: 0, detail: 0, effort: 0, value: 0, scoreFields: 0, closedWorld: 0, observations: 0, inconclusive: 0, inconclusiveReason: 0, registrableRoot: 0 };
+  const plan = { identity: 0, severity: 0, action: 0, fix: 0, lane: 0, unconfirmed: 0, detail: 0, effort: 0, value: 0, scoreFields: 0, closedWorld: 0, observations: 0, inconclusive: 0, inconclusiveReason: 0, registrableRoot: 0 };
   for (const fx of fixtures.filter((fixture) => CONTRACT_MODES.has(fixture.mode))) {
     const { expected } = expectedFindings(fx, surface);
     plan.identity += expected.length;
@@ -278,6 +286,7 @@ function assertionPlan(surface) {
     plan.action += expected.length;
     plan.fix += expected.length;
     plan.lane += expected.length;
+    plan.unconfirmed += expected.length;
     plan.detail += expected.filter((finding) => own(finding, "detail")).length;
     plan.effort += expected.filter((finding) => own(finding, "effort")).length;
     plan.value += expected.filter((finding) => own(finding, "value")).length;
@@ -296,7 +305,7 @@ let fail = 0;
 let skip = 0;
 let notApplicable = 0;
 const failures = [];
-const ledger = { identity: 0, severity: 0, action: 0, fix: 0, lane: 0, detail: 0, effort: 0, value: 0, scoreFields: 0, closedWorld: 0, observations: 0, inconclusive: 0, inconclusiveReason: 0, registrableRoot: 0 };
+const ledger = { identity: 0, severity: 0, action: 0, fix: 0, lane: 0, unconfirmed: 0, detail: 0, effort: 0, value: 0, scoreFields: 0, closedWorld: 0, observations: 0, inconclusive: 0, inconclusiveReason: 0, registrableRoot: 0 };
 
 for (const fx of fixtures) {
   if (!CONTRACT_MODES.has(fx.mode)) {
