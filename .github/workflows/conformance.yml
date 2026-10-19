@@ -6,6 +6,7 @@ name: conformance
 on:
   push:
     paths:
+      - '.github/workflows/conformance.yml'
       - 'amino-deliverability-audit/skills/amino-deliverability-audit/scripts/**'
       - 'amino-deliverability-audit/skills/amino-deliverability-audit/SKILL.md'
       - 'amino-deliverability-audit/skills/amino-deliverability-audit/references/**'
@@ -17,6 +18,7 @@ on:
       - 'CONTRIBUTING.md'
   pull_request:
     paths:
+      - '.github/workflows/conformance.yml'
       - 'amino-deliverability-audit/skills/amino-deliverability-audit/scripts/**'
       - 'amino-deliverability-audit/skills/amino-deliverability-audit/SKILL.md'
       - 'amino-deliverability-audit/skills/amino-deliverability-audit/references/**'
