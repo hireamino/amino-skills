@@ -26,7 +26,7 @@ from concurrent.futures import ThreadPoolExecutor
 from resolver import query as dig  # pluggable DNS (dig backend locally; DoH at the edge)
 from resolver import query_fresh   # uncached re-query, for confirming critical absences
 from resolver import meta as dns_meta  # DNSSEC/rcode side-channel (AD bit) for DANE/DNSSEC
-from resolver import query_checking_disabled as dns_checking_disabled
+from resolver import query_dnssec_probe as dnssec_probe
 
 # Input is untrusted (any domain, incl. from the future public web tool). Validate it as
 # a real DNS hostname before it flows into dig args / socket connects / name construction.
@@ -1106,7 +1106,7 @@ def check_mta_sts(domain, F, observations=None):
     if is_null_mx(dig(domain, "MX")):
         if observations is not None:
             observations["mta_sts_policy"] = "not_applicable"
-        F.append(finding("mta_sts.present",
+        F.append(finding("mta_sts.not_applicable",
             area="MTA-STS",
             severity="pass",
             title="MTA-STS not applicable — domain receives no mail",
@@ -1385,7 +1385,7 @@ def check_dnssec(domain, F):
     if signed:
         F.append(finding("dnssec.enabled", area="DNSSEC", severity="pass", title="DNSSEC enabled",
                       detail="The zone is DNSSEC-signed and answers validate.", fix=None))
-    elif _lookup_failure(domain, "DNSKEY") and dns_checking_disabled(domain, "DNSKEY"):
+    elif _lookup_failure(domain, "DNSKEY") and _dnssec_validation_failing(domain):
         F.append(finding("dnssec.validation_failing",
             area="DNSSEC", severity="critical", title="DNSSEC validation is failing",
             detail="This domain is DNSSEC-signed, but its signatures fail validation. Receivers that validate DNSSEC can't resolve this domain's MX or check its SPF, DKIM or DMARC records.",
@@ -1395,6 +1395,22 @@ def check_dnssec(domain, F):
         F.append(finding("dnssec.missing", area="DNSSEC", severity="low", title="DNSSEC not enabled",
                       detail="DNS answers for this domain aren't cryptographically signed/validated — and DANE can't be used without it. A trust/security gap more than a deliverability one.",
                       fix="Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."))
+
+
+def _dnssec_validation_failing(domain):
+    """Require corroborated SERVFAIL-on / DNSKEY-off evidence from both resolvers."""
+    evidence = dnssec_probe(domain, "DNSKEY")
+    providers = ("cloudflare", "google")
+    enabled_servfail = all(
+        evidence.get(provider, {}).get("checking_enabled", {}).get("status") == 2
+        for provider in providers
+    )
+    disabled_records = all(
+        evidence.get(provider, {}).get("checking_disabled", {}).get("status") == 0
+        and bool(evidence.get(provider, {}).get("checking_disabled", {}).get("records"))
+        for provider in providers
+    )
+    return enabled_servfail and disabled_records
 
 
 # ── Domain age / expiry via RDAP (modern WHOIS over HTTPS/JSON) ──────────────

@@ -113,6 +113,7 @@ _expected_rule_ids = {
     "dmarc.partial_pct", "dmarc.removed_tags", "dmarc.subdomain_not_enforced",
     "dmarc.unauthorized_report_destination", "dnssec.enabled", "dnssec.missing",
     "dnssec.validation_failing", "mta_sts.malformed", "mta_sts.missing",
+    "mta_sts.not_applicable",
     "mta_sts.mx_not_covered", "mta_sts.policy_unreachable", "mta_sts.present",
     "mta_sts.unconfirmed", "mx.mixed_providers", "reputation.expiring",
     "reputation.new_domain", "spf.duplicate_include", "spf.lookup_limit",
@@ -454,21 +455,41 @@ try:
     # and corroborate records through both named public resolvers. This is not a
     # fallback resolver for the audit; its answers are used only by check_dnssec.
     resolver.cache_clear()
-    _checking_disabled_calls = []
+    _dnssec_probe_calls = []
 
-    def _checking_disabled_run(args, **_kwargs):
-        _checking_disabled_calls.append(args)
-        return _result(_dig_reply(
-            "NOERROR", "dnssec-bogus.invalid", "DNSKEY", ("257 3 13 abcdef",),
-        ))
+    def _dnssec_probe_run(args, **_kwargs):
+        _dnssec_probe_calls.append(args)
+        if "+cd" in args:
+            return _result(_dig_reply(
+                "NOERROR", "dnssec-bogus.invalid", "DNSKEY", ("257 3 13 abcdef",),
+            ))
+        return _result(_dig_reply("SERVFAIL", "dnssec-bogus.invalid", "DNSKEY"))
 
-    resolver.subprocess.run = _checking_disabled_run
-    chk("WHI-293 checking-disabled probe returns corroborated DNSKEY",
-        resolver.query_checking_disabled("dnssec-bogus.invalid", "DNSKEY"),
-        ["257 3 13 abcdef"])
-    chk("WHI-293 checking-disabled probe uses +cd on Cloudflare and Google",
-        [(call[1], call[5]) for call in _checking_disabled_calls],
-        [("+cd", "@1.1.1.1"), ("+cd", "@8.8.8.8")])
+    resolver.subprocess.run = _dnssec_probe_run
+    _dnssec_evidence = resolver.query_dnssec_probe("dnssec-bogus.invalid", "DNSKEY")
+    chk("WHI-293 probe records enabled SERVFAIL and disabled DNSKEY per resolver",
+        _dnssec_evidence, {
+            "cloudflare": {
+                "checking_enabled": {"status": 2, "ad": False, "records": []},
+                "checking_disabled": {
+                    "status": 0, "ad": False, "records": ["257 3 13 abcdef"],
+                },
+            },
+            "google": {
+                "checking_enabled": {"status": 2, "ad": False, "records": []},
+                "checking_disabled": {
+                    "status": 0, "ad": False, "records": ["257 3 13 abcdef"],
+                },
+            },
+        })
+    chk("WHI-293 probe uses enabled and +cd queries on Cloudflare and Google",
+        [
+            ("+cd" in call, next(arg for arg in call if arg.startswith("@")))
+            for call in _dnssec_probe_calls
+        ], [
+            (False, "@1.1.1.1"), (True, "@1.1.1.1"),
+            (False, "@8.8.8.8"), (True, "@8.8.8.8"),
+        ])
 finally:
     resolver.subprocess.run = _resolver_run
     resolver.time.sleep = _resolver_sleep

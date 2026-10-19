@@ -64,9 +64,10 @@ title text and live values, plus a `discriminator` (`""` for one-per-asset
 rules). Selector-scoped DKIM rules use the normalized selector. The existing
 grouped external DMARC report-authorization finding uses its sorted destination
 set; splitting that display finding is outside this additive contract change.
-The complete source inventory has 59 emit sites and 57 declared rule IDs: the
+The complete source inventory has 59 emit sites and 58 declared rule IDs: the
 reviewed table's 56 plus `transport.starttls_present`, which the table omitted
-although the skill already emitted the successful STARTTLS row. No title,
+although the skill already emitted the successful STARTTLS row, and the
+permanent `mta_sts.not_applicable` identity for the null-MX pass row. No title,
 severity, lane, action, remedy, score, ordering or consumer display changes.
 
 Three rows bind identity separately from display: SPF lookup counts 12 and 13
@@ -74,7 +75,7 @@ share `spf.lookup_limit`, while selectors `selector1` and `google` produce
 different `dkim.present` discriminators. Every expected finding asserts both
 fields closed-world on both runners. Three source mutations make the emit-site
 inventory, title/value independence and selector discriminator load-bearing.
-The corpus is now 90 rows: 85 executable cases and five intentional skips on
+The corpus is now 94 rows: 89 executable cases and five intentional skips on
 the Python surface; the Python mutation total is 89.
 
 **v1.20 / WHI-290 + WHI-293 — absence provenance and broken-DNSSEC
@@ -90,24 +91,23 @@ remains apex TXT, `_dmarc` TXT and apex MX only. A failed SPF include lookup is
 not an authoritative void response and does not count toward the void-lookup
 limit.
 
-When an ordinary validating apex DNSKEY lookup fails, the Python skill makes a
-narrow diagnosis probe with DNSSEC checking disabled: `dig +cd` against both
-`@1.1.1.1` and `@8.8.8.8`. Only DNSKEY records returned by both resolvers
-replace `DNSSEC not enabled` with the critical `DNSSEC validation is failing`
-finding. If either checking-disabled query fails or returns no DNSKEY, the
-ordinary absence finding remains and is marked `unconfirmed`; a normally
-validating signed answer remains `DNSSEC enabled`. Checking-disabled records
-never enter the ordinary resolver cache and the rest of the audit is never
-rerun with checking disabled.
+When an ordinary validating apex DNSKEY lookup fails, it triggers—but does not
+itself contribute evidence to—a narrow public-resolver probe. The Python skill
+runs both `dig +dnssec` and `dig +cd +dnssec` against each of `@1.1.1.1` and
+`@8.8.8.8`. Only when both checking-enabled queries return SERVFAIL and both
+checking-disabled queries return DNSKEY records does `DNSSEC validation is
+failing` replace `DNSSEC not enabled`. Resolver disagreement, a normally
+validating public answer, or missing checking-disabled evidence keeps the
+ordinary absence finding marked `unconfirmed`. Probe answers never enter the
+ordinary resolver cache and the audit is never rerun with checking disabled.
 
-Fixtures may declare an optional `input.dnsCheckingDisabled` map, consumed by
-both corpus runners only through the checking-disabled DNS seam. Ten new rows
-bind the five independent absence dependencies, all-fail precedence,
-authoritative-empty control, bogus/signed/both-fail DNSSEC cases and the SPF
-failed-include boundary. The corpus is now 87 rows: 82 pass and 5 remain
-intentional skips on the Python surface. Eleven new source-mutation canaries
-bring the Python total from 75 to 86 and bind every mapping, precedence,
-negative control, DNSSEC branch, SPF boundary and two-resolver `+cd` probe.
+Fixtures may declare an optional `input.dnssecProbe` map that records each
+provider's checking-enabled and checking-disabled status and records. Both
+corpus runners expose it only through the narrow DNSSEC-probe seam. Four rows
+bind consensus, ordinary-failure-only, resolver-disagreement, and incomplete
+checking-disabled evidence. Two source mutations prove that ordinary failure
+cannot stand in for the checking-enabled evidence and one SERVFAIL provider is
+insufficient.
 
 **v1.19 / WHI-280 — per-finding inconclusive precision:** when one of the three
 critical DNS lookups fails, only findings whose verdict depends on that lookup
@@ -516,7 +516,7 @@ The web and Action pin files must name the same full amino-skills commit before 
 
 ## Fixtures
 
-See `fixtures.json`. It contains 90 known-answer cases: 85 executable contract
+See `fixtures.json`. It contains 94 known-answer cases: 89 executable contract
 cases and five explicitly skipped pure/HTTP/wrapper cases covered by per-surface
 tests or later work. Eight WHI-215 rows additionally assert the exact registrable
 root and the DMARC tree-walk boundary. Each fixture is language-neutral and every

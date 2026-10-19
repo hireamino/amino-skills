@@ -150,39 +150,44 @@ def _dig_backend(name, rrtype):
     return []
 
 
-def _dig_checking_disabled(name, rrtype, server):
-    """Query one explicit resolver with DNSSEC checking disabled.
+def _dig_dnssec_probe(name, rrtype, server, checking_disabled=False):
+    """Query one explicit resolver for the narrow bogus-DNSSEC diagnosis.
 
-    This narrow probe exists only to distinguish a bogus signed zone from a
-    generic lookup failure. It deliberately does not populate the normal
-    metadata/cache: records returned with ``+cd`` must never leak into the
-    ordinary audit result.
+    Probe answers deliberately do not populate the normal metadata/cache. In
+    particular, records returned with ``+cd`` must never leak into the ordinary
+    audit result.
     """
     if not name or name[0] == "-" or not _NAME_RE.fullmatch(name):
-        return []
+        return {"status": None, "ad": False, "records": []}
+    flags = ["+cd", "+dnssec"] if checking_disabled else ["+dnssec"]
     try:
         with _DIG_SEM:
             out = subprocess.run(
-                ["dig", "+cd", "+dnssec", "+tries=2", "+time=2",
-                 f"@{server}", rrtype, name],
+                ["dig", *flags, "+tries=2", "+time=2", f"@{server}", rrtype, name],
                 capture_output=True, text=True, timeout=DNS_TIMEOUT,
             ).stdout
     except Exception:
-        return []
+        return {"status": None, "ad": False, "records": []}
     match = re.search(r"status:\s*(\w+)", out)
-    if normalize_status(match.group(1) if match else None) != 0:
-        return []
-    return _parse_answer(out, rrtype)
+    status = normalize_status(match.group(1) if match else None)
+    fm = re.search(r"flags:\s*([a-z ]+);", out)
+    ad = bool(fm and "ad" in fm.group(1).split())
+    records = _parse_answer(out, rrtype) if status == 0 else []
+    return {"status": status, "ad": ad, "records": records}
 
 
 @lru_cache(maxsize=256)
-def query_checking_disabled(name, rrtype):
-    """Return records only when both reviewed public resolvers see them with CD."""
-    cloudflare = _dig_checking_disabled(name, rrtype, "1.1.1.1")
-    google = _dig_checking_disabled(name, rrtype, "8.8.8.8")
-    if not cloudflare or not google:
-        return []
-    return cloudflare
+def query_dnssec_probe(name, rrtype):
+    """Return checking-enabled and checking-disabled evidence from two resolvers."""
+    evidence = {}
+    for provider, server in (("cloudflare", "1.1.1.1"), ("google", "8.8.8.8")):
+        evidence[provider] = {
+            "checking_enabled": _dig_dnssec_probe(name, rrtype, server),
+            "checking_disabled": _dig_dnssec_probe(
+                name, rrtype, server, checking_disabled=True,
+            ),
+        }
+    return evidence
 
 
 _BACKEND = _dig_backend
@@ -224,6 +229,6 @@ def query_fresh(name, rrtype):
 
 def cache_clear():
     query.cache_clear()
-    query_checking_disabled.cache_clear()
+    query_dnssec_probe.cache_clear()
     with _META_LOCK:
         _META.clear()

@@ -353,8 +353,8 @@ def whi290_audit_canary(name, fixture, replacements, diagnostic):
 
 
 def whi293_resolver_canary():
-    """Prove the +cd two-resolver source check rejects a one-resolver mutation."""
-    name = "WHI-293 checking-disabled probe keeps both public resolvers"
+    """Prove the four-query source check rejects a duplicated resolver."""
+    name = "WHI-293 DNSSEC probe keeps both public resolvers"
     require_green(name, execute_check())
     with tempfile.TemporaryDirectory(prefix="amino-whi293-resolver-") as temporary:
         target = Path(temporary)
@@ -365,15 +365,15 @@ def whi293_resolver_canary():
         source = resolver_path.read_text(encoding="utf-8")
         source = replace_exactly_once(
             source,
-            '    google = _dig_checking_disabled(name, rrtype, "8.8.8.8")\n',
-            '    google = _dig_checking_disabled(name, rrtype, "1.1.1.1")  # WHI-293 canary\n',
+            '    for provider, server in (("cloudflare", "1.1.1.1"), ("google", "8.8.8.8")):\n',
+            '    for provider, server in (("cloudflare", "1.1.1.1"), ("google", "1.1.1.1")):\n',
             name,
         )
         resolver_path.write_text(source, encoding="utf-8")
         expect_red_comparison(
             name,
             execute_check_with_scripts(target),
-            "FAIL WHI-293 checking-disabled probe uses +cd on Cloudflare and Google",
+            "FAIL WHI-293 probe uses enabled and +cd queries on Cloudflare and Google",
         )
 
 
@@ -1657,18 +1657,27 @@ try:
         "inconclusive-noncritical-empty-control.findings[TLS-RPT|No TLS-RPT].unconfirmed: expected 'missing', got 'TXT _smtp._tls.ex.com: lookup error'",
     )
     whi290_audit_canary(
-        "WHI-293 broken DNSSEC requires checking-disabled evidence",
-        "dnssec-validation-failing",
-        [('    elif _lookup_failure(domain, "DNSKEY") and dns_checking_disabled(domain, "DNSKEY"):\n',
-          '    elif False and _lookup_failure(domain, "DNSKEY") and dns_checking_disabled(domain, "DNSKEY"):\n')],
-        "dnssec-validation-failing.findings[DNSSEC|DNSSEC validation is failing].identity: expected finding, got missing",
+        "WHI-293 ordinary DNS failure is only a probe trigger",
+        "dnssec-ordinary-failure-not-bogus",
+        [('    enabled_servfail = all(\n'
+          '        evidence.get(provider, {}).get("checking_enabled", {}).get("status") == 2\n'
+          '        for provider in providers\n'
+          '    )\n',
+          '    enabled_servfail = bool(_lookup_failure(domain, "DNSKEY"))  # WHI-293 canary\n')],
+        "dnssec-ordinary-failure-not-bogus.findings[DNSSEC|DNSSEC not enabled].identity: expected finding, got missing",
     )
     whi290_audit_canary(
-        "WHI-293 both failing probes do not diagnose bogus DNSSEC",
-        "inconclusive-dnskey-both-fail",
-        [('    elif _lookup_failure(domain, "DNSKEY") and dns_checking_disabled(domain, "DNSKEY"):\n',
-          '    elif _lookup_failure(domain, "DNSKEY") or dns_checking_disabled(domain, "DNSKEY"):\n')],
-        "inconclusive-dnskey-both-fail.findings[DNSSEC|DNSSEC not enabled].identity: expected finding, got missing",
+        "WHI-293 both validating resolvers must return SERVFAIL",
+        "dnssec-provider-disagreement-not-bogus",
+        [('    enabled_servfail = all(\n'
+          '        evidence.get(provider, {}).get("checking_enabled", {}).get("status") == 2\n'
+          '        for provider in providers\n'
+          '    )\n',
+          '    enabled_servfail = any(\n'
+          '        evidence.get(provider, {}).get("checking_enabled", {}).get("status") == 2\n'
+          '        for provider in providers\n'
+          '    )  # WHI-293 canary\n')],
+        "dnssec-provider-disagreement-not-bogus.findings[DNSSEC|DNSSEC not enabled].identity: expected finding, got missing",
     )
     whi290_audit_canary(
         "WHI-290 failed SPF includes are not void responses",

@@ -2463,7 +2463,7 @@
             "lane": "outbound_auth"
           },
           {
-            "rule_id": "mta_sts.present",
+            "rule_id": "mta_sts.not_applicable",
             "discriminator": "",
             "area": "MTA-STS",
             "title": "MTA-STS not applicable — domain receives no mail",
@@ -2818,7 +2818,7 @@
             "lane": "outbound_auth"
           },
           {
-            "rule_id": "mta_sts.present",
+            "rule_id": "mta_sts.not_applicable",
             "discriminator": "",
             "area": "MTA-STS",
             "title": "MTA-STS not applicable — domain receives no mail",
@@ -5851,7 +5851,7 @@
             "lane": "outbound_auth"
           },
           {
-            "rule_id": "mta_sts.present",
+            "rule_id": "mta_sts.not_applicable",
             "discriminator": "",
             "area": "MTA-STS",
             "title": "MTA-STS not applicable — domain receives no mail",
@@ -6601,7 +6601,7 @@
             "lane": "outbound_auth"
           },
           {
-            "rule_id": "mta_sts.present",
+            "rule_id": "mta_sts.not_applicable",
             "discriminator": "",
             "area": "MTA-STS",
             "title": "MTA-STS not applicable — domain receives no mail",
@@ -13111,10 +13111,31 @@
             }
           }
         },
-        "dnsCheckingDisabled": {
+        "dnssecProbe": {
           "ex.com": {
-            "status": {
-              "DNSKEY": 2
+            "cloudflare": {
+              "checking_enabled": {
+                "status": 2,
+                "ad": false,
+                "records": []
+              },
+              "checking_disabled": {
+                "status": 2,
+                "ad": false,
+                "records": []
+              }
+            },
+            "google": {
+              "checking_enabled": {
+                "status": 2,
+                "ad": false,
+                "records": []
+              },
+              "checking_disabled": {
+                "status": 2,
+                "ad": false,
+                "records": []
+              }
             }
           }
         }
@@ -13570,14 +13591,35 @@
             }
           }
         },
-        "dnsCheckingDisabled": {
+        "dnssecProbe": {
           "dnssec-failed.org": {
-            "DNSKEY": [
-              "257 3 13 abcdef",
-              "256 3 13 012345"
-            ],
-            "status": {
-              "DNSKEY": 0
+            "cloudflare": {
+              "checking_enabled": {
+                "status": 2,
+                "ad": false,
+                "records": []
+              },
+              "checking_disabled": {
+                "status": 0,
+                "ad": false,
+                "records": [
+                  "257 3 13 abcdef"
+                ]
+              }
+            },
+            "google": {
+              "checking_enabled": {
+                "status": 2,
+                "ad": false,
+                "records": []
+              },
+              "checking_disabled": {
+                "status": 0,
+                "ad": false,
+                "records": [
+                  "256 3 13 012345"
+                ]
+              }
             }
           }
         }
@@ -13750,14 +13792,6 @@
               "TXT": 0
             }
           }
-        },
-        "dnsCheckingDisabled": {
-          "ex.com": {
-            "DNSKEY": [],
-            "status": {
-              "DNSKEY": 0
-            }
-          }
         }
       },
       "expect": {
@@ -13902,13 +13936,35 @@
             }
           }
         },
-        "dnsCheckingDisabled": {
+        "dnssecProbe": {
           "ex.com": {
-            "DNSKEY": [
-              "257 3 13 abcdef"
-            ],
-            "status": {
-              "DNSKEY": 0
+            "cloudflare": {
+              "checking_enabled": {
+                "status": 2,
+                "ad": false,
+                "records": []
+              },
+              "checking_disabled": {
+                "status": 0,
+                "ad": false,
+                "records": [
+                  "257 3 13 abcdef"
+                ]
+              }
+            },
+            "google": {
+              "checking_enabled": {
+                "status": 2,
+                "ad": false,
+                "records": []
+              },
+              "checking_disabled": {
+                "status": 0,
+                "ad": false,
+                "records": [
+                  "257 3 13 abcdef"
+                ]
+              }
             }
           }
         }
@@ -14054,16 +14110,6 @@
               "257 3 13 abcdef"
             ],
             "ad": true,
-            "status": {
-              "DNSKEY": 0
-            }
-          }
-        },
-        "dnsCheckingDisabled": {
-          "ex.com": {
-            "DNSKEY": [
-              "257 3 13 abcdef"
-            ],
             "status": {
               "DNSKEY": 0
             }
@@ -14839,6 +14885,711 @@
         },
         "inconclusive": false,
         "inconclusive_reason": null
+      }
+    },
+    {
+      "id": "dnssec-bogus-provider-consensus",
+      "invariant": "I18",
+      "mode": "dns-engine",
+      "desc": "Both named public resolvers return SERVFAIL with checking enabled and DNSKEY records with checking disabled, proving bogus DNSSEC.",
+      "input": {
+        "domain": "ex.com",
+        "dns": {
+          "ex.com": {
+            "DNSKEY": [],
+            "status": {
+              "DNSKEY": 2
+            }
+          }
+        },
+        "dnssecProbe": {
+          "ex.com": {
+            "cloudflare": {
+              "checking_enabled": {
+                "status": 2,
+                "ad": false,
+                "records": []
+              },
+              "checking_disabled": {
+                "status": 0,
+                "ad": false,
+                "records": [
+                  "257 3 13 abcdef"
+                ]
+              }
+            },
+            "google": {
+              "checking_enabled": {
+                "status": 2,
+                "ad": false,
+                "records": []
+              },
+              "checking_disabled": {
+                "status": 0,
+                "ad": false,
+                "records": [
+                  "257 3 13 abcdef"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "expect": {
+        "findings": [
+          {
+            "rule_id": "dmarc.missing",
+            "discriminator": "",
+            "area": "DMARC",
+            "title": "No DMARC record",
+            "severity": "critical",
+            "action": "Publish a DMARC policy",
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to collect reports. Review those reports before any enforcement, then stage p=quarantine; whether p=reject is appropriate depends on your mail flows (RFC 9989 §7.4).",
+            "lane": "outbound_auth"
+          },
+          {
+            "rule_id": "dnssec.validation_failing",
+            "discriminator": "",
+            "area": "DNSSEC",
+            "title": "DNSSEC validation is failing",
+            "severity": "critical",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Your DNSSEC signatures don't validate. Fix the DS record at your registrar or re-sign the zone at your DNS provider. If you can't fix it quickly, remove the DS record so the domain resolves unsigned.",
+            "lane": "domain_posture",
+            "detail": "This domain is DNSSEC-signed, but its signatures fail validation. Receivers that validate DNSSEC can't resolve this domain's MX or check its SPF, DKIM or DMARC records."
+          },
+          {
+            "rule_id": "spf.missing",
+            "discriminator": "",
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with your sending providers; end with -all once confident).",
+            "lane": "outbound_auth"
+          },
+          {
+            "rule_id": "mta_sts.missing",
+            "discriminator": "",
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host https://mta-sts.<domain>/.well-known/mta-sts.txt. Stage it: publish TLS-RPT first so you get failure reports, start at mode: testing, confirm every production AND backup MX passes TLS, then switch to mode: enforce (RFC 8461 provides testing mode for exactly this).",
+            "lane": "inbound_transport"
+          },
+          {
+            "rule_id": "dkim.not_found",
+            "discriminator": "",
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at the ESP.",
+            "lane": "outbound_auth"
+          },
+          {
+            "rule_id": "tls_rpt.missing",
+            "discriminator": "",
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
+          },
+          {
+            "rule_id": "bimi.missing",
+            "discriminator": "",
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
+          },
+          {
+            "rule_id": "caa.missing",
+            "discriminator": "",
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "domain_posture"
+          },
+          {
+            "rule_id": "transport.no_mx",
+            "discriminator": "",
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": false,
+          "DMARC_enforced": false,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          },
+          "gap": 8,
+          "note": "no SPF; no DKIM key at common/provider selectors; no DMARC"
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "not_applicable",
+          "rdap": "unavailable"
+        },
+        "inconclusive": false,
+        "inconclusive_reason": null,
+        "registrable_root": "ex.com"
+      }
+    },
+    {
+      "id": "dnssec-ordinary-failure-not-bogus",
+      "invariant": "I18",
+      "mode": "dns-engine",
+      "desc": "An ordinary FORMERR triggers the probe but is not bogus-DNSSEC evidence when both public resolvers validate normally.",
+      "input": {
+        "domain": "ex.com",
+        "dns": {
+          "ex.com": {
+            "status": {
+              "DNSKEY": 1
+            }
+          }
+        },
+        "dnssecProbe": {
+          "ex.com": {
+            "cloudflare": {
+              "checking_enabled": {
+                "status": 0,
+                "ad": true,
+                "records": [
+                  "257 3 13 abcdef"
+                ]
+              },
+              "checking_disabled": {
+                "status": 0,
+                "ad": false,
+                "records": [
+                  "257 3 13 abcdef"
+                ]
+              }
+            },
+            "google": {
+              "checking_enabled": {
+                "status": 0,
+                "ad": true,
+                "records": [
+                  "257 3 13 abcdef"
+                ]
+              },
+              "checking_disabled": {
+                "status": 0,
+                "ad": false,
+                "records": [
+                  "257 3 13 abcdef"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "expect": {
+        "findings": [
+          {
+            "rule_id": "dmarc.missing",
+            "discriminator": "",
+            "area": "DMARC",
+            "title": "No DMARC record",
+            "severity": "critical",
+            "action": "Publish a DMARC policy",
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to collect reports. Review those reports before any enforcement, then stage p=quarantine; whether p=reject is appropriate depends on your mail flows (RFC 9989 §7.4).",
+            "lane": "outbound_auth"
+          },
+          {
+            "rule_id": "spf.missing",
+            "discriminator": "",
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with your sending providers; end with -all once confident).",
+            "lane": "outbound_auth"
+          },
+          {
+            "rule_id": "mta_sts.missing",
+            "discriminator": "",
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host https://mta-sts.<domain>/.well-known/mta-sts.txt. Stage it: publish TLS-RPT first so you get failure reports, start at mode: testing, confirm every production AND backup MX passes TLS, then switch to mode: enforce (RFC 8461 provides testing mode for exactly this).",
+            "lane": "inbound_transport"
+          },
+          {
+            "rule_id": "dkim.not_found",
+            "discriminator": "",
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at the ESP.",
+            "lane": "outbound_auth"
+          },
+          {
+            "rule_id": "tls_rpt.missing",
+            "discriminator": "",
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
+          },
+          {
+            "rule_id": "bimi.missing",
+            "discriminator": "",
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
+          },
+          {
+            "rule_id": "dnssec.missing",
+            "discriminator": "",
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "domain_posture",
+            "unconfirmed": "DNSKEY ex.com: lookup error"
+          },
+          {
+            "rule_id": "caa.missing",
+            "discriminator": "",
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "domain_posture"
+          },
+          {
+            "rule_id": "transport.no_mx",
+            "discriminator": "",
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": false,
+          "DMARC_enforced": false,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          },
+          "gap": 8,
+          "note": "no SPF; no DKIM key at common/provider selectors; no DMARC"
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "not_applicable",
+          "rdap": "unavailable"
+        },
+        "inconclusive": false,
+        "inconclusive_reason": null,
+        "registrable_root": "ex.com"
+      }
+    },
+    {
+      "id": "dnssec-provider-disagreement-not-bogus",
+      "invariant": "I18",
+      "mode": "dns-engine",
+      "desc": "One public resolver returns SERVFAIL while the other validates normally, so DNSSEC remains unconfirmed rather than critical.",
+      "input": {
+        "domain": "ex.com",
+        "dns": {
+          "ex.com": {
+            "status": {
+              "DNSKEY": 2
+            }
+          }
+        },
+        "dnssecProbe": {
+          "ex.com": {
+            "cloudflare": {
+              "checking_enabled": {
+                "status": 2,
+                "ad": false,
+                "records": []
+              },
+              "checking_disabled": {
+                "status": 0,
+                "ad": false,
+                "records": [
+                  "257 3 13 abcdef"
+                ]
+              }
+            },
+            "google": {
+              "checking_enabled": {
+                "status": 0,
+                "ad": true,
+                "records": [
+                  "257 3 13 abcdef"
+                ]
+              },
+              "checking_disabled": {
+                "status": 0,
+                "ad": false,
+                "records": [
+                  "257 3 13 abcdef"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "expect": {
+        "findings": [
+          {
+            "rule_id": "dmarc.missing",
+            "discriminator": "",
+            "area": "DMARC",
+            "title": "No DMARC record",
+            "severity": "critical",
+            "action": "Publish a DMARC policy",
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to collect reports. Review those reports before any enforcement, then stage p=quarantine; whether p=reject is appropriate depends on your mail flows (RFC 9989 §7.4).",
+            "lane": "outbound_auth"
+          },
+          {
+            "rule_id": "spf.missing",
+            "discriminator": "",
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with your sending providers; end with -all once confident).",
+            "lane": "outbound_auth"
+          },
+          {
+            "rule_id": "mta_sts.missing",
+            "discriminator": "",
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host https://mta-sts.<domain>/.well-known/mta-sts.txt. Stage it: publish TLS-RPT first so you get failure reports, start at mode: testing, confirm every production AND backup MX passes TLS, then switch to mode: enforce (RFC 8461 provides testing mode for exactly this).",
+            "lane": "inbound_transport"
+          },
+          {
+            "rule_id": "dkim.not_found",
+            "discriminator": "",
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at the ESP.",
+            "lane": "outbound_auth"
+          },
+          {
+            "rule_id": "tls_rpt.missing",
+            "discriminator": "",
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
+          },
+          {
+            "rule_id": "bimi.missing",
+            "discriminator": "",
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
+          },
+          {
+            "rule_id": "dnssec.missing",
+            "discriminator": "",
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "domain_posture",
+            "unconfirmed": "DNSKEY ex.com: SERVFAIL/REFUSED"
+          },
+          {
+            "rule_id": "caa.missing",
+            "discriminator": "",
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "domain_posture"
+          },
+          {
+            "rule_id": "transport.no_mx",
+            "discriminator": "",
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": false,
+          "DMARC_enforced": false,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          },
+          "gap": 8,
+          "note": "no SPF; no DKIM key at common/provider selectors; no DMARC"
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "not_applicable",
+          "rdap": "unavailable"
+        },
+        "inconclusive": false,
+        "inconclusive_reason": null,
+        "registrable_root": "ex.com"
+      }
+    },
+    {
+      "id": "dnssec-disabled-evidence-incomplete-not-bogus",
+      "invariant": "I18",
+      "mode": "dns-engine",
+      "desc": "Both public resolvers return SERVFAIL with checking enabled but one checking-disabled query fails, so DNSSEC remains unconfirmed rather than critical.",
+      "input": {
+        "domain": "ex.com",
+        "dns": {
+          "ex.com": {
+            "status": {
+              "DNSKEY": 2
+            }
+          }
+        },
+        "dnssecProbe": {
+          "ex.com": {
+            "cloudflare": {
+              "checking_enabled": {
+                "status": 2,
+                "ad": false,
+                "records": []
+              },
+              "checking_disabled": {
+                "status": 0,
+                "ad": false,
+                "records": [
+                  "257 3 13 abcdef"
+                ]
+              }
+            },
+            "google": {
+              "checking_enabled": {
+                "status": 2,
+                "ad": false,
+                "records": []
+              },
+              "checking_disabled": {
+                "status": 2,
+                "ad": false,
+                "records": []
+              }
+            }
+          }
+        }
+      },
+      "expect": {
+        "findings": [
+          {
+            "rule_id": "dmarc.missing",
+            "discriminator": "",
+            "area": "DMARC",
+            "title": "No DMARC record",
+            "severity": "critical",
+            "action": "Publish a DMARC policy",
+            "fixIncludes": "Publish TXT at _dmarc: start with \"v=DMARC1; p=none; rua=mailto:dmarc@<domain>\" to collect reports. Review those reports before any enforcement, then stage p=quarantine; whether p=reject is appropriate depends on your mail flows (RFC 9989 §7.4).",
+            "lane": "outbound_auth"
+          },
+          {
+            "rule_id": "spf.missing",
+            "discriminator": "",
+            "area": "SPF",
+            "title": "No SPF record",
+            "severity": "high",
+            "action": "Publish an SPF record",
+            "fixIncludes": "Add a TXT record at the apex: \"v=spf1 include:<your-ESP> -all\" (replace include with your sending providers; end with -all once confident).",
+            "lane": "outbound_auth"
+          },
+          {
+            "rule_id": "mta_sts.missing",
+            "discriminator": "",
+            "area": "MTA-STS",
+            "title": "No MTA-STS policy",
+            "severity": "medium",
+            "action": "Publish an MTA-STS policy",
+            "fixIncludes": "Publish _mta-sts TXT (v=STSv1; id=...) and host https://mta-sts.<domain>/.well-known/mta-sts.txt. Stage it: publish TLS-RPT first so you get failure reports, start at mode: testing, confirm every production AND backup MX passes TLS, then switch to mode: enforce (RFC 8461 provides testing mode for exactly this).",
+            "lane": "inbound_transport"
+          },
+          {
+            "rule_id": "dkim.not_found",
+            "discriminator": "",
+            "area": "DKIM",
+            "title": "DKIM not found at common/provider selectors",
+            "severity": "low",
+            "action": "Confirm or enable DKIM signing",
+            "fixIncludes": "Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at the ESP.",
+            "lane": "outbound_auth"
+          },
+          {
+            "rule_id": "tls_rpt.missing",
+            "discriminator": "",
+            "area": "TLS-RPT",
+            "title": "No TLS-RPT",
+            "severity": "low",
+            "action": "Add a TLS-RPT record",
+            "fixIncludes": "Add _smtp._tls TXT: \"v=TLSRPTv1; rua=mailto:tlsrpt@<domain>\".",
+            "lane": "inbound_transport"
+          },
+          {
+            "rule_id": "bimi.missing",
+            "discriminator": "",
+            "area": "BIMI",
+            "title": "No BIMI",
+            "severity": "low",
+            "action": "Get a VMC, then publish BIMI",
+            "fixIncludes": "Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple).",
+            "lane": "brand_optional"
+          },
+          {
+            "rule_id": "dnssec.missing",
+            "discriminator": "",
+            "area": "DNSSEC",
+            "title": "DNSSEC not enabled",
+            "severity": "low",
+            "action": "Enable DNSSEC",
+            "fixIncludes": "Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE).",
+            "lane": "domain_posture",
+            "unconfirmed": "DNSKEY ex.com: SERVFAIL/REFUSED"
+          },
+          {
+            "rule_id": "caa.missing",
+            "discriminator": "",
+            "area": "CAA",
+            "title": "No CAA records",
+            "severity": "low",
+            "action": "Add a CAA record",
+            "fixIncludes": "Publish a CAA record naming your CA(s), e.g. 0 issue \"letsencrypt.org\".",
+            "lane": "domain_posture"
+          },
+          {
+            "rule_id": "transport.no_mx",
+            "discriminator": "",
+            "area": "Transport",
+            "title": "No MX records",
+            "severity": "low",
+            "action": "Confirm whether this domain should receive mail",
+            "fixIncludes": "If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know.",
+            "lane": "inbound_transport"
+          }
+        ],
+        "score": {
+          "SPF": false,
+          "DMARC": false,
+          "DMARC_enforced": false,
+          "DMARC_rua": false,
+          "MTA_STS": false,
+          "TLS_RPT": false,
+          "DANE": false,
+          "BIMI": false,
+          "DKIM": "unknown",
+          "lanes": {
+            "SPF": "outbound_auth",
+            "DKIM": "outbound_auth",
+            "DMARC": "outbound_auth",
+            "DMARC_enforced": "outbound_auth",
+            "DMARC_rua": "outbound_auth",
+            "MTA_STS": "inbound_transport",
+            "TLS_RPT": "inbound_transport",
+            "DANE": "inbound_transport",
+            "BIMI": "brand_optional"
+          },
+          "gap": 8,
+          "note": "no SPF; no DKIM key at common/provider selectors; no DMARC"
+        },
+        "observations": {
+          "mta_sts_policy": "not_applicable",
+          "robots": "not_applicable",
+          "rdap": "unavailable"
+        },
+        "inconclusive": false,
+        "inconclusive_reason": null,
+        "registrable_root": "ex.com"
       }
     }
   ]

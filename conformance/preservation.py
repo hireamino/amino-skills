@@ -53,6 +53,12 @@ WHI12_NEW_IDS = (
     "finding-id-spf-lookup-13",
     "finding-id-dkim-google-selector",
 )
+WHI293_REVIEW_IDS = (
+    "dnssec-bogus-provider-consensus",
+    "dnssec-ordinary-failure-not-bogus",
+    "dnssec-provider-disagreement-not-bogus",
+    "dnssec-disabled-evidence-incomplete-not-bogus",
+)
 CHANGED_IDS = (
     "registrable-root-nhs-uk",
     "registrable-root-sch-uk-wildcard",
@@ -121,21 +127,27 @@ WHI290_NEW_DIGESTS = {
     "inconclusive-tls-rpt-txt-servfail": "6c4816940af8d3813b193b950643d7188600f1f35923847ec6cfa37e69d371f1",
     "inconclusive-bimi-txt-servfail": "8e5a60559f7548c8e08fe9c6a2ea2b7cc7155845160788caa1114f37dfb06165",
     "inconclusive-dnskey-both-fail": (
-        "4ed072ba956addbf42f57667c372ccd3c"
-        "f985f04ff52f320f8f0525ac7fe9587"
+        "edf7b4bcca9df8b2dc3e726a6d049989"
+        "0a76eeacc0b278eaf566d2b7911ef78c"
     ),
     "inconclusive-caa-servfail": "dda5b35c84c73cfaa21bbbfe2815eddb9c0c859bc88b42aa80870dafe3f86e81",
     "inconclusive-dkim-selector-servfail": "2c4a57a0d8bd23495339ef2d35836acedf95257b549d6a1ac6105ddce2df26dc",
-    "inconclusive-all-lookups-fail": "241a7dadff28f7cd7d2122620a9c24fa1c7bf174f0f67905ae122b300212e04f",
-    "inconclusive-noncritical-empty-control": "124d2714ca982d67aedfb8e1a35f28b5ab5c5481dff8712533f48bd04a1c9ce4",
-    "dnssec-validation-failing": "9ef205d55d56688ce229fc8f2f68783173f9b119358198254ca245f5fe681972",
-    "dnssec-signed-validating-control": "26440f23654a3ba685573f7e34a42a69f06a781246bab8a10a4f9ad485fa4864",
+    "inconclusive-all-lookups-fail": "0978aeafc46c27d12830709ffad612600b5bfadbd2df25acc9742dedf53a9117",
+    "inconclusive-noncritical-empty-control": "9486429544df21f8712f5bf29d6fd4d1a19d515eab13f5f54b242dba2d3c29c2",
+    "dnssec-validation-failing": "4323bbf2aac9a5299c6dc8628ea4228d3ce1653028ceb9c1dd41cc3a6921ec3d",
+    "dnssec-signed-validating-control": "929a37851b56687d3027c94073f4181ff098dd3f88f325290235b01d5eb41b65",
     "spf-failed-include-not-void": "626e9388c7968eb997b249713989c438d3cd34345ba1c3aaf611eafc4e11cc1e",
 }
 WHI12_NEW_DIGESTS = {
     "finding-id-spf-lookup-12": "dbcb9a03ff944a43da417aa2835388562761cef814d7d547657d2788153996b1",
     "finding-id-spf-lookup-13": "cdb2a95f2ec937186b3e2c450f2e6f97d614984bbc8467db29f120ab0ab9bc9e",
     "finding-id-dkim-google-selector": "e93e5cb144c5d4717f90882b19ca1453918c5b09bf56829a7e5958242c0289c4",
+}
+WHI293_REVIEW_DIGESTS = {
+    "dnssec-bogus-provider-consensus": "265f82710249808418ff0f5566fa42b0ca404e1c62115612671fe3d831e6722a",
+    "dnssec-ordinary-failure-not-bogus": "022ddbb23ce8faacf1577727a79b294e1931b8d70eba6b854a906eb34eeec630",
+    "dnssec-provider-disagreement-not-bogus": "cb03d4d78436681084fcbdb8f13f3f598d240173265f366026f16acdee977685",
+    "dnssec-disabled-evidence-incomplete-not-bogus": "74df14464be6c30a2fb8dbc4f04ca35368ea5272a0a69a6cad3d21b02581890a",
 }
 CHANGED_DIGESTS = {
     "registrable-root-nhs-uk": "2a0c85be080fae66392e177b9c9de70a0a9f3e5f80f3974718657239541faec4",
@@ -229,7 +241,7 @@ def snapshot(repository, included_ids):
         else:
             runner.install_resolver(
                 fixture["input"].get("dns", {}),
-                fixture["input"].get("dnsCheckingDisabled", {}),
+                fixture["input"].get("dnssecProbe", {}),
             )
         runner.install_http(fixture["input"]["domain"], fixture["input"].get("http", {}))
         now_ms = fixture["input"].get("nowMs")
@@ -265,14 +277,15 @@ def main():
     current_document = json.loads((ROOT / FIXTURES_PATH).read_text(encoding="utf-8"))
     base = base_document["fixtures"]
     current = current_document["fixtures"]
-    if set(base_document) != set(current_document) or len(base) != 66 or len(current) != 90:
+    if set(base_document) != set(current_document) or len(base) != 66 or len(current) != 94:
         print("UNEXPECTED_FIXTURE_SHAPE", file=sys.stderr)
         return 1
     if [f["id"] for f in current[:len(base)]] != [f["id"] for f in base]:
         print("UNEXPECTED_EXISTING_FIXTURE_ORDER", file=sys.stderr)
         return 1
     if tuple(f["id"] for f in current[len(base):]) != (
-            NEW_IDS + WHI254_NEW_IDS + WHI290_NEW_IDS + WHI12_NEW_IDS):
+            NEW_IDS + WHI254_NEW_IDS + WHI290_NEW_IDS + WHI12_NEW_IDS
+            + WHI293_REVIEW_IDS):
         print("UNEXPECTED_NEW_FIXTURE_IDS", file=sys.stderr)
         return 1
 
@@ -318,7 +331,7 @@ def main():
     table_same = git_show(TABLE_PATH) == (ROOT / TABLE_PATH).read_bytes()
     print(
         f"FIXTURE_CHANGE_PROOF existing={len(base)} changed={len(CHANGED_IDS)} "
-        f"added={len(NEW_IDS) + len(WHI254_NEW_IDS) + len(WHI290_NEW_IDS) + len(WHI12_NEW_IDS)} "
+        f"added={len(NEW_IDS) + len(WHI254_NEW_IDS) + len(WHI290_NEW_IDS) + len(WHI12_NEW_IDS) + len(WHI293_REVIEW_IDS)} "
         "allowed_existing_changes=one parent observation each plus additive finding identity "
         f"address_table_unchanged={str(table_same).lower()}"
     )
@@ -346,15 +359,28 @@ def main():
     print("WHI290_NEW_FIXTURE_DIGESTS " + ",".join(
         f"{key}:{whi290_digests[key]}" for key in WHI290_NEW_IDS
     ))
+    whi12_start = (
+        len(base) + len(NEW_IDS) + len(WHI254_NEW_IDS) + len(WHI290_NEW_IDS)
+    )
     whi12_digests = {
         f["id"]: hashlib.sha256(canonical(f)).hexdigest()
-        for f in current[-len(WHI12_NEW_IDS):]
+        for f in current[whi12_start:whi12_start + len(WHI12_NEW_IDS)]
     }
     if whi12_digests != WHI12_NEW_DIGESTS:
         print(f"UNEXPECTED_WHI12_FIXTURE_CHANGE {whi12_digests}", file=sys.stderr)
         return 1
     print("WHI12_NEW_FIXTURE_DIGESTS " + ",".join(
         f"{key}:{whi12_digests[key]}" for key in WHI12_NEW_IDS
+    ))
+    whi293_digests = {
+        f["id"]: hashlib.sha256(canonical(f)).hexdigest()
+        for f in current[whi12_start + len(WHI12_NEW_IDS):]
+    }
+    if whi293_digests != WHI293_REVIEW_DIGESTS:
+        print(f"UNEXPECTED_WHI293_REVIEW_FIXTURE_CHANGE {whi293_digests}", file=sys.stderr)
+        return 1
+    print("WHI293_REVIEW_FIXTURE_DIGESTS " + ",".join(
+        f"{key}:{whi293_digests[key]}" for key in WHI293_REVIEW_IDS
     ))
     changed_digests = {
         key: hashlib.sha256(canonical(without_finding_identity(current_by_id[key]))).hexdigest()

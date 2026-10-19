@@ -49,7 +49,7 @@ if (onlyFixture) {
   }
 }
 
-function mockQ(dns, http = {}, nowMs = 1767225600000, dnsCheckingDisabled = {}) {
+function mockQ(dns, http = {}, nowMs = 1767225600000, dnssecProbe = {}) {
   const norm = (name) => name.replace(/\.+$/, "").toLowerCase();
   const map = {};
   for (const [name, records] of Object.entries(dns || {})) map[norm(name)] = records;
@@ -71,18 +71,11 @@ function mockQ(dns, http = {}, nowMs = 1767225600000, dnsCheckingDisabled = {}) 
       : configured;
     return { status, ad: !!entry.ad, error: false };
   };
-  const checkingDisabledMap = {};
-  for (const [name, records] of Object.entries(dnsCheckingDisabled || {})) {
-    checkingDisabledMap[norm(name)] = records;
+  const dnssecProbeMap = {};
+  for (const [name, evidence] of Object.entries(dnssecProbe || {})) {
+    dnssecProbeMap[norm(name)] = evidence;
   }
-  q.queryCheckingDisabled = async (name, rrtype) => {
-    const entry = checkingDisabledMap[norm(name)] || {};
-    const configured = entry.status !== undefined ? entry.status : 0;
-    const status = configured && typeof configured === "object" && !Array.isArray(configured)
-      ? (configured[String(rrtype || "").toUpperCase()] ?? 0)
-      : configured;
-    return status === 0 ? (entry[rrtype] || []) : [];
-  };
+  q.dnssecProbe = async (name) => structuredClone(dnssecProbeMap[norm(name)] || {});
   const response = (name) => http[name] === "unavailable" || http[name] === undefined
     ? null : structuredClone(http[name]);
   const rdapResponse = () => {
@@ -351,7 +344,7 @@ for (const fx of fixtures) {
       fx.input.dns,
       fx.input.http,
       fx.input.nowMs,
-      fx.input.dnsCheckingDisabled,
+      fx.input.dnssecProbe,
     );
     result = await engine.auditDomain(fx.input.domain, q);
     findings = result.findings || [];
