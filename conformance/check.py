@@ -357,6 +357,26 @@ try:
         _absent_lookup_calls, 3)
     chk("WHI-125 real NXDOMAIN does not fetch the policy",
         _absent_policy_fetches, [])
+
+    # WHI-293 — the narrow DNSSEC diagnosis probe must keep checking disabled
+    # and corroborate records through both named public resolvers. This is not a
+    # fallback resolver for the audit; its answers are used only by check_dnssec.
+    resolver.cache_clear()
+    _checking_disabled_calls = []
+
+    def _checking_disabled_run(args, **_kwargs):
+        _checking_disabled_calls.append(args)
+        return _result(_dig_reply(
+            "NOERROR", "dnssec-bogus.invalid", "DNSKEY", ("257 3 13 abcdef",),
+        ))
+
+    resolver.subprocess.run = _checking_disabled_run
+    chk("WHI-293 checking-disabled probe returns corroborated DNSKEY",
+        resolver.query_checking_disabled("dnssec-bogus.invalid", "DNSKEY"),
+        ["257 3 13 abcdef"])
+    chk("WHI-293 checking-disabled probe uses +cd on Cloudflare and Google",
+        [(call[1], call[5]) for call in _checking_disabled_calls],
+        [("+cd", "@1.1.1.1"), ("+cd", "@8.8.8.8")])
 finally:
     resolver.subprocess.run = _resolver_run
     resolver.time.sleep = _resolver_sleep

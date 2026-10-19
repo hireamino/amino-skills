@@ -8,6 +8,7 @@ closed at git show/checkout; the workflow fetches full history for this proof.
 from collections import Counter
 import hashlib
 import importlib.util
+import inspect
 import json
 import os
 from pathlib import Path
@@ -34,6 +35,18 @@ WHI254_NEW_IDS = (
     "mx-provider-psl-distinct",
     "mx-provider-psl-same",
     "dmarc-external-null-organizations",
+)
+WHI290_NEW_IDS = (
+    "inconclusive-tls-rpt-txt-servfail",
+    "inconclusive-bimi-txt-servfail",
+    "inconclusive-dnskey-both-fail",
+    "inconclusive-caa-servfail",
+    "inconclusive-dkim-selector-servfail",
+    "inconclusive-all-lookups-fail",
+    "inconclusive-noncritical-empty-control",
+    "dnssec-validation-failing",
+    "dnssec-signed-validating-control",
+    "spf-failed-include-not-void",
 )
 CHANGED_IDS = (
     "registrable-root-nhs-uk",
@@ -98,6 +111,18 @@ WHI254_NEW_DIGESTS = {
     "mx-provider-psl-distinct": "60b65cbf98a2d4a9fe297923e9edefe2e8c3961a29db2fe7b8b53482b4d2c80a",
     "mx-provider-psl-same": "c708fd612405f8d2027a7bf83095c099292c72a5f58c6eb12a8e1a60bcfd9d63",
     "dmarc-external-null-organizations": "ae6121f6e7f76058d239b051175d42378e3c7b6418dc7243055bfe92a42f4146",
+}
+WHI290_NEW_DIGESTS = {
+    "inconclusive-tls-rpt-txt-servfail": "6c4816940af8d3813b193b950643d7188600f1f35923847ec6cfa37e69d371f1",
+    "inconclusive-bimi-txt-servfail": "8e5a60559f7548c8e08fe9c6a2ea2b7cc7155845160788caa1114f37dfb06165",
+    "inconclusive-dnskey-both-fail": "4ed072ba956addbf42f57667c372ccd3cf985f04ff52f320f8f0525ac7fe9587",
+    "inconclusive-caa-servfail": "dda5b35c84c73cfaa21bbbfe2815eddb9c0c859bc88b42aa80870dafe3f86e81",
+    "inconclusive-dkim-selector-servfail": "2c4a57a0d8bd23495339ef2d35836acedf95257b549d6a1ac6105ddce2df26dc",
+    "inconclusive-all-lookups-fail": "241a7dadff28f7cd7d2122620a9c24fa1c7bf174f0f67905ae122b300212e04f",
+    "inconclusive-noncritical-empty-control": "124d2714ca982d67aedfb8e1a35f28b5ab5c5481dff8712533f48bd04a1c9ce4",
+    "dnssec-validation-failing": "9ef205d55d56688ce229fc8f2f68783173f9b119358198254ca245f5fe681972",
+    "dnssec-signed-validating-control": "26440f23654a3ba685573f7e34a42a69f06a781246bab8a10a4f9ad485fa4864",
+    "spf-failed-include-not-void": "626e9388c7968eb997b249713989c438d3cd34345ba1c3aaf611eafc4e11cc1e",
 }
 CHANGED_DIGESTS = {
     "registrable-root-nhs-uk": "2a0c85be080fae66392e177b9c9de70a0a9f3e5f80f3974718657239541faec4",
@@ -165,7 +190,13 @@ def snapshot(repository, included_ids):
             continue
         runner.NETWORK_ATTEMPTS.clear()
         runner.HTTP_CALLS.clear()
-        runner.install_resolver(fixture["input"].get("dns", {}))
+        if len(inspect.signature(runner.install_resolver).parameters) == 1:
+            runner.install_resolver(fixture["input"].get("dns", {}))
+        else:
+            runner.install_resolver(
+                fixture["input"].get("dns", {}),
+                fixture["input"].get("dnsCheckingDisabled", {}),
+            )
         runner.install_http(fixture["input"]["domain"], fixture["input"].get("http", {}))
         now_ms = fixture["input"].get("nowMs")
         runner.audit.time.time = runner.REAL_TIME if now_ms is None else lambda: now_ms / 1000
@@ -200,13 +231,13 @@ def main():
     current_document = json.loads((ROOT / FIXTURES_PATH).read_text(encoding="utf-8"))
     base = base_document["fixtures"]
     current = current_document["fixtures"]
-    if set(base_document) != set(current_document) or len(base) != 66 or len(current) != 77:
+    if set(base_document) != set(current_document) or len(base) != 66 or len(current) != 87:
         print("UNEXPECTED_FIXTURE_SHAPE", file=sys.stderr)
         return 1
     if [f["id"] for f in current[:len(base)]] != [f["id"] for f in base]:
         print("UNEXPECTED_EXISTING_FIXTURE_ORDER", file=sys.stderr)
         return 1
-    if tuple(f["id"] for f in current[len(base):]) != NEW_IDS + WHI254_NEW_IDS:
+    if tuple(f["id"] for f in current[len(base):]) != NEW_IDS + WHI254_NEW_IDS + WHI290_NEW_IDS:
         print("UNEXPECTED_NEW_FIXTURE_IDS", file=sys.stderr)
         return 1
 
@@ -252,20 +283,30 @@ def main():
     table_same = git_show(TABLE_PATH) == (ROOT / TABLE_PATH).read_bytes()
     print(
         f"FIXTURE_CHANGE_PROOF existing={len(base)} changed={len(CHANGED_IDS)} "
-        f"added={len(NEW_IDS) + len(WHI254_NEW_IDS)} "
+        f"added={len(NEW_IDS) + len(WHI254_NEW_IDS) + len(WHI290_NEW_IDS)} "
         "allowed_existing_changes=one parent observation each "
         f"address_table_unchanged={str(table_same).lower()}"
     )
     print("NEW_FIXTURE_DIGESTS " + ",".join(f"{key}:{digests[key]}" for key in NEW_IDS))
     whi254_digests = {
         f["id"]: hashlib.sha256(canonical(f)).hexdigest()
-        for f in current[len(base) + len(NEW_IDS):]
+        for f in current[len(base) + len(NEW_IDS):len(base) + len(NEW_IDS) + len(WHI254_NEW_IDS)]
     }
     if whi254_digests != WHI254_NEW_DIGESTS:
         print(f"UNEXPECTED_WHI254_FIXTURE_CHANGE {whi254_digests}", file=sys.stderr)
         return 1
     print("WHI254_NEW_FIXTURE_DIGESTS " + ",".join(
         f"{key}:{whi254_digests[key]}" for key in WHI254_NEW_IDS
+    ))
+    whi290_digests = {
+        f["id"]: hashlib.sha256(canonical(f)).hexdigest()
+        for f in current[len(base) + len(NEW_IDS) + len(WHI254_NEW_IDS):]
+    }
+    if whi290_digests != WHI290_NEW_DIGESTS:
+        print(f"UNEXPECTED_WHI290_FIXTURE_CHANGE {whi290_digests}", file=sys.stderr)
+        return 1
+    print("WHI290_NEW_FIXTURE_DIGESTS " + ",".join(
+        f"{key}:{whi290_digests[key]}" for key in WHI290_NEW_IDS
     ))
     changed_digests = {
         key: hashlib.sha256(canonical(current_by_id[key])).hexdigest()

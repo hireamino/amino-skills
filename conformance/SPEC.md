@@ -1,4 +1,4 @@
-# Amino Deliverability — Correctness Conformance Spec (v1.18)
+# Amino Deliverability — Correctness Conformance Spec (v1.20)
 
 **Status:** proposed · **Owner:** hireamino · **Canonical home:** `amino-skills/conformance/`
 
@@ -54,6 +54,38 @@ review. The corpus has no expectation regeneration mode; reviewed answers cannot
 replaced by current output.
 
 ## Current status
+
+**v1.20 / WHI-290 + WHI-293 — absence provenance and broken-DNSSEC
+diagnosis:** every absence finding whose own DNS lookup failed now carries the
+same additive `unconfirmed` reason used by the v1.19 critical-lookup contract.
+TLS-RPT depends first on `_smtp._tls.<domain>` TXT and then on apex MX; BIMI on
+`default._bimi.<domain>` TXT; DNSSEC on apex DNSKEY; CAA on apex CAA; and DKIM
+on the first failed selector in probe order before any shared inputs. A
+finding's own lookup has precedence when multiple dependencies fail.
+Authoritative NOERROR/NODATA and NXDOMAIN remain conclusive absence. These
+additional failures do not widen the result-level `inconclusive` set, which
+remains apex TXT, `_dmarc` TXT and apex MX only. A failed SPF include lookup is
+not an authoritative void response and does not count toward the void-lookup
+limit.
+
+When an ordinary validating apex DNSKEY lookup fails, the Python skill makes a
+narrow diagnosis probe with DNSSEC checking disabled: `dig +cd` against both
+`@1.1.1.1` and `@8.8.8.8`. Only DNSKEY records returned by both resolvers
+replace `DNSSEC not enabled` with the critical `DNSSEC validation is failing`
+finding. If either checking-disabled query fails or returns no DNSKEY, the
+ordinary absence finding remains and is marked `unconfirmed`; a normally
+validating signed answer remains `DNSSEC enabled`. Checking-disabled records
+never enter the ordinary resolver cache and the rest of the audit is never
+rerun with checking disabled.
+
+Fixtures may declare an optional `input.dnsCheckingDisabled` map, consumed by
+both corpus runners only through the checking-disabled DNS seam. Ten new rows
+bind the five independent absence dependencies, all-fail precedence,
+authoritative-empty control, bogus/signed/both-fail DNSSEC cases and the SPF
+failed-include boundary. The corpus is now 87 rows: 82 pass and 5 remain
+intentional skips on the Python surface. Eleven new source-mutation canaries
+bring the Python total from 75 to 86 and bind every mapping, precedence,
+negative control, DNSSEC branch, SPF boundary and two-resolver `+cd` probe.
 
 **v1.19 / WHI-280 — per-finding inconclusive precision:** when one of the three
 critical DNS lookups fails, only findings whose verdict depends on that lookup
@@ -462,12 +494,12 @@ The web and Action pin files must name the same full amino-skills commit before 
 
 ## Fixtures
 
-See `fixtures.json`. It contains 77 known-answer cases: 72 executable contract
+See `fixtures.json`. It contains 87 known-answer cases: 82 executable contract
 cases and five explicitly skipped pure/HTTP/wrapper cases covered by per-surface
 tests or later work. Eight WHI-215 rows additionally assert the exact registrable
 root and the DMARC tree-walk boundary. Each fixture is language-neutral and every
 harness adapts it to its own resolver/HTTP mock without ambient network access.
-Step 2 gates the Python runner with 71 mutation canaries plus two independent
+Step 2 gates the Python runner with 86 mutation canaries plus two independent
 public-suffix adoption canaries. The JavaScript surface already gates its
 embedded artifact, official vectors and mutation proof; WHI-254 activates the
 widened cross-runtime differential after its normalization contract matches the

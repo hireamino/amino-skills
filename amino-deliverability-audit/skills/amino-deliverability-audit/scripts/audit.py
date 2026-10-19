@@ -26,6 +26,7 @@ from concurrent.futures import ThreadPoolExecutor
 from resolver import query as dig  # pluggable DNS (dig backend locally; DoH at the edge)
 from resolver import query_fresh   # uncached re-query, for confirming critical absences
 from resolver import meta as dns_meta  # DNSSEC/rcode side-channel (AD bit) for DANE/DNSSEC
+from resolver import query_checking_disabled as dns_checking_disabled
 
 # Input is untrusted (any domain, incl. from the future public web tool). Validate it as
 # a real DNS hostname before it flows into dig args / socket connects / name construction.
@@ -288,6 +289,45 @@ def critical_lookup_failures(domain):
     return failures
 
 
+def _lookup_failure(name, rrtype):
+    """Return the shared lookup-failure reason, or None for authoritative data."""
+    metadata = dns_meta(name, rrtype)
+    status = metadata.get("status")
+    if not metadata.get("error") and status not in (2, 5):
+        return None
+    reason = "SERVFAIL/REFUSED" if status in (2, 5) else "lookup error"
+    return (name, rrtype, f"{rrtype} {name}: {reason}")
+
+
+def finding_lookup_failures(domain, critical_failures=None):
+    """Return failures that can make an absence finding uncertain.
+
+    The order is the output contract: a finding's own record lookup wins over
+    its inputs, and DKIM names the first failed selector in probe order.
+    """
+    failures = []
+    for name, rrtype in (
+        (f"_smtp._tls.{domain}", "TXT"),
+        (f"default._bimi.{domain}", "TXT"),
+        (domain, "DNSKEY"),
+        (domain, "CAA"),
+    ):
+        failure = _lookup_failure(name, rrtype)
+        if failure:
+            failures.append(failure)
+
+    for selector in dkim_candidates(domain):
+        failure = _lookup_failure(f"{selector}._domainkey.{domain}", "TXT")
+        if failure:
+            failures.append(failure)
+            break
+    failures.extend(
+        critical_lookup_failures(domain)
+        if critical_failures is None else critical_failures
+    )
+    return failures
+
+
 def inconclusive_state(domain, lookup_failures=None):
     """Return the shipping audit's one critical-DNS uncertainty decision."""
     failures = (critical_lookup_failures(domain)
@@ -308,11 +348,18 @@ def mark_unconfirmed_findings(domain, findings, lookup_failures):
             ("MTA-STS", "No MTA-STS policy"),
             ("TLS-RPT", "No TLS-RPT"),
         },
+        (f"_smtp._tls.{domain}", "TXT"): {("TLS-RPT", "No TLS-RPT")},
+        (f"default._bimi.{domain}", "TXT"): {("BIMI", "No BIMI")},
+        (domain, "DNSKEY"): {("DNSSEC", "DNSSEC not enabled")},
+        (domain, "CAA"): {("CAA", "No CAA records")},
     }
     for name, rrtype, reason in lookup_failures:
         affected = dependencies.get((name, rrtype), set())
+        if rrtype == "TXT" and name.endswith(f"._domainkey.{domain}"):
+            affected = {("DKIM", "DKIM not found at common/provider selectors")}
         for finding in findings:
-            if (finding.get("area"), finding.get("title")) in affected:
+            if ((finding.get("area"), finding.get("title")) in affected
+                    and "unconfirmed" not in finding):
                 finding["unconfirmed"] = reason
 
 
@@ -324,7 +371,11 @@ def is_void(name):
     domains add ~0 queries. A live SPF include always publishes a TXT record."""
     if dig(name, "TXT"):
         return False
-    return not dig(name, "A")
+    if dns_meta(name, "TXT").get("error"):
+        return False
+    if dig(name, "A"):
+        return False
+    return not dns_meta(name, "A").get("error")
 
 
 def first_txt(name, prefix):
@@ -1310,6 +1361,12 @@ def check_dnssec(domain, F):
     if signed:
         F.append(dict(area="DNSSEC", severity="pass", title="DNSSEC enabled",
                       detail="The zone is DNSSEC-signed and answers validate.", fix=None))
+    elif _lookup_failure(domain, "DNSKEY") and dns_checking_disabled(domain, "DNSKEY"):
+        F.append(dict(
+            area="DNSSEC", severity="critical", title="DNSSEC validation is failing",
+            detail="This domain is DNSSEC-signed, but its signatures fail validation. Receivers that validate DNSSEC can't resolve this domain's MX or check its SPF, DKIM or DMARC records.",
+            fix="Your DNSSEC signatures don't validate. Fix the DS record at your registrar or re-sign the zone at your DNS provider. If you can't fix it quickly, remove the DS record so the domain resolves unsigned.",
+        ))
     else:
         F.append(dict(area="DNSSEC", severity="low", title="DNSSEC not enabled",
                       detail="DNS answers for this domain aren't cryptographically signed/validated — and DANE can't be used without it. A trust/security gap more than a deliverability one.",
@@ -1676,7 +1733,9 @@ def main():
     # The resolver records the final metadata after its existing retry policy.
     lookup_failures = critical_lookup_failures(domain)
     inconclusive, inconclusive_reason = inconclusive_state(domain, lookup_failures)
-    mark_unconfirmed_findings(domain, F, lookup_failures)
+    mark_unconfirmed_findings(
+        domain, F, finding_lookup_failures(domain, lookup_failures)
+    )
     print(json.dumps({
         "domain": domain,
         "primary_mx": mx_host,

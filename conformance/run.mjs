@@ -49,7 +49,7 @@ if (onlyFixture) {
   }
 }
 
-function mockQ(dns, http = {}, nowMs = 1767225600000) {
+function mockQ(dns, http = {}, nowMs = 1767225600000, dnsCheckingDisabled = {}) {
   const norm = (name) => name.replace(/\.+$/, "").toLowerCase();
   const map = {};
   for (const [name, records] of Object.entries(dns || {})) map[norm(name)] = records;
@@ -70,6 +70,18 @@ function mockQ(dns, http = {}, nowMs = 1767225600000) {
       ? (configured[String(rrtype || "").toUpperCase()] ?? 0)
       : configured;
     return { status, ad: !!entry.ad, error: false };
+  };
+  const checkingDisabledMap = {};
+  for (const [name, records] of Object.entries(dnsCheckingDisabled || {})) {
+    checkingDisabledMap[norm(name)] = records;
+  }
+  q.queryCheckingDisabled = async (name, rrtype) => {
+    const entry = checkingDisabledMap[norm(name)] || {};
+    const configured = entry.status !== undefined ? entry.status : 0;
+    const status = configured && typeof configured === "object" && !Array.isArray(configured)
+      ? (configured[String(rrtype || "").toUpperCase()] ?? 0)
+      : configured;
+    return status === 0 ? (entry[rrtype] || []) : [];
   };
   const response = (name) => http[name] === "unavailable" || http[name] === undefined
     ? null : structuredClone(http[name]);
@@ -318,7 +330,12 @@ for (const fx of fixtures) {
   let findings;
   let score;
   try {
-    const q = mockQ(fx.input.dns, fx.input.http, fx.input.nowMs);
+    const q = mockQ(
+      fx.input.dns,
+      fx.input.http,
+      fx.input.nowMs,
+      fx.input.dnsCheckingDisabled,
+    );
     result = await engine.auditDomain(fx.input.domain, q);
     findings = result.findings || [];
     score = await engine.buckets(fx.input.domain, q);

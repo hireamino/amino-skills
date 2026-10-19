@@ -66,7 +66,7 @@ def _norm(name):
     return name.rstrip(".").lower()
 
 
-def install_resolver(dns):
+def install_resolver(dns, dns_checking_disabled=None):
     """Install one fixture's DNS in audit and every batch_score import binding."""
     records = {_norm(name): value for name, value in (dns or {}).items()}
 
@@ -97,11 +97,25 @@ def install_resolver(dns):
             status = status.get(rtype.upper(), 0)
         return resolver.normalized_meta(status, entry.get("ad", False))
 
+    checking_disabled_records = {
+        _norm(name): value
+        for name, value in (dns_checking_disabled or {}).items()
+    }
+
+    def checking_disabled(name, rtype="DNSKEY"):
+        entry = checking_disabled_records.get(_norm(name), {})
+        status = entry.get("status", 0)
+        if isinstance(status, dict):
+            status = status.get(rtype.upper(), 0)
+        metadata = resolver.normalized_meta(status, entry.get("ad", False))
+        return entry.get(rtype, []) if not metadata["error"] else []
+
     audit.dig = recs
     audit.query_fresh = recs
     audit.first_txt = first_txt
     audit.confirm_txt = lambda name, prefix: first_txt(name, prefix)
     audit.dns_meta = dns_meta
+    audit.dns_checking_disabled = checking_disabled
 
     # batch_score imports these names from audit at module load. Rebind every one
     # so the scorer cannot silently escape the fixture resolver.
@@ -487,7 +501,10 @@ def run():
 
         NETWORK_ATTEMPTS.clear()
         HTTP_CALLS.clear()
-        install_resolver(fx["input"].get("dns", {}))
+        install_resolver(
+            fx["input"].get("dns", {}),
+            fx["input"].get("dnsCheckingDisabled", {}),
+        )
         install_http(fx["input"]["domain"], fx["input"].get("http", {}))
         now_ms = fx["input"].get("nowMs")
         audit.time.time = REAL_TIME if now_ms is None else lambda: now_ms / 1000
