@@ -110,8 +110,15 @@ function expectedFindings(fx, surface) {
   const expected = [];
   let notApplicable = 0;
   for (const finding of fx.expect.findings) {
-    for (const field of ["area", "title", "severity", "lane", "action", "fixIncludes"]) {
+    for (const field of ["rule_id", "discriminator", "area", "title", "severity", "lane", "action", "fixIncludes"]) {
       if (!own(finding, field)) throw new Error(`${fx.id}.expect.findings missing ${field}`);
+    }
+    if (typeof finding.rule_id !== "string"
+        || !/^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$/.test(finding.rule_id)) {
+      throw new Error(`${fx.id}.findings[${findingLabel(finding)}].rule_id: invalid contract value ${shown(finding.rule_id)}`);
+    }
+    if (typeof finding.discriminator !== "string") {
+      throw new Error(`${fx.id}.findings[${findingLabel(finding)}].discriminator: expected a string`);
     }
     if (!LANES.has(finding.lane)) {
       throw new Error(`${fx.id}.findings[${findingLabel(finding)}].lane: unknown contract value ${shown(finding.lane)}`);
@@ -177,6 +184,8 @@ function compareContract(fx, result, score, surface, ledger) {
   const expectedKeys = new Set();
   for (const wanted of expected) {
     ledger.identity++;
+    ledger.rule_id++;
+    ledger.discriminator++;
     ledger.severity++;
     ledger.action++;
     ledger.fix++;
@@ -197,6 +206,12 @@ function compareContract(fx, result, score, surface, ledger) {
     if (!actual) {
       problems.push(`findings[${findingLabel(wanted)}].identity: expected finding, got missing`);
       continue;
+    }
+    if (actual.rule_id !== wanted.rule_id) {
+      problems.push(`findings[${findingLabel(wanted)}].rule_id: expected ${shown(wanted.rule_id)}, got ${shown(actual.rule_id)}`);
+    }
+    if (actual.discriminator !== wanted.discriminator) {
+      problems.push(`findings[${findingLabel(wanted)}].discriminator: expected ${shown(wanted.discriminator)}, got ${shown(actual.discriminator)}`);
     }
     if (actual.severity !== wanted.severity) {
       problems.push(`findings[${findingLabel(wanted)}].severity: expected ${shown(wanted.severity)}, got ${shown(actual.severity)}`);
@@ -290,10 +305,12 @@ function compareContract(fx, result, score, surface, ledger) {
 }
 
 function assertionPlan(surface) {
-  const plan = { identity: 0, severity: 0, action: 0, fix: 0, lane: 0, unconfirmed: 0, detail: 0, effort: 0, value: 0, scoreFields: 0, closedWorld: 0, observations: 0, inconclusive: 0, inconclusiveReason: 0, registrableRoot: 0 };
+  const plan = { identity: 0, rule_id: 0, discriminator: 0, severity: 0, action: 0, fix: 0, lane: 0, unconfirmed: 0, detail: 0, effort: 0, value: 0, scoreFields: 0, closedWorld: 0, observations: 0, inconclusive: 0, inconclusiveReason: 0, registrableRoot: 0 };
   for (const fx of fixtures.filter((fixture) => CONTRACT_MODES.has(fixture.mode))) {
     const { expected } = expectedFindings(fx, surface);
     plan.identity += expected.length;
+    plan.rule_id += expected.length;
+    plan.discriminator += expected.length;
     plan.severity += expected.length;
     plan.action += expected.length;
     plan.fix += expected.length;
@@ -317,7 +334,7 @@ let fail = 0;
 let skip = 0;
 let notApplicable = 0;
 const failures = [];
-const ledger = { identity: 0, severity: 0, action: 0, fix: 0, lane: 0, unconfirmed: 0, detail: 0, effort: 0, value: 0, scoreFields: 0, closedWorld: 0, observations: 0, inconclusive: 0, inconclusiveReason: 0, registrableRoot: 0 };
+const ledger = { identity: 0, rule_id: 0, discriminator: 0, severity: 0, action: 0, fix: 0, lane: 0, unconfirmed: 0, detail: 0, effort: 0, value: 0, scoreFields: 0, closedWorld: 0, observations: 0, inconclusive: 0, inconclusiveReason: 0, registrableRoot: 0 };
 
 for (const fx of fixtures) {
   if (!CONTRACT_MODES.has(fx.mode)) {

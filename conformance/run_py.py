@@ -216,9 +216,22 @@ def expected_findings(fx):
     expected = []
     not_applicable = 0
     for finding in findings:
-        for field in ("area", "title", "severity", "lane", "action", "fixIncludes"):
+        for field in (
+                "rule_id", "discriminator", "area", "title", "severity", "lane",
+                "action", "fixIncludes"):
             if field not in finding:
                 raise AssertionError(f"{fx['id']}.expect.findings missing {field}")
+        if not isinstance(finding["rule_id"], str) or not audit.RULE_ID_RE.fullmatch(
+                finding["rule_id"]):
+            raise AssertionError(
+                f"{fx['id']}.findings[{finding_label(finding)}].rule_id: "
+                f"invalid contract value {finding['rule_id']!r}"
+            )
+        if not isinstance(finding["discriminator"], str):
+            raise AssertionError(
+                f"{fx['id']}.findings[{finding_label(finding)}].discriminator: "
+                "expected a string"
+            )
         if finding["lane"] not in LANES:
             raise AssertionError(
                 f"{fx['id']}.findings[{finding_label(finding)}].lane: "
@@ -294,7 +307,9 @@ def compare_contract(fx, result, score, ledger):
 
     expected_keys = set()
     for wanted in expected:
-        for field in ("identity", "severity", "action", "fix", "lane", "unconfirmed"):
+        for field in (
+                "identity", "rule_id", "discriminator", "severity", "action", "fix",
+                "lane", "unconfirmed"):
             ledger[field] += 1
         if "detail" in wanted:
             ledger["detail"] += 1
@@ -314,6 +329,17 @@ def compare_contract(fx, result, score, ledger):
                 f"findings[{finding_label(wanted)}].identity: expected finding, got missing"
             )
             continue
+        if actual.get("rule_id") != wanted["rule_id"]:
+            problems.append(
+                f"findings[{finding_label(wanted)}].rule_id: "
+                f"expected {wanted['rule_id']!r}, got {actual.get('rule_id')!r}"
+            )
+        if actual.get("discriminator") != wanted["discriminator"]:
+            problems.append(
+                f"findings[{finding_label(wanted)}].discriminator: "
+                f"expected {wanted['discriminator']!r}, "
+                f"got {actual.get('discriminator')!r}"
+            )
         if actual.get("severity") != wanted["severity"]:
             problems.append(
                 f"findings[{finding_label(wanted)}].severity: "
@@ -438,7 +464,8 @@ def compare_contract(fx, result, score, ledger):
 
 def assertion_plan(fixtures):
     plan = {
-        "identity": 0, "severity": 0, "action": 0, "fix": 0, "lane": 0,
+        "identity": 0, "rule_id": 0, "discriminator": 0,
+        "severity": 0, "action": 0, "fix": 0, "lane": 0,
         "unconfirmed": 0,
         "detail": 0, "effort": 0, "value": 0,
         "scoreFields": 0, "closedWorld": 0, "observations": 0,
@@ -448,7 +475,9 @@ def assertion_plan(fixtures):
         if fx.get("mode") not in CONTRACT_MODES:
             continue
         expected, _ = expected_findings(fx)
-        for field in ("identity", "severity", "action", "fix", "lane", "unconfirmed"):
+        for field in (
+                "identity", "rule_id", "discriminator", "severity", "action", "fix",
+                "lane", "unconfirmed"):
             plan[field] += len(expected)
         plan["detail"] += sum("detail" in finding for finding in expected)
         plan["effort"] += sum("effort" in finding for finding in expected)
@@ -483,7 +512,8 @@ def run():
     passed = failed = skipped = not_applicable = 0
     failures = []
     ledger = {
-        "identity": 0, "severity": 0, "action": 0, "fix": 0, "lane": 0,
+        "identity": 0, "rule_id": 0, "discriminator": 0,
+        "severity": 0, "action": 0, "fix": 0, "lane": 0,
         "unconfirmed": 0,
         "detail": 0, "effort": 0, "value": 0,
         "scoreFields": 0, "closedWorld": 0, "observations": 0,

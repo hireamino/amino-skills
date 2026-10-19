@@ -437,8 +437,8 @@ try:
         source = audit_path.read_text(encoding="utf-8")
         source = replace_exactly_once(
             source,
-            'F.append(dict(area="SPF", severity="high", title="No SPF record",',
-            'F.append(dict(area="SPF", severity="low", title="No SPF record",',
+            'F.append(finding("spf.missing", area="SPF", severity="high", title="No SPF record",',
+            'F.append(finding("spf.missing", area="SPF", severity="low", title="No SPF record",',
             "severity",
         )
         audit_path.write_text(source, encoding="utf-8")
@@ -1689,6 +1689,41 @@ try:
     )
     whi293_resolver_canary()
 
+    require_green("WHI-12 every emit site declares rule identity", execute_check())
+    with tempfile.TemporaryDirectory(prefix="amino-whi12-source-identity-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py", "verify.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            'F.append(finding("spf.multiple_records", area="SPF"',
+            'F.append(dict(area="SPF"',
+            "WHI-12 remove one emit-site identity",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red_comparison(
+            "WHI-12 dropping one emit-site rule_id is rejected by source inventory",
+            execute_check_with_scripts(target),
+            "FAIL WHI-12 every finding emit declares stable identity",
+        )
+
+    whi290_audit_canary(
+        "WHI-12 live SPF values cannot become rule identity",
+        "finding-id-spf-lookup-12",
+        [('F.append(finding("spf.lookup_limit", area="SPF",',
+          'F.append(finding(f"spf.lookup_limit_n{n}", area="SPF",')],
+        "finding-id-spf-lookup-12.findings[SPF|SPF exceeds 10 DNS lookups (12)].rule_id: expected 'spf.lookup_limit', got 'spf.lookup_limit_n12'",
+    )
+    whi290_audit_canary(
+        "WHI-12 DKIM selectors cannot collapse to one discriminator",
+        "finding-id-dkim-google-selector",
+        [('F.append(finding("dkim.present", discriminator=selector,',
+          'F.append(finding("dkim.present", discriminator="",')],
+        "finding-id-dkim-google-selector.findings[DKIM|DKIM present (DKIM google (RSA-2048))].discriminator: expected 'google', got ''",
+    )
+
     whi251_dmarc_canary(
         "WHI-251 no-psd parent is never effective", "registrable-root-nhs-uk",
         '            if psd == "y":\n',
@@ -1822,8 +1857,8 @@ except Exception as error:
     print(f"FAIL  canary setup — {error}")
     FAILED += 1
 
-print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 86 cases.")
-if PASSED + FAILED != 86:
-    print(f"FAIL  canary count: expected 86, got {PASSED + FAILED}", file=sys.stderr)
+print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 89 cases.")
+if PASSED + FAILED != 89:
+    print(f"FAIL  canary count: expected 89, got {PASSED + FAILED}", file=sys.stderr)
     sys.exit(1)
 sys.exit(1 if FAILED else 0)

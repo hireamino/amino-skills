@@ -1,4 +1,4 @@
-# Amino Deliverability — Correctness Conformance Spec (v1.20)
+# Amino Deliverability — Correctness Conformance Spec (v1.21)
 
 **Status:** proposed · **Owner:** hireamino · **Canonical home:** `amino-skills/conformance/`
 
@@ -31,6 +31,9 @@ another surface or a regenerated snapshot. For every `dns-engine` or
 - `present` and `absent` retain the original positive/negative guards;
 - `findings` is a closed list: missing, duplicate, and additional findings fail;
 - finding identity, severity, lane, action, and fix substring are asserted;
+- every finding carries an exact namespaced `rule_id` plus a string
+  `discriminator`; the rule is stable across title/value changes, and the
+  discriminator is empty unless multiple real instances of that rule can exist;
 - every finding is asserted for the presence or absence of the additive
   `unconfirmed` lookup-reason marker;
 - every non-pass expected finding must declare a non-null fix substring;
@@ -54,6 +57,25 @@ review. The corpus has no expectation regeneration mode; reviewed answers cannot
 replaced by current output.
 
 ## Current status
+
+**v1.21 / WHI-12 Part A — stable finding lifecycle identity:** every finding
+emit site now declares a namespaced `rule_id` that is independent of mutable
+title text and live values, plus a `discriminator` (`""` for one-per-asset
+rules). Selector-scoped DKIM rules use the normalized selector. The existing
+grouped external DMARC report-authorization finding uses its sorted destination
+set; splitting that display finding is outside this additive contract change.
+The complete source inventory has 59 emit sites and 57 declared rule IDs: the
+reviewed table's 56 plus `transport.starttls_present`, which the table omitted
+although the skill already emitted the successful STARTTLS row. No title,
+severity, lane, action, remedy, score, ordering or consumer display changes.
+
+Three rows bind identity separately from display: SPF lookup counts 12 and 13
+share `spf.lookup_limit`, while selectors `selector1` and `google` produce
+different `dkim.present` discriminators. Every expected finding asserts both
+fields closed-world on both runners. Three source mutations make the emit-site
+inventory, title/value independence and selector discriminator load-bearing.
+The corpus is now 90 rows: 85 executable cases and five intentional skips on
+the Python surface; the Python mutation total is 89.
 
 **v1.20 / WHI-290 + WHI-293 — absence provenance and broken-DNSSEC
 diagnosis:** every absence finding whose own DNS lookup failed now carries the
@@ -494,12 +516,12 @@ The web and Action pin files must name the same full amino-skills commit before 
 
 ## Fixtures
 
-See `fixtures.json`. It contains 87 known-answer cases: 82 executable contract
+See `fixtures.json`. It contains 90 known-answer cases: 85 executable contract
 cases and five explicitly skipped pure/HTTP/wrapper cases covered by per-surface
 tests or later work. Eight WHI-215 rows additionally assert the exact registrable
 root and the DMARC tree-walk boundary. Each fixture is language-neutral and every
 harness adapts it to its own resolver/HTTP mock without ambient network access.
-Step 2 gates the Python runner with 86 mutation canaries plus two independent
+Step 2 gates the Python runner with 89 mutation canaries plus two independent
 public-suffix adoption canaries. The JavaScript surface already gates its
 embedded artifact, official vectors and mutation proof; WHI-254 activates the
 widened cross-runtime differential after its normalization contract matches the
