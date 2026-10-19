@@ -115,7 +115,10 @@ WHI254_NEW_DIGESTS = {
 WHI290_NEW_DIGESTS = {
     "inconclusive-tls-rpt-txt-servfail": "6c4816940af8d3813b193b950643d7188600f1f35923847ec6cfa37e69d371f1",
     "inconclusive-bimi-txt-servfail": "8e5a60559f7548c8e08fe9c6a2ea2b7cc7155845160788caa1114f37dfb06165",
-    "inconclusive-dnskey-both-fail": "4ed072ba956addbf42f57667c372ccd3cf985f04ff52f320f8f0525ac7fe9587",
+    "inconclusive-dnskey-both-fail": (
+        "4ed072ba956addbf42f57667c372ccd3c"
+        "f985f04ff52f320f8f0525ac7fe9587"
+    ),
     "inconclusive-caa-servfail": "dda5b35c84c73cfaa21bbbfe2815eddb9c0c859bc88b42aa80870dafe3f86e81",
     "inconclusive-dkim-selector-servfail": "2c4a57a0d8bd23495339ef2d35836acedf95257b549d6a1ac6105ddce2df26dc",
     "inconclusive-all-lookups-fail": "241a7dadff28f7cd7d2122620a9c24fa1c7bf174f0f67905ae122b300212e04f",
