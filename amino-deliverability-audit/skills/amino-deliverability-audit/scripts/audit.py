@@ -26,6 +26,7 @@ from concurrent.futures import ThreadPoolExecutor
 from resolver import query as dig  # pluggable DNS (dig backend locally; DoH at the edge)
 from resolver import query_fresh   # uncached re-query, for confirming critical absences
 from resolver import meta as dns_meta  # DNSSEC/rcode side-channel (AD bit) for DANE/DNSSEC
+from resolver import query_dnssec_probe as dnssec_probe
 
 # Input is untrusted (any domain, incl. from the future public web tool). Validate it as
 # a real DNS hostname before it flows into dig args / socket connects / name construction.
@@ -54,6 +55,16 @@ AREA_LANES = {
     "Reputation": "domain_posture",
 }
 OBSERVATION_STATES = ("checked", "unavailable", "not_applicable")
+RULE_ID_RE = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
+
+
+def finding(rule_id, *, discriminator="", **fields):
+    """Build one finding with stable, title-independent lifecycle identity."""
+    if not isinstance(rule_id, str) or not RULE_ID_RE.fullmatch(rule_id):
+        raise ValueError(f"invalid finding rule_id: {rule_id!r}")
+    if not isinstance(discriminator, str):
+        raise ValueError("finding discriminator must be a string")
+    return {"rule_id": rule_id, "discriminator": discriminator, **fields}
 
 
 def lane_for_area(area):
@@ -288,6 +299,45 @@ def critical_lookup_failures(domain):
     return failures
 
 
+def _lookup_failure(name, rrtype):
+    """Return the shared lookup-failure reason, or None for authoritative data."""
+    metadata = dns_meta(name, rrtype)
+    status = metadata.get("status")
+    if not metadata.get("error") and status not in (2, 5):
+        return None
+    reason = "SERVFAIL/REFUSED" if status in (2, 5) else "lookup error"
+    return (name, rrtype, f"{rrtype} {name}: {reason}")
+
+
+def finding_lookup_failures(domain, critical_failures=None):
+    """Return failures that can make an absence finding uncertain.
+
+    The order is the output contract: a finding's own record lookup wins over
+    its inputs, and DKIM names the first failed selector in probe order.
+    """
+    failures = []
+    for name, rrtype in (
+        (f"_smtp._tls.{domain}", "TXT"),
+        (f"default._bimi.{domain}", "TXT"),
+        (domain, "DNSKEY"),
+        (domain, "CAA"),
+    ):
+        failure = _lookup_failure(name, rrtype)
+        if failure:
+            failures.append(failure)
+
+    for selector in dkim_candidates(domain):
+        failure = _lookup_failure(f"{selector}._domainkey.{domain}", "TXT")
+        if failure:
+            failures.append(failure)
+            break
+    failures.extend(
+        critical_lookup_failures(domain)
+        if critical_failures is None else critical_failures
+    )
+    return failures
+
+
 def inconclusive_state(domain, lookup_failures=None):
     """Return the shipping audit's one critical-DNS uncertainty decision."""
     failures = (critical_lookup_failures(domain)
@@ -308,11 +358,18 @@ def mark_unconfirmed_findings(domain, findings, lookup_failures):
             ("MTA-STS", "No MTA-STS policy"),
             ("TLS-RPT", "No TLS-RPT"),
         },
+        (f"_smtp._tls.{domain}", "TXT"): {("TLS-RPT", "No TLS-RPT")},
+        (f"default._bimi.{domain}", "TXT"): {("BIMI", "No BIMI")},
+        (domain, "DNSKEY"): {("DNSSEC", "DNSSEC not enabled")},
+        (domain, "CAA"): {("CAA", "No CAA records")},
     }
     for name, rrtype, reason in lookup_failures:
         affected = dependencies.get((name, rrtype), set())
+        if rrtype == "TXT" and name.endswith(f"._domainkey.{domain}"):
+            affected = {("DKIM", "DKIM not found at common/provider selectors")}
         for finding in findings:
-            if (finding.get("area"), finding.get("title")) in affected:
+            if ((finding.get("area"), finding.get("title")) in affected
+                    and "unconfirmed" not in finding):
                 finding["unconfirmed"] = reason
 
 
@@ -324,7 +381,11 @@ def is_void(name):
     domains add ~0 queries. A live SPF include always publishes a TXT record."""
     if dig(name, "TXT"):
         return False
-    return not dig(name, "A")
+    if dns_meta(name, "TXT").get("error"):
+        return False
+    if dig(name, "A"):
+        return False
+    return not dns_meta(name, "A").get("error")
 
 
 def first_txt(name, prefix):
@@ -513,46 +574,46 @@ def effective_terminator(domain, seen=None, depth=0):
 def check_spf(domain, F):
     spf_records = [r for r in dig(domain, "TXT") if r.lower().startswith("v=spf1")]
     if len(spf_records) > 1:
-        F.append(dict(area="SPF", severity="high", title="Multiple SPF records (invalid)",
+        F.append(finding("spf.multiple_records", area="SPF", severity="high", title="Multiple SPF records (invalid)",
                       detail=f"{len(spf_records)} v=spf1 records are published at the apex. RFC 7208 allows only one — receivers treat multiple as a PermError, so SPF fails entirely.",
                       fix="Merge them into a single v=spf1 record."))
     spf = confirm_txt(domain, "v=spf1")
     if not spf:
-        F.append(dict(area="SPF", severity="high", title="No SPF record",
+        F.append(finding("spf.missing", area="SPF", severity="high", title="No SPF record",
                       detail="No v=spf1 TXT record at the apex. Receivers can't verify which hosts may send for this domain; alignment-based DMARC pass via SPF is impossible.",
                       fix='Add a TXT record at the apex: "v=spf1 include:<your-ESP> -all" (replace include with your sending providers; end with -all once confident).'))
         return
     q = effective_terminator(domain)  # -/~/?/+ or None
     if q is None:
-        F.append(dict(area="SPF", severity="medium", title="SPF has no `all` mechanism",
+        F.append(finding("spf.no_all", area="SPF", severity="medium", title="SPF has no `all` mechanism",
                       detail="Without a terminating all qualifier, SPF gives receivers no default disposition.",
                       fix='End the SPF record with -all (hard fail) or at least ~all (soft fail).'))
     elif q in ("+", "?"):
-        F.append(dict(area="SPF", severity="high", title=f"SPF terminates in `{q}all` (permissive)",
+        F.append(finding("spf.permissive_all", area="SPF", severity="high", title=f"SPF terminates in `{q}all` (permissive)",
                       detail=f"`{q}all` makes no fail assertion — anything not listed is treated as pass/neutral, so SPF gives effectively no protection against spoofing (`+all` literally authorizes any host).",
                       fix="Change the terminating qualifier to -all (or ~all while testing)."))
     n, voids = count_spf_lookups(domain)
     if n > 10:
-        F.append(dict(area="SPF", severity="high", title=f"SPF exceeds 10 DNS lookups ({n})",
+        F.append(finding("spf.lookup_limit", area="SPF", severity="high", title=f"SPF exceeds 10 DNS lookups ({n})",
                       detail="Over 10 DNS-querying mechanisms triggers a PermError and SPF silently fails at many receivers — a classic invisible deliverability drain.",
                       fix="Flatten or consolidate includes; remove unused senders. Target <=8 to leave headroom."))
     if voids > 2:
-        F.append(dict(area="SPF", severity="high", title=f"SPF exceeds the void-lookup limit ({voids})",
+        F.append(finding("spf.void_limit", area="SPF", severity="high", title=f"SPF exceeds the void-lookup limit ({voids})",
                       detail="More than 2 SPF mechanisms point at names that resolve to nothing (RFC 7208 caps 'void' lookups at 2). This trips a PermError and SPF silently fails — usually a dead/retired include nobody removed.",
                       fix="Find and remove the dead include/redirect/a/mx targets (the ones that no longer resolve)."))
     # ptr is deprecated (RFC 7208 §5.5) — slow and discouraged.
     if re.search(r"(?:^|\s)[-~?+]?ptr\b", spf.lower()):
-        F.append(dict(area="SPF", severity="low", title="SPF uses the deprecated `ptr` mechanism",
+        F.append(finding("spf.ptr_mechanism", area="SPF", severity="low", title="SPF uses the deprecated `ptr` mechanism",
                       detail="The ptr mechanism is slow, unreliable, and explicitly discouraged by RFC 7208 §5.5; some receivers ignore it entirely.",
                       fix="Remove ptr and authorize senders via include:/a/mx/ip4/ip6 instead."))
     # duplicate include — wastes lookups, sign of copy-paste drift.
     incs = re.findall(r"include:(\S+)", spf.lower())
     dupes = {i for i in incs if incs.count(i) > 1}
     if dupes:
-        F.append(dict(area="SPF", severity="low", title="SPF has duplicate include(s)",
+        F.append(finding("spf.duplicate_include", area="SPF", severity="low", title="SPF has duplicate include(s)",
                       detail=f"The record repeats include(s): {', '.join(sorted(dupes))}. Each duplicate still burns one of the 10 DNS lookups for no benefit.",
                       fix="Remove the repeated include entries."))
-    F.append(dict(area="SPF", severity="pass", title="SPF present",
+    F.append(finding("spf.present", area="SPF", severity="pass", title="SPF present",
                   detail=f"Record found; effective terminator: {q}all; ~{n} DNS lookups, {voids} void.",
                   fix=None, record=spf))
 
@@ -625,25 +686,36 @@ def parse_dkim(rec):
     return ktype, pub, bits, testing, invalid
 
 
+def _dkim_selector(note):
+    """Extract the normalized selector carried by dkim_lookup's stable note shape."""
+    match = re.match(r"DKIM ([a-z0-9_-]+)(?:[ =(]|$)", note or "", re.I)
+    return match.group(1).lower() if match else ""
+
+
 def check_dkim(domain, F):
     state, note, testing = dkim_lookup(domain)
+    selector = _dkim_selector(note)
     if state == "good":
-        F.append(dict(area="DKIM", severity="pass", title=f"DKIM present ({note})",
+        F.append(finding("dkim.present", discriminator=selector,
+                      area="DKIM", severity="pass", title=f"DKIM present ({note})",
                       detail="A modern DKIM key was found at a probed selector.", fix=None))
     elif state == "weak":
-        F.append(dict(area="DKIM", severity="high", title="DKIM key is RSA-1024 (legacy)",
+        F.append(finding("dkim.weak_rsa1024", discriminator=selector,
+                      area="DKIM", severity="high", title="DKIM key is RSA-1024 (legacy)",
                       detail="RSA-1024 is below current strength guidance and is being phased out; some receivers discount it, and it's the first thing a PQC/crypto-hygiene review flags.",
                       fix="Rotate the selector to RSA-2048 (or Ed25519): publish the new key, let it propagate, then switch signing over.", record=note))
     elif state == "invalid":
-        F.append(dict(area="DKIM", severity="high", title="DKIM key is revoked or malformed",
+        F.append(finding("dkim.invalid_key", discriminator=selector,
+                      area="DKIM", severity="high", title="DKIM key is revoked or malformed",
                       detail=f"A DKIM record is published but the key is unusable ({note}). A revoked (empty p=) or malformed key can't verify signatures — receivers treat the mail as unsigned, so DKIM gives no protection.",
                       fix="Publish a valid key at this selector (RSA >=2048 or Ed25519), or remove the dead record and sign from a live selector.", record=note))
     else:  # unknown — a blind spot, NOT a confirmed gap
-        F.append(dict(area="DKIM", severity="low", title="DKIM not found at common/provider selectors",
+        F.append(finding("dkim.not_found", area="DKIM", severity="low", title="DKIM not found at common/provider selectors",
                       detail="No DKIM key at the selectors probed. DKIM has no discovery mechanism, so this is a blind spot — the domain may well sign with a custom selector. Verify against actual message headers before concluding DKIM is absent; don't treat this as a confirmed gap.",
                       fix="Confirm the selector with the sending provider; if genuinely unsigned, enable DKIM at the ESP."))
     if testing:
-        F.append(dict(area="DKIM", severity="low", title="DKIM key is in testing mode (t=y)",
+        F.append(finding("dkim.testing_mode", discriminator=selector,
+                      area="DKIM", severity="low", title="DKIM key is in testing mode (t=y)",
                       detail="The surfaced DKIM key carries the t=y testing flag, which tells receivers to treat the signature as experimental and NOT act on failures — so DKIM gives no real protection while it's set. Usually left over from initial setup.",
                       fix="Remove the t=y flag from the DKIM TXT record once you've confirmed signing works."))
 
@@ -768,7 +840,7 @@ def dmarc_policy_context(domain):
 
 
 def _append_no_dmarc(F):
-    F.append(dict(area="DMARC", severity="critical", title="No DMARC record",
+    F.append(finding("dmarc.missing", area="DMARC", severity="critical", title="No DMARC record",
                   detail="No policy at _dmarc. Receivers have no instruction on how to handle unauthenticated mail in your name — and as of 2024-25, Gmail/Yahoo/Microsoft require DMARC for bulk senders. This is both a spoofing exposure and a hard deliverability blocker.",
                   fix='Publish TXT at _dmarc: start with "v=DMARC1; p=none; rua=mailto:dmarc@<domain>" to collect reports. Review those reports before any enforcement, then stage p=quarantine; whether p=reject is appropriate depends on your mail flows (RFC 9989 §7.4).'))
 
@@ -788,7 +860,7 @@ def check_dmarc(domain, F):
 
     if relationship == "parent_observation":
         _append_no_dmarc(F)
-        F.append(dict(
+        F.append(finding("dmarc.parent_observed",
             area="DMARC", severity="low",
             title="Parent DMARC record observed above registrable root",
             detail=(
@@ -830,7 +902,8 @@ def check_dmarc(domain, F):
             "as nonexistent."
             if context["domain_exists"] is None else ""
         )
-        F.append(dict(
+        F.append(finding(
+            "dmarc.inherited_enforced" if strong else "dmarc.inherited_not_enforced",
             area="DMARC", severity=severity, title=title,
             detail=(
                 f'{source_detail} RFC 9989 applies its {tag}={eff or "<missing>"} '
@@ -852,54 +925,54 @@ def check_dmarc(domain, F):
         eff = context["effective"]
         tag = context["tag"]
         if eff not in ("quarantine", "reject"):
-            F.append(dict(area="DMARC", severity="high",
+            F.append(finding("dmarc.inherited_not_enforced", area="DMARC", severity="high",
                           title=f"DMARC subdomain not enforced (inherited {tag}={eff or '<missing>'} from {source})",
                           detail=f"This subdomain has no _dmarc record; it inherits {source}'s policy, which resolves to {eff or '<missing>'} — spoofed mail from this subdomain isn't stopped.",
                           fix=f"Publish _dmarc.{domain} with p=reject, or set sp=reject on {source}."))
         else:
-            F.append(dict(area="DMARC", severity="pass",
+            F.append(finding("dmarc.inherited_enforced", area="DMARC", severity="pass",
                           title=f"DMARC enforced (inherited {tag}={eff} from {source})",
                           detail=f"This subdomain has no record of its own and is covered by {source}'s enforced policy.", fix=None, record=rec))
         return
 
     dmarc_records = [r for r in dig(f"_dmarc.{source}", "TXT") if r.lower().startswith("v=dmarc1")]
     if len(dmarc_records) > 1:
-        F.append(dict(area="DMARC", severity="high", title="Multiple DMARC records (invalid)",
+        F.append(finding("dmarc.multiple_records", area="DMARC", severity="high", title="Multiple DMARC records (invalid)",
                       detail=f"{len(dmarc_records)} DMARC records exist at _dmarc. Exactly one is allowed — receivers ignore the policy entirely when there are several, so you effectively have no DMARC.",
                       fix="Keep one DMARC record and remove the rest."))
     rua = "rua" in kv
     if p not in ("none", "quarantine", "reject"):
-        F.append(dict(area="DMARC", severity="high", title=f"DMARC policy value is invalid (p={p or '<missing>'})",
+        F.append(finding("dmarc.invalid_policy", area="DMARC", severity="high", title=f"DMARC policy value is invalid (p={p or '<missing>'})",
                       detail="The p= tag must be exactly none, quarantine, or reject (RFC 9989). An unrecognized or missing value means receivers apply no enforcement — you have a DMARC record but no effective policy.",
                       fix="Set p= to none (monitor), quarantine, or reject."))
     elif p == "none":
-        F.append(dict(area="DMARC", severity="high", title="DMARC policy is p=none (monitor only)",
+        F.append(finding("dmarc.monitor_only", area="DMARC", severity="high", title="DMARC policy is p=none (monitor only)",
                       detail="p=none offers, in the words of RFC 9989, no expression of preference — a receiver applying DMARC has nothing to act on, though its own filtering still applies. An enforcement policy requests quarantine or rejection of failures, but it can affect legitimate mail when an authorized sender is unauthenticated or misaligned, which is why aggregate reports come first. This is primarily an anti-spoofing gap, not a deliverability failure.",
                       fix="Collect and review DMARC aggregate reports before enforcement, and remediate every legitimate unauthenticated or misaligned stream. Move to p=quarantine once authorized sources are passing. Before considering p=reject, ensure every legitimate stream has valid, DMARC-aligned DKIM rather than relying only on SPF. RFC 9989 §7.4 advises domains whose users may post to mailing lists not to publish p=reject; for those that still do, it recommends at least a month at p=none followed by an equally long period at p=quarantine. Treat reject as conditional on your mail flows, not as the default destination. RFC 9989 removed pct; use t=y to test an enforcement policy instead."))
     else:
-        F.append(dict(area="DMARC", severity="pass", title=f"DMARC enforced (p={p})",
+        F.append(finding("dmarc.enforced", area="DMARC", severity="pass", title=f"DMARC enforced (p={p})",
                       detail="Enforcement policy in place.", fix=None, record=rec))
         # Enforced at the org domain but subdomains left open (sp=none) — the parked /
         # cousin-subdomain spoofing vector. sp defaults to p when absent, so only flag
         # an explicit sp=none.
         if sp == "none":
-            F.append(dict(area="DMARC", severity="medium", title="DMARC subdomain policy not enforced (sp=none)",
+            F.append(finding("dmarc.subdomain_not_enforced", area="DMARC", severity="medium", title="DMARC subdomain policy not enforced (sp=none)",
                           detail="The org domain is enforced but sp=none leaves every subdomain unprotected — attackers spoof random.<domain> and DMARC won't stop it. A common gap on domains with one strong apex policy.",
                           fix="Set sp=reject (or sp=quarantine) so the enforcement also covers subdomains."))
     # Partial enforcement via pct (pct is removed in DMARCbis / RFC 9989, and <100 = probabilistic).
     pct = kv.get("pct", "").strip()
     if pct and pct.isdigit() and int(pct) < 100:
-        F.append(dict(area="DMARC", severity="medium", title=f"DMARC only partially enforced (pct={pct})",
+        F.append(finding("dmarc.partial_pct", area="DMARC", severity="medium", title=f"DMARC only partially enforced (pct={pct})",
                       detail=f"pct={pct} applies the policy to only {pct}% of failing mail — the rest is let through, so enforcement is probabilistic. (Note: pct is also removed in DMARCbis / RFC 9989.)",
                       fix="Once confident, remove pct (or set pct=100) so the policy applies to all failing mail."))
     # Tags removed in DMARCbis / RFC 9989.
     removed = [t for t in ("rf", "ri", "pct") if t in kv]
     if removed:
-        F.append(dict(area="DMARC", severity="low", title="DMARC uses tags removed in RFC 9989 (DMARCbis)",
+        F.append(finding("dmarc.removed_tags", area="DMARC", severity="low", title="DMARC uses tags removed in RFC 9989 (DMARCbis)",
                       detail=f"The record uses {', '.join(removed)}, which DMARCbis (RFC 9989, published May 2026, obsoletes RFC 7489) removes. They're still tolerated today but are no longer part of the spec; np= is the new tag for non-existent subdomains.",
                       fix="Drop rf/ri/pct on your next edit; add np=reject to cover non-existent subdomains per RFC 9989."))
     if not rua:
-        F.append(dict(area="DMARC", severity="medium", title="DMARC has no rua (no aggregate reporting)",
+        F.append(finding("dmarc.no_rua", area="DMARC", severity="medium", title="DMARC has no rua (no aggregate reporting)",
                       detail="Without rua you're blind to who's sending as you and to auth failures — you lose the early-warning signal a deliverability owner relies on.",
                       fix="Add rua=mailto:dmarc@<domain> to receive daily aggregate XML reports."))
     else:
@@ -917,7 +990,9 @@ def check_dmarc(domain, F):
                 if not auth:
                     unauth.append(dest)
         if unauth:
-            F.append(dict(area="DMARC", severity="medium", title="DMARC report destination not authorized",
+            F.append(finding("dmarc.unauthorized_report_destination",
+                          discriminator="|".join(sorted(unauth)),
+                          area="DMARC", severity="medium", title="DMARC report destination not authorized",
                           detail=f"Aggregate/forensic reports are sent to an external domain ({', '.join(sorted(unauth))}) that hasn't published the required authorization record, so most receivers will silently DROP your reports — you think you have reporting, but you don't.",
                           fix=f"Have the destination publish a TXT record at '{domain}._report._dmarc.<destination>' containing 'v=DMARC1;' (your DMARC vendor usually does this automatically)."))
 
@@ -1031,7 +1106,7 @@ def check_mta_sts(domain, F, observations=None):
     if is_null_mx(dig(domain, "MX")):
         if observations is not None:
             observations["mta_sts_policy"] = "not_applicable"
-        F.append(dict(
+        F.append(finding("mta_sts.not_applicable",
             area="MTA-STS",
             severity="pass",
             title="MTA-STS not applicable — domain receives no mail",
@@ -1043,7 +1118,7 @@ def check_mta_sts(domain, F, observations=None):
     if lookup_failed:
         if observations is not None:
             observations["mta_sts_policy"] = "unavailable"
-        F.append(dict(
+        F.append(finding("mta_sts.unconfirmed",
             area="MTA-STS",
             severity="low",
             title="Unable to confirm MTA-STS policy",
@@ -1054,7 +1129,7 @@ def check_mta_sts(domain, F, observations=None):
     if not txt:
         if observations is not None:
             observations["mta_sts_policy"] = "not_applicable"
-        F.append(dict(area="MTA-STS", severity="medium", title="No MTA-STS policy",
+        F.append(finding("mta_sts.missing", area="MTA-STS", severity="medium", title="No MTA-STS policy",
                       detail="MTA-STS lets you require TLS for inbound SMTP and is part of a modern transport posture (and increasingly asked for in EU procurement, and specified in BSI's guidance for secure email transport (TR-03108)). Absent it, downgrade attacks on mail-in-transit are possible.",
                       fix="Publish _mta-sts TXT (v=STSv1; id=...) and host https://mta-sts.<domain>/.well-known/mta-sts.txt. Stage it: publish TLS-RPT first so you get failure reports, start at mode: testing, confirm every production AND backup MX passes TLS, then switch to mode: enforce (RFC 8461 provides testing mode for exactly this)."))
         return
@@ -1062,19 +1137,19 @@ def check_mta_sts(domain, F, observations=None):
     if observations is not None:
         observations["mta_sts_policy"] = observation
     if not policy:
-        F.append(dict(area="MTA-STS", severity="medium", title="MTA-STS TXT present but policy file not retrievable",
+        F.append(finding("mta_sts.policy_unreachable", area="MTA-STS", severity="medium", title="MTA-STS TXT present but policy file not retrievable",
                       detail=f"The _mta-sts TXT record advertises a policy, but https://mta-sts.{domain}/.well-known/mta-sts.txt did not return a valid policy (RFC 8461 requires HTTP 200 with Content-Type text/plain). Senders can't fetch it, so MTA-STS isn't actually enforced.",
                       fix="Serve the policy at that URL over HTTPS with status 200 and Content-Type: text/plain."))
         return
     problems, mode, _max_age, pol_mx = mta_sts_policy_problems(policy)
     if problems:
-        F.append(dict(area="MTA-STS", severity=("high" if mode == "enforce" else "medium"), title="MTA-STS policy is malformed",
+        F.append(finding("mta_sts.malformed", area="MTA-STS", severity=("high" if mode == "enforce" else "medium"), title="MTA-STS policy is malformed",
                       detail="The hosted policy is invalid (" + "; ".join(problems) + "). RFC 8461 requires version: STSv1, a valid mode, an integer max_age, and at least one mx: (unless mode: none)."
                              + (" Under mode: enforce a malformed policy can break inbound mail delivery." if mode == "enforce" else ""),
                       fix="Fix the hosted mta-sts.txt to include version: STSv1, mode:, max_age:, and mx: lines per RFC 8461."))
         return
     sev = "pass" if mode == "enforce" else "medium"
-    F.append(dict(area="MTA-STS", severity=sev, title=f"MTA-STS present (mode: {mode})",
+    F.append(finding("mta_sts.present", area="MTA-STS", severity=sev, title=f"MTA-STS present (mode: {mode})",
                   detail="Policy published." + ("" if mode == "enforce" else " mode is not 'enforce' — testing/none gives no real protection."),
                   fix=None if mode == "enforce" else "Move policy to mode: enforce once tested."))
     # Every real MX must be covered by an mx: line, or mail to it fails under enforce.
@@ -1082,7 +1157,7 @@ def check_mta_sts(domain, F, observations=None):
     if pol_mx and real_mx:
         unmatched = [h for h in real_mx if not any(_mx_pattern_matches(p, h) for p in pol_mx)]
         if unmatched:
-            F.append(dict(area="MTA-STS", severity=("high" if mode == "enforce" else "medium"),
+            F.append(finding("mta_sts.mx_not_covered", area="MTA-STS", severity=("high" if mode == "enforce" else "medium"),
                           title="MTA-STS policy does not cover all MX hosts",
                           detail=f"These live MX hosts match no mx: line in the policy: {', '.join(unmatched)}."
                                  + (" Under mode: enforce, senders will REFUSE to deliver to them — active mail loss." if mode == "enforce" else " Once you move to enforce, mail to them will fail."),
@@ -1095,13 +1170,13 @@ def check_simple(domain, F):
         tlsrpt = first_txt(f"_smtp._tls.{domain}", "v=tlsrptv1")
         if tlsrpt:
             if "rua=" not in tlsrpt.lower():
-                F.append(dict(area="TLS-RPT", severity="low", title="TLS-RPT present but has no rua endpoint",
+                F.append(finding("tls_rpt.no_rua", area="TLS-RPT", severity="low", title="TLS-RPT present but has no rua endpoint",
                               detail="A TLS-RPT record exists but defines no rua= destination, so no TLS failure reports are actually delivered anywhere.",
                               fix='Add a destination: "v=TLSRPTv1; rua=mailto:tlsrpt@<domain>".'))
             else:
-                F.append(dict(area="TLS-RPT", severity="pass", title="TLS-RPT present", detail="Receiving TLS failure reports.", fix=None))
+                F.append(finding("tls_rpt.present", area="TLS-RPT", severity="pass", title="TLS-RPT present", detail="Receiving TLS failure reports.", fix=None))
         else:
-            F.append(dict(area="TLS-RPT", severity="low", title="No TLS-RPT",
+            F.append(finding("tls_rpt.missing", area="TLS-RPT", severity="low", title="No TLS-RPT",
                           detail="No SMTP TLS reporting; you won't learn when senders fail to negotiate TLS to you.",
                           fix='Add _smtp._tls TXT: "v=TLSRPTv1; rua=mailto:tlsrpt@<domain>".'))
     # BIMI
@@ -1109,13 +1184,13 @@ def check_simple(domain, F):
     if bimi:
         has_vmc = re.search(r"(?:^|;)\s*a=\s*https?://", bimi.lower())
         if not has_vmc:
-            F.append(dict(area="BIMI", severity="low", title="BIMI present without a VMC",
+            F.append(finding("bimi.no_vmc", area="BIMI", severity="low", title="BIMI present without a VMC",
                           detail="A BIMI record is published but has no a= (Verified Mark Certificate) URL. Gmail and Apple Mail require a VMC to actually display the logo, so without it most inboxes won't render your mark.",
                           fix="Obtain a VMC (or a CMC) and add it as a=https://<domain>/path/vmc.pem to the BIMI record."))
         else:
-            F.append(dict(area="BIMI", severity="pass", title="BIMI present (with VMC)", detail="Brand indicator + VMC published.", fix=None))
+            F.append(finding("bimi.present", area="BIMI", severity="pass", title="BIMI present (with VMC)", detail="Brand indicator + VMC published.", fix=None))
     else:
-        F.append(dict(area="BIMI", severity="low", title="No BIMI",
+        F.append(finding("bimi.missing", area="BIMI", severity="low", title="No BIMI",
                       detail="BIMI (logo in inbox) requires p=quarantine/reject DMARC first; it's a trust/brand signal, not a blocker.",
                       fix="Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."))
 
@@ -1123,13 +1198,13 @@ def check_simple(domain, F):
 def check_transport(domain, F):
     mx = dig(domain, "MX")
     if not mx:
-        F.append(dict(area="Transport", severity="low", title="No MX records",
+        F.append(finding("transport.no_mx", area="Transport", severity="low", title="No MX records",
                       detail="No MX record is published. SMTP then treats the domain as if it had an implicit MX pointing to itself and resolves that host's address records, so this does not show that the domain receives no mail — a null MX (0 .) is what says that explicitly. This may be intentional for a send-only or parked domain.",
                       fix="If it should receive mail, publish MX records. If it should not, publish a null MX (0 .) so receivers know."))
         return None
     # Null MX (RFC 7505): "0 ." positively declares that the domain accepts no mail.
     if is_null_mx(mx):
-        F.append(dict(area="Transport", severity="pass", title="Null MX (RFC 7505) — domain declares no mail",
+        F.append(finding("transport.null_mx", area="Transport", severity="pass", title="Null MX (RFC 7505) — domain declares no mail",
                       detail="A null MX (0 .) declares under RFC 7505 that this domain accepts no inbound mail. That is good hygiene for a domain not meant to receive mail. It says nothing about whether the domain sends — outbound authentication is assessed separately.", fix=None))
         return None
     real_mx = _real_mx_rows(mx)
@@ -1162,27 +1237,27 @@ def check_transport(domain, F):
     dane_meta = dns_meta(dane_name, "TLSA")
     if tls_ver:
         sev = "pass" if tls_ver == "TLSv1.3" else "low"
-        F.append(dict(area="Transport", severity=sev, title=f"Inbound SMTP STARTTLS: {tls_ver}",
+        F.append(finding("transport.starttls_present", area="Transport", severity=sev, title=f"Inbound SMTP STARTTLS: {tls_ver}",
                       detail=f"Primary MX {host} negotiates {tls_ver}." + ("" if tls_ver == "TLSv1.3" else " TLS 1.3 is the floor for PQC-hybrid (ML-KEM) key exchange — on 1.2 you can't adopt PQC transport at all."),
                       fix=None if tls_ver == "TLSv1.3" else "Ensure the MX supports TLS 1.3 — prerequisite for any post-quantum (hybrid ML-KEM) transport readiness."))
     else:
-        F.append(dict(area="Transport", severity="medium", title="Could not establish STARTTLS to primary MX",
+        F.append(finding("transport.starttls_failed", area="Transport", severity="medium", title="Could not establish STARTTLS to primary MX",
                       detail=f"No TLS negotiated with {host}:25 (blocked port, timeout, or STARTTLS unsupported). Mail to you may travel in cleartext.",
                       fix="Verify the MX offers STARTTLS with a valid certificate."))
     if dane:
         bad = _bad_tlsa(dane)
         if bad:
-            F.append(dict(area="Transport", severity="medium", title="DANE/TLSA present but misconfigured",
+            F.append(finding("transport.dane_misconfigured", area="Transport", severity="medium", title="DANE/TLSA present but misconfigured",
                           detail=f"TLSA records exist but {bad} For SMTP DANE only usage 3 (DANE-EE) or 2 (DANE-TA) are valid, and matching-type 1 (SHA-256) is recommended; an invalid record can break DANE-enforcing senders.",
                           fix="Correct the TLSA usage/selector/matching-type (typically '3 1 1' for the MX cert) and re-publish."))
         elif dane_meta.get("ad") is False:
-            F.append(dict(area="Transport", severity="medium", title="DANE/TLSA present but not DNSSEC-validated",
+            F.append(finding("transport.dane_unvalidated", area="Transport", severity="medium", title="DANE/TLSA present but not DNSSEC-validated",
                           detail="TLSA records exist but the response isn't DNSSEC-authenticated (AD bit not set). DANE requires a validated DNSSEC chain — without it senders can't trust the TLSA, so DANE gives no protection and can't be enforced.",
                           fix="Enable DNSSEC on the zone so the TLSA records are cryptographically validated."))
         else:
-            F.append(dict(area="Transport", severity="pass", title="DANE/TLSA present", detail="TLSA records bind the MX cert" + (" (DNSSEC-validated)." if dane_meta.get("ad") else "."), fix=None))
+            F.append(finding("transport.dane_present", area="Transport", severity="pass", title="DANE/TLSA present", detail="TLSA records bind the MX cert" + (" (DNSSEC-validated)." if dane_meta.get("ad") else "."), fix=None))
     else:
-        F.append(dict(area="Transport", severity="low", title="No DANE/TLSA",
+        F.append(finding("transport.dane_missing", area="Transport", severity="low", title="No DANE/TLSA",
                       detail="No TLSA records on the MX. DANE is recommended in BSI guidance for secure email transport (TR-03108) and depends on DNSSEC.",
                       fix="If DNSSEC is enabled, publish TLSA records for the MX; otherwise enable DNSSEC first."))
     return host
@@ -1234,7 +1309,7 @@ def check_mx_hygiene(domain, F):
     prim_hi = max(providers[primary])  # highest (numerically) primary priority
     risky = [p for p in providers if p != primary and min(providers[p]) <= prim_hi]
     listing = "; ".join(f"{p} (prio {','.join(map(str, sorted(v)))})" for p, v in providers.items())
-    F.append(dict(area="MX", severity=("medium" if risky else "low"),
+    F.append(finding("mx.mixed_providers", area="MX", severity=("medium" if risky else "low"),
                   title=f"Mixed MX providers ({len(providers)})",
                   detail=f"Inbound MX spans multiple providers: {listing}. Senders deliver to whichever MX is reachable at the lowest priority, so a stale/duplicate backup provider can silently receive (or drop) mail and is a relay/interception surface."
                          + (f" '{risky[0]}' sits at a priority that can actively receive mail today." if risky else ""),
@@ -1308,12 +1383,34 @@ def check_dnssec(domain, F):
     # only when meta isn't available (a backend that doesn't record it / mock).
     signed = m["ad"] if "ad" in m else bool(keys)
     if signed:
-        F.append(dict(area="DNSSEC", severity="pass", title="DNSSEC enabled",
+        F.append(finding("dnssec.enabled", area="DNSSEC", severity="pass", title="DNSSEC enabled",
                       detail="The zone is DNSSEC-signed and answers validate.", fix=None))
+    elif _lookup_failure(domain, "DNSKEY") and _dnssec_validation_failing(domain):
+        F.append(finding("dnssec.validation_failing",
+            area="DNSSEC", severity="critical", title="DNSSEC validation is failing",
+            detail="This domain is DNSSEC-signed, but its signatures fail validation. Receivers that validate DNSSEC can't resolve this domain's MX or check its SPF, DKIM or DMARC records.",
+            fix="Your DNSSEC signatures don't validate. Fix the DS record at your registrar or re-sign the zone at your DNS provider. If you can't fix it quickly, remove the DS record so the domain resolves unsigned.",
+        ))
     else:
-        F.append(dict(area="DNSSEC", severity="low", title="DNSSEC not enabled",
+        F.append(finding("dnssec.missing", area="DNSSEC", severity="low", title="DNSSEC not enabled",
                       detail="DNS answers for this domain aren't cryptographically signed/validated — and DANE can't be used without it. A trust/security gap more than a deliverability one.",
                       fix="Enable DNSSEC at your DNS provider (it's also the prerequisite for DANE)."))
+
+
+def _dnssec_validation_failing(domain):
+    """Require corroborated SERVFAIL-on / DNSKEY-off evidence from both resolvers."""
+    evidence = dnssec_probe(domain, "DNSKEY")
+    providers = ("cloudflare", "google")
+    enabled_servfail = all(
+        evidence.get(provider, {}).get("checking_enabled", {}).get("status") == 2
+        for provider in providers
+    )
+    disabled_records = all(
+        evidence.get(provider, {}).get("checking_disabled", {}).get("status") == 0
+        and bool(evidence.get(provider, {}).get("checking_disabled", {}).get("records"))
+        for provider in providers
+    )
+    return enabled_servfail and disabled_records
 
 
 # ── Domain age / expiry via RDAP (modern WHOIS over HTTPS/JSON) ──────────────
@@ -1345,13 +1442,13 @@ def check_domain_age(domain, F, observations=None):
         if ev.get("eventAction") == "registration":
             age = int((now - ts) // 86400)
             if 0 <= age < 90:
-                F.append(dict(area="Reputation", severity="medium", title=f"Domain is newly registered ({age} days)",
+                F.append(finding("reputation.new_domain", area="Reputation", severity="medium", title=f"Domain is newly registered ({age} days)",
                               detail="Brand-new domains have no sending reputation, so mailbox providers throttle them. Sending cold or at volume now risks the spam folder.",
                               fix="Warm up gradually — start low-volume to engaged recipients and ramp over weeks before scaling."))
         elif ev.get("eventAction") == "expiration":
             left = int((ts - now) // 86400)
             if 0 <= left < 30:
-                F.append(dict(area="Reputation", severity="high", title=f"Domain expires in {left} days",
+                F.append(finding("reputation.expiring", area="Reputation", severity="high", title=f"Domain expires in {left} days",
                               detail="If the registration lapses, mail and the website stop entirely — a full outage, and a reputation reset once recovered.",
                               fix="Renew the domain now and turn on auto-renew."))
 
@@ -1415,7 +1512,7 @@ def check_ai_bots(domain, F, observations=None):
     blocked = _robots_blocks_ai_bots(body)
     if blocked:
         more = ", and others" if len(blocked) > 4 else ""
-        F.append(dict(area="AI visibility", severity="low", title="robots.txt blocks AI crawlers",
+        F.append(finding("ai_visibility.robots_blocks", area="AI visibility", severity="low", title="robots.txt blocks AI crawlers",
                       detail=f"robots.txt disallows {', '.join(blocked[:4])}{more}. As people increasingly ask AI engines (ChatGPT, Perplexity, Google AI) about vendors, blocking these crawlers makes your site invisible to those answers.",
                       fix="Allow the AI crawlers you want in robots.txt (or drop the blanket Disallow)."))
 
@@ -1448,13 +1545,13 @@ def check_reverse_dns(domain, F):
     ip = ips[0]
     ptr = dig(_reverse_name(ip), "PTR")
     if not ptr:
-        F.append(dict(area="Transport", severity="low", title="Mail server has no reverse DNS (PTR)",
+        F.append(finding("transport.ptr_missing", area="Transport", severity="low", title="Mail server has no reverse DNS (PTR)",
                       detail=f"The primary MX ({host}, {ip}) has no PTR record. Receivers check reverse DNS on connecting mail servers, so a missing PTR hurts deliverability for self-hosted / own-IP senders (managed providers like Google and Microsoft set this for you).",
                       fix="Have your host set a PTR (reverse DNS) record for the mail server's IP that matches its hostname."))
         return
     ptr_name = ptr[0].rstrip(".")
     if ip not in dig(ptr_name, "A"):
-        F.append(dict(area="Transport", severity="low", title="Mail server reverse DNS isn't forward-confirmed",
+        F.append(finding("transport.ptr_not_fcrdns", area="Transport", severity="low", title="Mail server reverse DNS isn't forward-confirmed",
                       detail=f"The MX IP {ip} has a PTR ({ptr_name}) but that name doesn't resolve back to the same IP — no forward-confirmed reverse DNS (FCrDNS). Some receivers read this as a spam signal.",
                       fix="Align the PTR hostname and its A record so reverse and forward DNS agree."))
 
@@ -1463,7 +1560,7 @@ def check_reverse_dns(domain, F):
 
 def check_caa(domain, F):
     if not dig(domain, "CAA"):
-        F.append(dict(area="CAA", severity="low", title="No CAA records",
+        F.append(finding("caa.missing", area="CAA", severity="low", title="No CAA records",
                       detail="No CAA record restricts which certificate authorities can issue TLS certificates for your domain. CAA narrows cert mis-issuance — and the certs your MTA-STS and DANE rely on are part of your email trust chain.",
                       fix='Publish a CAA record naming your CA(s), e.g. 0 issue "letsencrypt.org".'))
 
@@ -1676,7 +1773,9 @@ def main():
     # The resolver records the final metadata after its existing retry policy.
     lookup_failures = critical_lookup_failures(domain)
     inconclusive, inconclusive_reason = inconclusive_state(domain, lookup_failures)
-    mark_unconfirmed_findings(domain, F, lookup_failures)
+    mark_unconfirmed_findings(
+        domain, F, finding_lookup_failures(domain, lookup_failures)
+    )
     print(json.dumps({
         "domain": domain,
         "primary_mx": mx_host,

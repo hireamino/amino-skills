@@ -336,6 +336,47 @@ def whi180_inconclusive_canary(name, fixture, anchor, replacement, diagnostic):
         expect_red_comparison(name, execute_with_scripts(target, selected), diagnostic)
 
 
+def whi290_audit_canary(name, fixture, replacements, diagnostic):
+    """Mutate one or more reviewed anchors in a temporary shipping audit copy."""
+    selected = {"CONFORMANCE_FIXTURE": fixture}
+    require_green(name, execute(selected))
+    with tempfile.TemporaryDirectory(prefix="amino-whi290-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        for anchor, replacement in replacements:
+            source = replace_exactly_once(source, anchor, replacement, name)
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red_comparison(name, execute_with_scripts(target, selected), diagnostic)
+
+
+def whi293_resolver_canary():
+    """Prove the four-query source check rejects a duplicated resolver."""
+    name = "WHI-293 DNSSEC probe keeps both public resolvers"
+    require_green(name, execute_check())
+    with tempfile.TemporaryDirectory(prefix="amino-whi293-resolver-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py", "verify.py",
+                         "address-contract.json", "public_suffix_rules.tsv"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        resolver_path = target / "resolver.py"
+        source = resolver_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            '    for provider, server in (("cloudflare", "1.1.1.1"), ("google", "8.8.8.8")):\n',
+            '    for provider, server in (("cloudflare", "1.1.1.1"), ("google", "1.1.1.1")):\n',
+            name,
+        )
+        resolver_path.write_text(source, encoding="utf-8")
+        expect_red_comparison(
+            name,
+            execute_check_with_scripts(target),
+            "FAIL WHI-293 probe uses enabled and +cd queries on Cloudflare and Google",
+        )
+
+
 def whi251_dmarc_canary(name, fixture, anchor, replacement, diagnostic):
     """Mutate the shipping discovery/policy path and require a fixture-level verdict."""
     selected = {"CONFORMANCE_FIXTURE": fixture}
@@ -396,8 +437,8 @@ try:
         source = audit_path.read_text(encoding="utf-8")
         source = replace_exactly_once(
             source,
-            'F.append(dict(area="SPF", severity="high", title="No SPF record",',
-            'F.append(dict(area="SPF", severity="low", title="No SPF record",',
+            'F.append(finding("spf.missing", area="SPF", severity="high", title="No SPF record",',
+            'F.append(finding("spf.missing", area="SPF", severity="low", title="No SPF record",',
             "severity",
         )
         audit_path.write_text(source, encoding="utf-8")
@@ -733,8 +774,14 @@ try:
         source = runner_path.read_text(encoding="utf-8")
         source = replace_exactly_once(
             source,
+            '    def dns_meta(name, rtype):\n'
+            '        entry = records.get(_norm(name), {})\n'
+            '        status = entry.get("status", 0)\n'
             '        if isinstance(status, dict):\n'
             '            status = status.get(rtype.upper(), 0)\n',
+            '    def dns_meta(name, rtype):\n'
+            '        entry = records.get(_norm(name), {})\n'
+            '        status = entry.get("status", 0)\n'
             '        if isinstance(status, dict):\n'
             '            status = status.get("TXT", 0)  # WHI-176 ignored rrtype canary\n',
             "per-record-type DNS status selection",
@@ -1523,7 +1570,8 @@ try:
     )
     whi180_inconclusive_canary(
         "WHI-280 failure does not mark every finding", "inconclusive-apex-txt-servfail",
-        '            if (finding.get("area"), finding.get("title")) in affected:\n',
+        '            if ((finding.get("area"), finding.get("title")) in affected\n'
+        '                    and "unconfirmed" not in finding):\n',
         '            if True:  # WHI-280 over-marking canary\n',
         "inconclusive-apex-txt-servfail.findings[DMARC|No DMARC record].unconfirmed: expected 'missing', got 'TXT ex.com: SERVFAIL/REFUSED'",
     )
@@ -1554,6 +1602,135 @@ try:
         '        if dns_meta(host, "A").get("error") or dns_meta(host, "AAAA").get("error"):\n',
         '        if dns_meta(host, "A").get("status") != 0 or dns_meta(host, "AAAA").get("status") != 0:\n',
         "robots-apex-nxdomain.observations: expected {'mta_sts_policy': 'not_applicable', 'robots': 'not_applicable', 'rdap': 'unavailable'}, got {'mta_sts_policy': 'not_applicable', 'robots': 'unavailable', 'rdap': 'unavailable'}",
+    )
+
+    whi290_audit_canary(
+        "WHI-290 TLS-RPT depends on its own TXT lookup",
+        "inconclusive-tls-rpt-txt-servfail",
+        [(f'        (f"_smtp._tls.{{domain}}", "TXT"): {{("TLS-RPT", "No TLS-RPT")}},\n',
+          '        (f"_smtp._tls.{domain}", "TXT"): set(),  # WHI-290 canary\n')],
+        "inconclusive-tls-rpt-txt-servfail.findings[TLS-RPT|No TLS-RPT].unconfirmed: expected 'TXT _smtp._tls.ex.com: SERVFAIL/REFUSED', got 'missing'",
+    )
+    whi290_audit_canary(
+        "WHI-290 BIMI depends on its own TXT lookup",
+        "inconclusive-bimi-txt-servfail",
+        [('        (f"default._bimi.{domain}", "TXT"): {("BIMI", "No BIMI")},\n',
+          '        (f"default._bimi.{domain}", "TXT"): set(),  # WHI-290 canary\n')],
+        "inconclusive-bimi-txt-servfail.findings[BIMI|No BIMI].unconfirmed: expected 'TXT default._bimi.ex.com: SERVFAIL/REFUSED', got 'missing'",
+    )
+    whi290_audit_canary(
+        "WHI-290 DNSSEC absence depends on DNSKEY",
+        "inconclusive-dnskey-both-fail",
+        [('        (domain, "DNSKEY"): {("DNSSEC", "DNSSEC not enabled")},\n',
+          '        (domain, "DNSKEY"): set(),  # WHI-290 canary\n')],
+        "inconclusive-dnskey-both-fail.findings[DNSSEC|DNSSEC not enabled].unconfirmed: expected 'DNSKEY ex.com: SERVFAIL/REFUSED', got 'missing'",
+    )
+    whi290_audit_canary(
+        "WHI-290 CAA absence depends on CAA",
+        "inconclusive-caa-servfail",
+        [('        (domain, "CAA"): {("CAA", "No CAA records")},\n',
+          '        (domain, "CAA"): set(),  # WHI-290 canary\n')],
+        "inconclusive-caa-servfail.findings[CAA|No CAA records].unconfirmed: expected 'CAA ex.com: SERVFAIL/REFUSED', got 'missing'",
+    )
+    whi290_audit_canary(
+        "WHI-290 DKIM names the first failed selector",
+        "inconclusive-dkim-selector-servfail",
+        [('            affected = {("DKIM", "DKIM not found at common/provider selectors")}\n',
+          '            affected = set()  # WHI-290 canary\n')],
+        "inconclusive-dkim-selector-servfail.findings[DKIM|DKIM not found at common/provider selectors].unconfirmed: expected 'TXT selector1._domainkey.ex.com: SERVFAIL/REFUSED', got 'missing'",
+    )
+    whi290_audit_canary(
+        "WHI-290 own lookup precedes input lookup",
+        "inconclusive-all-lookups-fail",
+        [('            if ((finding.get("area"), finding.get("title")) in affected\n'
+          '                    and "unconfirmed" not in finding):\n',
+          '            if (finding.get("area"), finding.get("title")) in affected:\n')],
+        "inconclusive-all-lookups-fail.findings[TLS-RPT|No TLS-RPT].unconfirmed: expected 'TXT _smtp._tls.dnssec-failed.org: SERVFAIL/REFUSED', got 'MX dnssec-failed.org: SERVFAIL/REFUSED'",
+    )
+    whi290_audit_canary(
+        "WHI-290 authoritative empty control stays confirmed",
+        "inconclusive-noncritical-empty-control",
+        [('    if not metadata.get("error") and status not in (2, 5):\n'
+          '        return None\n',
+          '    if False:  # WHI-290 authoritative-empty canary\n'
+          '        return None\n')],
+        "inconclusive-noncritical-empty-control.findings[TLS-RPT|No TLS-RPT].unconfirmed: expected 'missing', got 'TXT _smtp._tls.ex.com: lookup error'",
+    )
+    whi290_audit_canary(
+        "WHI-293 ordinary DNS failure is only a probe trigger",
+        "dnssec-ordinary-failure-not-bogus",
+        [('    enabled_servfail = all(\n'
+          '        evidence.get(provider, {}).get("checking_enabled", {}).get("status") == 2\n'
+          '        for provider in providers\n'
+          '    )\n',
+          '    enabled_servfail = bool(_lookup_failure(domain, "DNSKEY"))  # WHI-293 canary\n')],
+        "dnssec-ordinary-failure-not-bogus.findings[DNSSEC|DNSSEC not enabled].identity: expected finding, got missing",
+    )
+    whi290_audit_canary(
+        "WHI-293 both validating resolvers must return SERVFAIL",
+        "dnssec-provider-disagreement-not-bogus",
+        [('    enabled_servfail = all(\n'
+          '        evidence.get(provider, {}).get("checking_enabled", {}).get("status") == 2\n'
+          '        for provider in providers\n'
+          '    )\n',
+          '    enabled_servfail = any(\n'
+          '        evidence.get(provider, {}).get("checking_enabled", {}).get("status") == 2\n'
+          '        for provider in providers\n'
+          '    )  # WHI-293 canary\n')],
+        "dnssec-provider-disagreement-not-bogus.findings[DNSSEC|DNSSEC not enabled].identity: expected finding, got missing",
+    )
+    whi290_audit_canary(
+        "WHI-290 failed SPF includes are not void responses",
+        "spf-failed-include-not-void",
+        [('    if dig(name, "TXT"):\n'
+          '        return False\n'
+          '    if dns_meta(name, "TXT").get("error"):\n'
+          '        return False\n'
+          '    if dig(name, "A"):\n'
+          '        return False\n'
+          '    return not dns_meta(name, "A").get("error")\n',
+          '    if dig(name, "TXT"):\n'
+          '        return False\n'
+          '    if dig(name, "A"):\n'
+          '        return False\n'
+          '    return True  # WHI-290 failed-lookup-as-void canary\n')],
+        "spf-failed-include-not-void.findings[SPF|SPF exceeds the void-lookup limit (3)].identity: unexpected finding",
+    )
+    whi293_resolver_canary()
+
+    require_green("WHI-12 every emit site declares rule identity", execute_check())
+    with tempfile.TemporaryDirectory(prefix="amino-whi12-source-identity-") as temporary:
+        target = Path(temporary)
+        for filename in ("audit.py", "batch_score.py", "resolver.py", "verify.py"):
+            shutil.copyfile(SCRIPTS / filename, target / filename)
+        audit_path = target / "audit.py"
+        source = audit_path.read_text(encoding="utf-8")
+        source = replace_exactly_once(
+            source,
+            'F.append(finding("spf.multiple_records", area="SPF"',
+            'F.append(dict(area="SPF"',
+            "WHI-12 remove one emit-site identity",
+        )
+        audit_path.write_text(source, encoding="utf-8")
+        expect_red_comparison(
+            "WHI-12 dropping one emit-site rule_id is rejected by source inventory",
+            execute_check_with_scripts(target),
+            "FAIL WHI-12 every finding emit declares stable identity",
+        )
+
+    whi290_audit_canary(
+        "WHI-12 live SPF values cannot become rule identity",
+        "finding-id-spf-lookup-12",
+        [('F.append(finding("spf.lookup_limit", area="SPF",',
+          'F.append(finding(f"spf.lookup_limit_n{n}", area="SPF",')],
+        "finding-id-spf-lookup-12.findings[SPF|SPF exceeds 10 DNS lookups (12)].rule_id: expected 'spf.lookup_limit', got 'spf.lookup_limit_n12'",
+    )
+    whi290_audit_canary(
+        "WHI-12 DKIM selectors cannot collapse to one discriminator",
+        "finding-id-dkim-google-selector",
+        [('F.append(finding("dkim.present", discriminator=selector,',
+          'F.append(finding("dkim.present", discriminator="",')],
+        "finding-id-dkim-google-selector.findings[DKIM|DKIM present (DKIM google (RSA-2048))].discriminator: expected 'google', got ''",
     )
 
     whi251_dmarc_canary(
@@ -1689,8 +1866,8 @@ except Exception as error:
     print(f"FAIL  canary setup — {error}")
     FAILED += 1
 
-print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 75 cases.")
-if PASSED + FAILED != 75:
-    print(f"FAIL  canary count: expected 75, got {PASSED + FAILED}", file=sys.stderr)
+print(f"\nCanaries (skill): {PASSED} passed, {FAILED} failed; expected 89 cases.")
+if PASSED + FAILED != 89:
+    print(f"FAIL  canary count: expected 89, got {PASSED + FAILED}", file=sys.stderr)
     sys.exit(1)
 sys.exit(1 if FAILED else 0)

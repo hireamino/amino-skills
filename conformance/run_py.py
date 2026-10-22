@@ -66,7 +66,7 @@ def _norm(name):
     return name.rstrip(".").lower()
 
 
-def install_resolver(dns):
+def install_resolver(dns, dnssec_probe=None):
     """Install one fixture's DNS in audit and every batch_score import binding."""
     records = {_norm(name): value for name, value in (dns or {}).items()}
 
@@ -97,11 +97,21 @@ def install_resolver(dns):
             status = status.get(rtype.upper(), 0)
         return resolver.normalized_meta(status, entry.get("ad", False))
 
+    dnssec_probe_records = {
+        _norm(name): value
+        for name, value in (dnssec_probe or {}).items()
+    }
+
+    def probe(name, rtype="DNSKEY"):
+        entry = dnssec_probe_records.get(_norm(name), {})
+        return entry
+
     audit.dig = recs
     audit.query_fresh = recs
     audit.first_txt = first_txt
     audit.confirm_txt = lambda name, prefix: first_txt(name, prefix)
     audit.dns_meta = dns_meta
+    audit.dnssec_probe = probe
 
     # batch_score imports these names from audit at module load. Rebind every one
     # so the scorer cannot silently escape the fixture resolver.
@@ -202,9 +212,22 @@ def expected_findings(fx):
     expected = []
     not_applicable = 0
     for finding in findings:
-        for field in ("area", "title", "severity", "lane", "action", "fixIncludes"):
+        for field in (
+                "rule_id", "discriminator", "area", "title", "severity", "lane",
+                "action", "fixIncludes"):
             if field not in finding:
                 raise AssertionError(f"{fx['id']}.expect.findings missing {field}")
+        if not isinstance(finding["rule_id"], str) or not audit.RULE_ID_RE.fullmatch(
+                finding["rule_id"]):
+            raise AssertionError(
+                f"{fx['id']}.findings[{finding_label(finding)}].rule_id: "
+                f"invalid contract value {finding['rule_id']!r}"
+            )
+        if not isinstance(finding["discriminator"], str):
+            raise AssertionError(
+                f"{fx['id']}.findings[{finding_label(finding)}].discriminator: "
+                "expected a string"
+            )
         if finding["lane"] not in LANES:
             raise AssertionError(
                 f"{fx['id']}.findings[{finding_label(finding)}].lane: "
@@ -280,7 +303,9 @@ def compare_contract(fx, result, score, ledger):
 
     expected_keys = set()
     for wanted in expected:
-        for field in ("identity", "severity", "action", "fix", "lane", "unconfirmed"):
+        for field in (
+                "identity", "rule_id", "discriminator", "severity", "action", "fix",
+                "lane", "unconfirmed"):
             ledger[field] += 1
         if "detail" in wanted:
             ledger["detail"] += 1
@@ -300,6 +325,17 @@ def compare_contract(fx, result, score, ledger):
                 f"findings[{finding_label(wanted)}].identity: expected finding, got missing"
             )
             continue
+        if actual.get("rule_id") != wanted["rule_id"]:
+            problems.append(
+                f"findings[{finding_label(wanted)}].rule_id: "
+                f"expected {wanted['rule_id']!r}, got {actual.get('rule_id')!r}"
+            )
+        if actual.get("discriminator") != wanted["discriminator"]:
+            problems.append(
+                f"findings[{finding_label(wanted)}].discriminator: "
+                f"expected {wanted['discriminator']!r}, "
+                f"got {actual.get('discriminator')!r}"
+            )
         if actual.get("severity") != wanted["severity"]:
             problems.append(
                 f"findings[{finding_label(wanted)}].severity: "
@@ -424,7 +460,8 @@ def compare_contract(fx, result, score, ledger):
 
 def assertion_plan(fixtures):
     plan = {
-        "identity": 0, "severity": 0, "action": 0, "fix": 0, "lane": 0,
+        "identity": 0, "rule_id": 0, "discriminator": 0,
+        "severity": 0, "action": 0, "fix": 0, "lane": 0,
         "unconfirmed": 0,
         "detail": 0, "effort": 0, "value": 0,
         "scoreFields": 0, "closedWorld": 0, "observations": 0,
@@ -434,7 +471,9 @@ def assertion_plan(fixtures):
         if fx.get("mode") not in CONTRACT_MODES:
             continue
         expected, _ = expected_findings(fx)
-        for field in ("identity", "severity", "action", "fix", "lane", "unconfirmed"):
+        for field in (
+                "identity", "rule_id", "discriminator", "severity", "action", "fix",
+                "lane", "unconfirmed"):
             plan[field] += len(expected)
         plan["detail"] += sum("detail" in finding for finding in expected)
         plan["effort"] += sum("effort" in finding for finding in expected)
@@ -469,7 +508,8 @@ def run():
     passed = failed = skipped = not_applicable = 0
     failures = []
     ledger = {
-        "identity": 0, "severity": 0, "action": 0, "fix": 0, "lane": 0,
+        "identity": 0, "rule_id": 0, "discriminator": 0,
+        "severity": 0, "action": 0, "fix": 0, "lane": 0,
         "unconfirmed": 0,
         "detail": 0, "effort": 0, "value": 0,
         "scoreFields": 0, "closedWorld": 0, "observations": 0,
@@ -487,7 +527,10 @@ def run():
 
         NETWORK_ATTEMPTS.clear()
         HTTP_CALLS.clear()
-        install_resolver(fx["input"].get("dns", {}))
+        install_resolver(
+            fx["input"].get("dns", {}),
+            fx["input"].get("dnssecProbe", {}),
+        )
         install_http(fx["input"]["domain"], fx["input"].get("http", {}))
         now_ms = fx["input"].get("nowMs")
         audit.time.time = REAL_TIME if now_ms is None else lambda: now_ms / 1000

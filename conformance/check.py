@@ -7,6 +7,7 @@ runs as a CI gate. The full DNS-driven fixtures (fixtures.json) are consumed by 
 cross-surface runner in web-parity/ (WS1); this file guards the pure logic here.
 """
 import base64
+import ast
 import json
 import os
 import sys
@@ -60,6 +61,98 @@ chk(
     "WHI-254 STARTTLS findings are skill-only with shipping N/A reasons",
     _starttls_scope_errors,
     [],
+)
+
+
+# WHI-12 Part A — lifecycle identity is declared at every emit site, never
+# inferred from mutable display text after the finding has been built.
+_audit_source = Path(audit.__file__).read_text(encoding="utf-8")
+_audit_tree = ast.parse(_audit_source)
+_finding_emit_errors = []
+_finding_rule_ids = set()
+_finding_emit_count = 0
+
+
+def _declared_rule_ids(node):
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return {node.value}
+    if isinstance(node, ast.IfExp):
+        return _declared_rule_ids(node.body) | _declared_rule_ids(node.orelse)
+    return set()
+
+
+for _node in ast.walk(_audit_tree):
+    if not (
+            isinstance(_node, ast.Call)
+            and isinstance(_node.func, ast.Attribute)
+            and isinstance(_node.func.value, ast.Name)
+            and _node.func.value.id == "F"
+            and _node.func.attr == "append"):
+        continue
+    _finding_emit_count += 1
+    if not _node.args or not (
+            isinstance(_node.args[0], ast.Call)
+            and isinstance(_node.args[0].func, ast.Name)
+            and _node.args[0].func.id == "finding"
+            and _node.args[0].args):
+        _finding_emit_errors.append(f"line {_node.lineno}: not finding(rule_id, ...)")
+        continue
+    _ids = _declared_rule_ids(_node.args[0].args[0])
+    if not _ids or any(not audit.RULE_ID_RE.fullmatch(value) for value in _ids):
+        _finding_emit_errors.append(f"line {_node.lineno}: non-literal or invalid rule_id")
+        continue
+    _finding_rule_ids.update(_ids)
+
+_expected_rule_ids = {
+    "ai_visibility.robots_blocks", "bimi.missing", "bimi.no_vmc", "bimi.present",
+    "caa.missing", "dkim.invalid_key", "dkim.not_found", "dkim.present",
+    "dkim.testing_mode", "dkim.weak_rsa1024", "dmarc.enforced",
+    "dmarc.inherited_enforced", "dmarc.inherited_not_enforced",
+    "dmarc.invalid_policy", "dmarc.missing", "dmarc.monitor_only",
+    "dmarc.multiple_records", "dmarc.no_rua", "dmarc.parent_observed",
+    "dmarc.partial_pct", "dmarc.removed_tags", "dmarc.subdomain_not_enforced",
+    "dmarc.unauthorized_report_destination", "dnssec.enabled", "dnssec.missing",
+    "dnssec.validation_failing", "mta_sts.malformed", "mta_sts.missing",
+    "mta_sts.not_applicable",
+    "mta_sts.mx_not_covered", "mta_sts.policy_unreachable", "mta_sts.present",
+    "mta_sts.unconfirmed", "mx.mixed_providers", "reputation.expiring",
+    "reputation.new_domain", "spf.duplicate_include", "spf.lookup_limit",
+    "spf.missing", "spf.multiple_records", "spf.no_all", "spf.permissive_all",
+    "spf.present", "spf.ptr_mechanism", "spf.void_limit", "tls_rpt.missing",
+    "tls_rpt.no_rua", "tls_rpt.present", "transport.dane_misconfigured",
+    "transport.dane_missing", "transport.dane_present", "transport.dane_unvalidated",
+    "transport.no_mx", "transport.null_mx", "transport.ptr_missing",
+    "transport.ptr_not_fcrdns", "transport.starttls_failed",
+    "transport.starttls_present",
+}
+chk("WHI-12 every finding emit declares stable identity", _finding_emit_errors, [])
+chk("WHI-12 finding emit-site count", _finding_emit_count, 59)
+chk("WHI-12 finding rule inventory", _finding_rule_ids, _expected_rule_ids)
+
+_fixtures_by_id = {fixture["id"]: fixture for fixture in _fixture_document["fixtures"]}
+_spf_identity_pair = []
+for _fixture_id in ("finding-id-spf-lookup-12", "finding-id-spf-lookup-13"):
+    _spf_identity_pair.append(next(
+        finding["rule_id"]
+        for finding in _fixtures_by_id[_fixture_id]["expect"]["findings"]
+        if finding["title"].startswith("SPF exceeds 10 DNS lookups")
+    ))
+chk(
+    "WHI-12 SPF live-value changes keep one rule identity",
+    _spf_identity_pair,
+    ["spf.lookup_limit", "spf.lookup_limit"],
+)
+_dkim_selector_pair = []
+for _fixture_id in ("dkim-rsa-good", "finding-id-dkim-google-selector"):
+    _dkim_selector_pair.append(next(
+        finding["discriminator"]
+        for finding in _fixtures_by_id[_fixture_id]["expect"]["findings"]
+        if finding["rule_id"] == "dkim.present"
+    ))
+chk(
+    "WHI-12 two DKIM selectors have distinct discriminators",
+    _dkim_selector_pair,
+    ["selector1", "google"],
 )
 
 
@@ -357,6 +450,46 @@ try:
         _absent_lookup_calls, 3)
     chk("WHI-125 real NXDOMAIN does not fetch the policy",
         _absent_policy_fetches, [])
+
+    # WHI-293 — the narrow DNSSEC diagnosis probe must keep checking disabled
+    # and corroborate records through both named public resolvers. This is not a
+    # fallback resolver for the audit; its answers are used only by check_dnssec.
+    resolver.cache_clear()
+    _dnssec_probe_calls = []
+
+    def _dnssec_probe_run(args, **_kwargs):
+        _dnssec_probe_calls.append(args)
+        if "+cd" in args:
+            return _result(_dig_reply(
+                "NOERROR", "dnssec-bogus.invalid", "DNSKEY", ("257 3 13 abcdef",),
+            ))
+        return _result(_dig_reply("SERVFAIL", "dnssec-bogus.invalid", "DNSKEY"))
+
+    resolver.subprocess.run = _dnssec_probe_run
+    _dnssec_evidence = resolver.query_dnssec_probe("dnssec-bogus.invalid", "DNSKEY")
+    chk("WHI-293 probe records enabled SERVFAIL and disabled DNSKEY per resolver",
+        _dnssec_evidence, {
+            "cloudflare": {
+                "checking_enabled": {"status": 2, "ad": False, "records": []},
+                "checking_disabled": {
+                    "status": 0, "ad": False, "records": ["257 3 13 abcdef"],
+                },
+            },
+            "google": {
+                "checking_enabled": {"status": 2, "ad": False, "records": []},
+                "checking_disabled": {
+                    "status": 0, "ad": False, "records": ["257 3 13 abcdef"],
+                },
+            },
+        })
+    chk("WHI-293 probe uses enabled and +cd queries on Cloudflare and Google",
+        [
+            ("+cd" in call, next(arg for arg in call if arg.startswith("@")))
+            for call in _dnssec_probe_calls
+        ], [
+            (False, "@1.1.1.1"), (True, "@1.1.1.1"),
+            (False, "@8.8.8.8"), (True, "@8.8.8.8"),
+        ])
 finally:
     resolver.subprocess.run = _resolver_run
     resolver.time.sleep = _resolver_sleep
