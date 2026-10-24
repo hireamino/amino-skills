@@ -128,6 +128,60 @@ _expected_rule_ids = {
 chk("WHI-12 every finding emit declares stable identity", _finding_emit_errors, [])
 chk("WHI-12 finding emit-site count", _finding_emit_count, 59)
 chk("WHI-12 finding rule inventory", _finding_rule_ids, _expected_rule_ids)
+_engine_rule_ids = _expected_rule_ids - {
+    "transport.starttls_failed", "transport.starttls_present",
+}
+chk("WHI-12 1.11 rule-evaluation inventory count", len(audit.RULE_EVALUATION_IDS), 56)
+chk(
+    "WHI-12 1.11 rule-evaluation inventory is exact",
+    set(audit.RULE_EVALUATION_IDS),
+    _engine_rule_ids,
+)
+chk(
+    "WHI-12 1.11 every engine rule declares inputs",
+    set(audit.RULE_INPUTS),
+    _engine_rule_ids,
+)
+chk(
+    "WHI-12 1.11 no rule has an empty input declaration",
+    [rule for rule, inputs in audit.RULE_INPUTS.items() if not inputs],
+    [],
+)
+_validation_failing = audit.finding(
+    "dnssec.validation_failing", area="DNSSEC", severity="critical",
+    title="DNSSEC validation is failing", detail="", fix="",
+)
+chk(
+    "WHI-312 bogus DNSSEC has the repair-specific action",
+    audit.action(_validation_failing),
+    "Fix DNSSEC signing",
+)
+_missing_dnssec = audit.finding(
+    "dnssec.missing", area="DNSSEC", severity="low",
+    title="DNSSEC not enabled", detail="", fix="",
+)
+chk(
+    "WHI-312 ordinary DNSSEC absence keeps the enable action",
+    audit.action(_missing_dnssec),
+    "Enable DNSSEC",
+)
+
+_saved_query, _saved_meta = audit._resolver_query, audit._resolver_meta
+_one_read_calls = []
+try:
+    audit._resolver_query = lambda name, rrtype="A", *_a, **_k: (
+        _one_read_calls.append((name, rrtype)) or []
+    )
+    audit._resolver_meta = lambda *_a, **_k: {"status": 0, "error": False, "ad": False}
+    audit._reset_evaluation_trace()
+    with audit._evaluation_scope("spf"):
+        audit.dig("one-read.example", "TXT")
+        audit.dig("one-read.example", "TXT")
+    chk("WHI-12 1.11 one DNS read per name/type", _one_read_calls,
+        [("one-read.example", "TXT")])
+finally:
+    audit._resolver_query, audit._resolver_meta = _saved_query, _saved_meta
+    audit._reset_evaluation_trace()
 
 _fixtures_by_id = {fixture["id"]: fixture for fixture in _fixture_document["fixtures"]}
 _spf_identity_pair = []

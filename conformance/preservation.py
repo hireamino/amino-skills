@@ -59,6 +59,30 @@ WHI293_REVIEW_IDS = (
     "dnssec-provider-disagreement-not-bogus",
     "dnssec-disabled-evidence-incomplete-not-bogus",
 )
+WHI12_1_11_NEW_IDS = (
+    "registrable-root-systems-refresh",
+    "registrable-root-replit-private-refresh",
+    "rule-evaluation-no-dns-meta",
+    "rule-evaluation-no-dnssec-probe",
+    "rule-evaluation-tlsa-servfail",
+    "rule-evaluation-spf-target-servfail",
+    "rule-evaluation-dmarc-parent-servfail",
+    "rule-evaluation-mta-sts-http-503",
+    "rule-evaluation-dmarc-report-auth-servfail",
+    "rule-evaluation-ptr-forward-servfail",
+)
+WHI12_1_11_NEW_DIGESTS = {
+    "registrable-root-systems-refresh": "379ce61fd2e6de4aecf76ed81aa2df49e7705e734988348fb60c46e5b8b0c3ee",
+    "registrable-root-replit-private-refresh": "296d17f6d1e828c07436f860236410b9c15c022d623edb025ad6e7d97d4861de",
+    "rule-evaluation-no-dns-meta": "dcbdebef47b0ac61e9e1e06ebf5fd4540476e68bac07a82801f2c876ae97bc83",
+    "rule-evaluation-no-dnssec-probe": "f723a1ca81c1737e669a257f905072d0b07c2b1416c449b4f2e1917c1baaa419",
+    "rule-evaluation-tlsa-servfail": "4d5d6e03ea2dcf2e55f8a9e81bc9dcdf003a21a502965f4e159492b56fee55cb",
+    "rule-evaluation-spf-target-servfail": "d5b2dd97edf6e5fc36ab7c762f5e12c571cdc2a4540359acdea73105f180c073",
+    "rule-evaluation-dmarc-parent-servfail": "d4ade29a8ec2c1115bc4343a7076d02d1185c0c8f4d41c86a50760359e06cdd6",
+    "rule-evaluation-mta-sts-http-503": "474a4afb55ed27078cdb4d5962ad8a0d6a7a9e66b54ab3fd03007370d5c0ece2",
+    "rule-evaluation-dmarc-report-auth-servfail": "ce370b376f7c0efd1bf4e1f647aec3ec60e91143fe9c4ce04590692a683dd72b",  # gitleaks:allow — fixture SHA-256
+    "rule-evaluation-ptr-forward-servfail": "7af75943499003bf8f2fba08ec6f32ea7d284c4885cdb0f913e589e0aca9e5df",
+}
 CHANGED_IDS = (
     "registrable-root-nhs-uk",
     "registrable-root-sch-uk-wildcard",
@@ -196,6 +220,30 @@ def without_finding_identity(value):
     return candidate
 
 
+def without_1_11(value):
+    """Remove only the additive 1.11 ledger and normalize WHI-312 for old proofs."""
+    candidate = json.loads(json.dumps(value))
+    items = [candidate] if isinstance(candidate, dict) and "expect" in candidate else []
+    if not items and isinstance(candidate, dict):
+        for output in candidate.values():
+            if isinstance(output, dict):
+                result = output.get("result", {})
+                if isinstance(result, dict):
+                    result.pop("rule_evaluation", None)
+                    items.append({"expect": {"findings": result.get("findings", [])}})
+    for item in items:
+        expected = item.get("expect", {})
+        expected.pop("rule_evaluation", None)
+        for finding in expected.get("findings", []):
+            if finding.get("rule_id") == "dnssec.validation_failing":
+                finding["action"] = "Enable DNSSEC"
+    return candidate
+
+
+def without_1_11_and_identity(value):
+    return without_finding_identity(without_1_11(value))
+
+
 def changes(old, new, path=()):
     if type(old) is not type(new):
         yield path, old, new
@@ -277,7 +325,7 @@ def main():
     current_document = json.loads((ROOT / FIXTURES_PATH).read_text(encoding="utf-8"))
     base = base_document["fixtures"]
     current = current_document["fixtures"]
-    if set(base_document) != set(current_document) or len(base) != 66 or len(current) != 94:
+    if set(base_document) != set(current_document) or len(base) != 66 or len(current) != 104:
         print("UNEXPECTED_FIXTURE_SHAPE", file=sys.stderr)
         return 1
     if [f["id"] for f in current[:len(base)]] != [f["id"] for f in base]:
@@ -285,13 +333,13 @@ def main():
         return 1
     if tuple(f["id"] for f in current[len(base):]) != (
             NEW_IDS + WHI254_NEW_IDS + WHI290_NEW_IDS + WHI12_NEW_IDS
-            + WHI293_REVIEW_IDS):
+            + WHI293_REVIEW_IDS + WHI12_1_11_NEW_IDS):
         print("UNEXPECTED_NEW_FIXTURE_IDS", file=sys.stderr)
         return 1
 
     fixture_changes = []
     for old, new in zip(base, current):
-        candidate = without_finding_identity(new)
+        candidate = without_1_11_and_identity(new)
         if old["id"] in CHANGED_IDS:
             findings = candidate["expect"]["findings"]
             candidate["expect"]["findings"] = [
@@ -322,7 +370,7 @@ def main():
 
     current_by_id = {fixture["id"]: fixture for fixture in current}
     digests = {
-        f["id"]: hashlib.sha256(canonical(without_finding_identity(f))).hexdigest()
+        f["id"]: hashlib.sha256(canonical(without_1_11_and_identity(f))).hexdigest()
         for f in current[len(base):len(base) + len(NEW_IDS)]
     }
     if digests != NEW_DIGESTS:
@@ -331,13 +379,13 @@ def main():
     table_same = git_show(TABLE_PATH) == (ROOT / TABLE_PATH).read_bytes()
     print(
         f"FIXTURE_CHANGE_PROOF existing={len(base)} changed={len(CHANGED_IDS)} "
-        f"added={len(NEW_IDS) + len(WHI254_NEW_IDS) + len(WHI290_NEW_IDS) + len(WHI12_NEW_IDS) + len(WHI293_REVIEW_IDS)} "
-        "allowed_existing_changes=one parent observation each plus additive finding identity "
+        f"added={len(NEW_IDS) + len(WHI254_NEW_IDS) + len(WHI290_NEW_IDS) + len(WHI12_NEW_IDS) + len(WHI293_REVIEW_IDS) + len(WHI12_1_11_NEW_IDS)} "
+        "allowed_existing_changes=one parent observation each plus additive finding identity/rule evaluation and WHI-312 action "
         f"address_table_unchanged={str(table_same).lower()}"
     )
     print("NEW_FIXTURE_DIGESTS " + ",".join(f"{key}:{digests[key]}" for key in NEW_IDS))
     whi254_digests = {
-        f["id"]: hashlib.sha256(canonical(without_finding_identity(f))).hexdigest()
+        f["id"]: hashlib.sha256(canonical(without_1_11_and_identity(f))).hexdigest()
         for f in current[len(base) + len(NEW_IDS):len(base) + len(NEW_IDS) + len(WHI254_NEW_IDS)]
     }
     if whi254_digests != WHI254_NEW_DIGESTS:
@@ -347,7 +395,7 @@ def main():
         f"{key}:{whi254_digests[key]}" for key in WHI254_NEW_IDS
     ))
     whi290_digests = {
-        f["id"]: hashlib.sha256(canonical(without_finding_identity(f))).hexdigest()
+        f["id"]: hashlib.sha256(canonical(without_1_11_and_identity(f))).hexdigest()
         for f in current[
             len(base) + len(NEW_IDS) + len(WHI254_NEW_IDS):
             len(base) + len(NEW_IDS) + len(WHI254_NEW_IDS) + len(WHI290_NEW_IDS)
@@ -373,8 +421,11 @@ def main():
         f"{key}:{whi12_digests[key]}" for key in WHI12_NEW_IDS
     ))
     whi293_digests = {
-        f["id"]: hashlib.sha256(canonical(f)).hexdigest()
-        for f in current[whi12_start + len(WHI12_NEW_IDS):]
+        f["id"]: hashlib.sha256(canonical(without_1_11(f))).hexdigest()
+        for f in current[
+            whi12_start + len(WHI12_NEW_IDS):
+            whi12_start + len(WHI12_NEW_IDS) + len(WHI293_REVIEW_IDS)
+        ]
     }
     if whi293_digests != WHI293_REVIEW_DIGESTS:
         print(f"UNEXPECTED_WHI293_REVIEW_FIXTURE_CHANGE {whi293_digests}", file=sys.stderr)
@@ -382,8 +433,19 @@ def main():
     print("WHI293_REVIEW_FIXTURE_DIGESTS " + ",".join(
         f"{key}:{whi293_digests[key]}" for key in WHI293_REVIEW_IDS
     ))
+    whi12_1_11_start = whi12_start + len(WHI12_NEW_IDS) + len(WHI293_REVIEW_IDS)
+    whi12_1_11_digests = {
+        f["id"]: hashlib.sha256(canonical(f)).hexdigest()
+        for f in current[whi12_1_11_start:]
+    }
+    if WHI12_1_11_NEW_DIGESTS and whi12_1_11_digests != WHI12_1_11_NEW_DIGESTS:
+        print(f"UNEXPECTED_WHI12_1_11_FIXTURE_CHANGE {whi12_1_11_digests}", file=sys.stderr)
+        return 1
+    print("WHI12_1_11_NEW_FIXTURE_DIGESTS " + ",".join(
+        f"{key}:{whi12_1_11_digests[key]}" for key in WHI12_1_11_NEW_IDS
+    ))
     changed_digests = {
-        key: hashlib.sha256(canonical(without_finding_identity(current_by_id[key]))).hexdigest()
+        key: hashlib.sha256(canonical(without_1_11_and_identity(current_by_id[key]))).hexdigest()
         for key in CHANGED_IDS
     }
     if changed_digests != CHANGED_DIGESTS:
@@ -412,8 +474,8 @@ def main():
         old_whi280 = snapshot_subprocess(old_repository, set(WHI280_CHANGED_IDS))
         current_whi280 = snapshot_subprocess(ROOT, set(WHI280_CHANGED_IDS))
 
-    current_outputs_without_identity = without_finding_identity(current_outputs)
-    current_whi280_without_identity = without_finding_identity(current_whi280)
+    current_outputs_without_identity = without_1_11_and_identity(current_outputs)
+    current_whi280_without_identity = without_1_11_and_identity(current_whi280)
     output_changes = list(changes(old_outputs, current_outputs_without_identity))
     grouped = Counter(path[-1] for path, _before, _after in output_changes)
     expected_ids = set(old_outputs)

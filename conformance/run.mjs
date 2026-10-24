@@ -33,7 +33,9 @@ if (typeof engine.auditDomain !== "function" || typeof engine.buckets !== "funct
   process.exit(2);
 }
 let { fixtures } = JSON.parse(readFileSync(resolve(here, "fixtures.json"), "utf8"));
-const CONTRACT_MODES = new Set(["dns-engine", "http-observation"]);
+const CONTRACT_MODES = new Set([
+  "dns-engine", "http-observation", "registrable-root", "rule-evaluation",
+]);
 const LANES = new Set([
   "outbound_auth", "inbound_transport", "domain_posture",
   "brand_optional", "outside_sending_posture",
@@ -88,6 +90,13 @@ function mockQ(dns, http = {}, nowMs = 1767225600000, dnssecProbe = {}) {
     rdap: async () => rdapResponse(),
   };
   q.clock = { nowMs: () => nowMs };
+  return q;
+}
+
+function fixtureQ(fx) {
+  const q = mockQ(fx.input.dns, fx.input.http, fx.input.nowMs, fx.input.dnssecProbe);
+  if (fx.input.dnsMeta === "unavailable") delete q.meta;
+  if (fx.input.dnssecProbeAvailable === false) delete q.dnssecProbe;
   return q;
 }
 
@@ -298,8 +307,16 @@ function compareContract(fx, result, score, surface, ledger) {
 }
 
 function assertionPlan(surface) {
-  const plan = { identity: 0, rule_id: 0, discriminator: 0, severity: 0, action: 0, fix: 0, lane: 0, unconfirmed: 0, detail: 0, effort: 0, value: 0, scoreFields: 0, closedWorld: 0, observations: 0, inconclusive: 0, inconclusiveReason: 0, registrableRoot: 0 };
+  const plan = { identity: 0, rule_id: 0, discriminator: 0, severity: 0, action: 0, fix: 0, lane: 0, unconfirmed: 0, detail: 0, effort: 0, value: 0, scoreFields: 0, closedWorld: 0, observations: 0, inconclusive: 0, inconclusiveReason: 0, registrableRoot: 0, ruleEvaluationCases: 0 };
   for (const fx of fixtures.filter((fixture) => CONTRACT_MODES.has(fixture.mode))) {
+    if (fx.mode === "registrable-root") {
+      plan.registrableRoot++;
+      continue;
+    }
+    if (fx.mode === "rule-evaluation") {
+      plan.ruleEvaluationCases++;
+      continue;
+    }
     const { expected } = expectedFindings(fx, surface);
     plan.identity += expected.length;
     plan.rule_id += expected.length;
@@ -327,7 +344,7 @@ let fail = 0;
 let skip = 0;
 let notApplicable = 0;
 const failures = [];
-const ledger = { identity: 0, rule_id: 0, discriminator: 0, severity: 0, action: 0, fix: 0, lane: 0, unconfirmed: 0, detail: 0, effort: 0, value: 0, scoreFields: 0, closedWorld: 0, observations: 0, inconclusive: 0, inconclusiveReason: 0, registrableRoot: 0 };
+const ledger = { identity: 0, rule_id: 0, discriminator: 0, severity: 0, action: 0, fix: 0, lane: 0, unconfirmed: 0, detail: 0, effort: 0, value: 0, scoreFields: 0, closedWorld: 0, observations: 0, inconclusive: 0, inconclusiveReason: 0, registrableRoot: 0, ruleEvaluationCases: 0 };
 
 for (const fx of fixtures) {
   if (!CONTRACT_MODES.has(fx.mode)) {
@@ -336,16 +353,73 @@ for (const fx of fixtures) {
     continue;
   }
 
+  if (fx.mode === "registrable-root") {
+    const actual = typeof engine.registrableDomain === "function"
+      ? engine.registrableDomain(fx.input.domain) : undefined;
+    ledger.registrableRoot++;
+    if (actual === fx.expect.registrable_root) {
+      pass++;
+      console.log(`  PASS  ${fx.id} (${fx.invariant})`);
+    } else {
+      fail++;
+      const message = `${fx.id}.registrable_root: expected ${shown(fx.expect.registrable_root)}, got ${shown(actual)}`;
+      failures.push(message);
+      console.log(`  FAIL  ${fx.id} (${fx.invariant}) — ${message}`);
+    }
+    continue;
+  }
+
+  if (fx.mode === "rule-evaluation") {
+    try {
+      const result = await engine.auditDomain(fx.input.domain, fixtureQ(fx));
+      const evaluation = result.rule_evaluation || {};
+      const entries = Object.entries(evaluation);
+      const nonconclusive = entries.filter(([, reason]) => reason !== "conclusive");
+      const conclusive = entries.filter(([, reason]) => reason === "conclusive")
+        .map(([rule]) => rule).sort();
+      const wanted = [...(fx.expect.conclusive || [])].sort();
+      const problems = [];
+      if (entries.length !== 56) problems.push(`rule_evaluation count: expected 56, got ${entries.length}`);
+      if (nonconclusive.length !== fx.expect.not_conclusive_count) {
+        problems.push(`not_conclusive_count: expected ${fx.expect.not_conclusive_count}, got ${nonconclusive.length}`);
+      }
+      if (fx.expect.conclusive && shown(conclusive) !== shown(wanted)) {
+        problems.push(`conclusive: expected ${shown(wanted)}, got ${shown(conclusive)}`);
+      }
+      if (fx.expect.not_conclusive_rules) {
+        const gotRules = nonconclusive.map(([rule]) => rule).sort();
+        const wantedRules = [...fx.expect.not_conclusive_rules].sort();
+        if (shown(gotRules) !== shown(wantedRules)) {
+          problems.push(`not_conclusive_rules: expected ${shown(wantedRules)}, got ${shown(gotRules)}`);
+        }
+      }
+      if (fx.expect.reasonIncludes
+          && nonconclusive.some(([, reason]) => !String(reason).includes(fx.expect.reasonIncludes))) {
+        problems.push(`every non-conclusive reason must include ${shown(fx.expect.reasonIncludes)}`);
+      }
+      ledger.ruleEvaluationCases++;
+      if (problems.length) {
+        fail++;
+        failures.push(...problems.map((problem) => `${fx.id}.${problem}`));
+        console.log(`  FAIL  ${fx.id} (${fx.invariant}) — ${problems.join("; ")}`);
+      } else {
+        pass++;
+        console.log(`  PASS  ${fx.id} (${fx.invariant})`);
+      }
+    } catch (error) {
+      fail++;
+      const message = `${fx.id}.execution: threw ${error?.message || error}`;
+      failures.push(message);
+      console.log(`  FAIL  ${fx.id} (${fx.invariant}) — ${message}`);
+    }
+    continue;
+  }
+
   let result;
   let findings;
   let score;
   try {
-    const q = mockQ(
-      fx.input.dns,
-      fx.input.http,
-      fx.input.nowMs,
-      fx.input.dnssecProbe,
-    );
+    const q = fixtureQ(fx);
     result = await engine.auditDomain(fx.input.domain, q);
     findings = result.findings || [];
     score = await engine.buckets(fx.input.domain, q);

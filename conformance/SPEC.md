@@ -1,4 +1,4 @@
-# Amino Deliverability — Correctness Conformance Spec (v1.21)
+# Amino Deliverability — Correctness Conformance Spec (v1.22)
 
 **Status:** proposed · **Owner:** hireamino · **Canonical home:** `amino-skills/conformance/`
 
@@ -45,6 +45,8 @@ another surface or a regenerated snapshot. For every `dns-engine` or
   and `rdap`; and
 - `inconclusive` and `inconclusive_reason` are compared on both surfaces whenever
   a fixture declares them; and
+- `rule_evaluation` is a closed 56-entry map: every engine-visible rule is either
+  `conclusive` or names the failed DNS/HTTP input that prevented evaluation; and
 - a surface may omit a finding only through `surfaces` plus a non-empty
   `notApplicable` reason for that surface.
 
@@ -57,6 +59,32 @@ review. The corpus has no expectation regeneration mode; reviewed answers cannot
 replaced by current output.
 
 ## Current status
+
+**v1.22 / WHI-12 engine contract 1.11.0 — resolution-safe rule evidence:**
+every skill result carries a closed `rule_evaluation` object with exactly the 56
+engine-visible `rule_id` values. Each value is `conclusive` or a short reason naming
+the failed DNS or HTTP input read during that run. The two live port-25 STARTTLS rules
+remain skill-only and outside the shared ledger. `RULE_INPUTS` is source-declared and
+closed-world: a missing or extra rule fails the source gate.
+
+DNS reads are single-flight and cached by normalized `(name, record type)` for one
+audit, even when the injected adapter does not cache. Only NOERROR and NXDOMAIN
+metadata are authoritative; missing metadata is a failed input. Missing DNSSEC-probe
+capability makes all three DNSSEC rules non-conclusive. HTTP absence, exceptions,
+429 and 5xx are failures; 404, 3xx, non-text policy responses and public-address-guard
+refusals are usable evidence and remain conclusive. Dependency precision is per
+rule: `spf.present` reads apex TXT only; the nine own-record DMARC rules read only
+`_dmarc.<audited-name>`; `tls_rpt.present` reads only `_smtp._tls`; report-
+authorization, RFC 9989 ancestors, TLSA, PTR/forward-A, recursive SPF, A+AAAA,
+policy/RDAP/robots HTTP and DNSSEC probes remain attached to their source-exact rules.
+
+The corpus adds two WHI-311 refreshed-PSL rows (`knightpoint.systems` and the private
+`*.replit.dev` wildcard), two missing-capability rows, and six source-precision rows.
+It also changes only the action label for `dnssec.validation_failing` to
+`Fix DNSSEC signing`; every other DNSSEC action stays `Enable DNSSEC`. Six independent
+mutation canaries prove TLSA dependency, closed declarations, missing-metadata
+fail-closed behavior, one-read DNS, DMARC report authorization, and PTR-forward
+precision.
 
 **v1.21 / WHI-12 Part A — stable finding lifecycle identity:** every finding
 emit site now declares a namespaced `rule_id` that is independent of mutable
@@ -516,12 +544,13 @@ The web and Action pin files must name the same full amino-skills commit before 
 
 ## Fixtures
 
-See `fixtures.json`. It contains 94 known-answer cases: 89 executable contract
+See `fixtures.json`. It contains 104 known-answer cases: 99 executable contract
 cases and five explicitly skipped pure/HTTP/wrapper cases covered by per-surface
-tests or later work. Eight WHI-215 rows additionally assert the exact registrable
+tests or later work. Ten WHI-215/WHI-311 rows additionally assert the exact registrable
 root and the DMARC tree-walk boundary. Each fixture is language-neutral and every
 harness adapts it to its own resolver/HTTP mock without ambient network access.
-Step 2 gates the Python runner with 89 mutation canaries plus two independent
+Step 2 gates the Python runner with 89 existing mutation canaries, six rule-evaluation
+canaries, plus two independent
 public-suffix adoption canaries. The JavaScript surface already gates its
 embedded artifact, official vectors and mutation proof; WHI-254 activates the
 widened cross-runtime differential after its normalization contract matches the

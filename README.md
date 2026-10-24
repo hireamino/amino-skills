@@ -68,6 +68,11 @@ answer is public under the reviewed IANA-derived address contract; mixed, unpars
 mapped-private, translated-private, and other non-public answers are refused. IPv6
 zone-qualified address literals are refused.
 
+Every audit also emits a closed `rule_evaluation` ledger for the 56 shared engine
+rules. Each entry is `conclusive` or names the DNS/HTTP input failure that prevented
+that rule from being evaluated. DNS reads are cached once per normalized name and
+type for the audit, so the findings and their evidence ledger share one observation.
+
 Registrable-domain decisions are moving to one generated, pinned
 [Public Suffix List artifact](./public-suffix/README.md). Step 1 establishes and
 tests that shared source without changing any shipping audit surface.

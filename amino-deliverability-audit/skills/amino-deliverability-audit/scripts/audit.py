@@ -19,14 +19,15 @@ import socket
 import ssl
 import base64
 import ipaddress
+import threading
+from contextlib import contextmanager
 from pathlib import Path
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 
-from resolver import query as dig  # pluggable DNS (dig backend locally; DoH at the edge)
-from resolver import query_fresh   # uncached re-query, for confirming critical absences
-from resolver import meta as dns_meta  # DNSSEC/rcode side-channel (AD bit) for DANE/DNSSEC
-from resolver import query_dnssec_probe as dnssec_probe
+from resolver import query as _resolver_query  # pluggable DNS backend
+from resolver import meta as _resolver_meta  # DNSSEC/rcode side-channel
+from resolver import query_dnssec_probe as _resolver_dnssec_probe
 
 # Input is untrusted (any domain, incl. from the future public web tool). Validate it as
 # a real DNS hostname before it flows into dig args / socket connects / name construction.
@@ -56,6 +57,218 @@ AREA_LANES = {
 }
 OBSERVATION_STATES = ("checked", "unavailable", "not_applicable")
 RULE_ID_RE = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
+
+# Engine-visible finding contract. The two live STARTTLS findings are deliberately
+# skill-only and therefore do not appear in the shared rule-evaluation ledger.
+RULE_EVALUATION_IDS = (
+    "ai_visibility.robots_blocks", "bimi.missing", "bimi.no_vmc", "bimi.present",
+    "caa.missing", "dkim.invalid_key", "dkim.not_found", "dkim.present",
+    "dkim.testing_mode", "dkim.weak_rsa1024", "dmarc.enforced",
+    "dmarc.inherited_enforced", "dmarc.inherited_not_enforced",
+    "dmarc.invalid_policy", "dmarc.missing", "dmarc.monitor_only",
+    "dmarc.multiple_records", "dmarc.no_rua", "dmarc.parent_observed",
+    "dmarc.partial_pct", "dmarc.removed_tags", "dmarc.subdomain_not_enforced",
+    "dmarc.unauthorized_report_destination", "dnssec.enabled", "dnssec.missing",
+    "dnssec.validation_failing", "mta_sts.malformed", "mta_sts.missing",
+    "mta_sts.mx_not_covered", "mta_sts.not_applicable",
+    "mta_sts.policy_unreachable", "mta_sts.present", "mta_sts.unconfirmed",
+    "mx.mixed_providers", "reputation.expiring", "reputation.new_domain",
+    "spf.duplicate_include", "spf.lookup_limit", "spf.missing",
+    "spf.multiple_records", "spf.no_all", "spf.permissive_all", "spf.present",
+    "spf.ptr_mechanism", "spf.void_limit", "tls_rpt.missing", "tls_rpt.no_rua",
+    "tls_rpt.present", "transport.dane_misconfigured", "transport.dane_missing",
+    "transport.dane_present", "transport.dane_unvalidated", "transport.no_mx",
+    "transport.null_mx", "transport.ptr_missing", "transport.ptr_not_fcrdns",
+)
+
+_RULE_GROUPS = {
+    "spf": {rule for rule in RULE_EVALUATION_IDS if rule.startswith("spf.")},
+    "dkim": {rule for rule in RULE_EVALUATION_IDS if rule.startswith("dkim.")},
+    "dmarc": {rule for rule in RULE_EVALUATION_IDS if rule.startswith("dmarc.")},
+    "mta_sts": {rule for rule in RULE_EVALUATION_IDS if rule.startswith("mta_sts.")},
+    "tls_rpt": {rule for rule in RULE_EVALUATION_IDS if rule.startswith("tls_rpt.")},
+    "bimi": {rule for rule in RULE_EVALUATION_IDS if rule.startswith("bimi.")},
+    "mx": {"mx.mixed_providers"},
+    "transport": {
+        "transport.no_mx", "transport.null_mx",
+        *{rule for rule in RULE_EVALUATION_IDS if rule.startswith("transport.dane_")},
+    },
+    "rdns": {"transport.ptr_missing", "transport.ptr_not_fcrdns"},
+    "dnssec": {rule for rule in RULE_EVALUATION_IDS if rule.startswith("dnssec.")},
+    "reputation": {"reputation.expiring", "reputation.new_domain"},
+    "aibots": {"ai_visibility.robots_blocks"},
+    "caa": {"caa.missing"},
+}
+
+# Source-declared input contract. Values name the real trace selectors consumed by
+# _rule_evaluation; the closed key set is guarded in conformance/check.py.
+RULE_INPUTS = {
+    rule: (group,)
+    for group, rules in _RULE_GROUPS.items()
+    for rule in rules
+}
+RULE_INPUTS["transport.ptr_not_fcrdns"] = ("rdns", "rdns_forward")
+
+_scope = threading.local()
+_trace_lock = threading.Condition()
+_dns_cache = {}
+_dns_inflight = set()
+_dns_failures = []
+_http_failures = []
+_probe_failure = None
+
+
+@contextmanager
+def _evaluation_scope(name):
+    previous = getattr(_scope, "name", None)
+    _scope.name = name
+    try:
+        yield
+    finally:
+        _scope.name = previous
+
+
+def _reset_evaluation_trace():
+    global _dns_cache, _dns_inflight, _dns_failures, _http_failures, _probe_failure
+    with _trace_lock:
+        _dns_cache = {}
+        _dns_inflight = set()
+        _dns_failures = []
+        _http_failures = []
+        _probe_failure = None
+
+
+def _dns_failure_reason(name, rrtype, metadata):
+    status = metadata.get("status")
+    if not metadata or status is None:
+        return f"{rrtype} {name}: metadata unavailable"
+    if metadata.get("error") or status not in (0, 3):
+        label = {1: "FORMERR", 2: "SERVFAIL", 4: "NOTIMP", 5: "REFUSED"}.get(status)
+        return f"{rrtype} {name}: {label or 'lookup error'}"
+    return None
+
+
+def dig(name, rrtype="A", *args, **kwargs):
+    """One-read-per-key DNS adapter with per-rule failure provenance."""
+    key = (name.rstrip(".").lower(), rrtype.upper())
+    with _trace_lock:
+        while key in _dns_inflight and key not in _dns_cache:
+            _trace_lock.wait()
+        if key in _dns_cache:
+            rows, metadata = _dns_cache[key]
+        else:
+            _dns_inflight.add(key)
+            rows = metadata = None
+    if rows is None:
+        try:
+            rows = list(_resolver_query(name, rrtype, *args, **kwargs))
+            metadata = dict(_resolver_meta(name, rrtype) or {})
+        except Exception:
+            rows, metadata = [], {"status": None, "error": True}
+        finally:
+            with _trace_lock:
+                if rows is not None:
+                    _dns_cache[key] = (rows, metadata)
+                _dns_inflight.discard(key)
+                _trace_lock.notify_all()
+    reason = _dns_failure_reason(key[0], key[1], metadata)
+    scope = getattr(_scope, "name", None)
+    if scope and reason:
+        with _trace_lock:
+            _dns_failures.append((scope, key[0], key[1], reason))
+    return list(rows)
+
+
+def query_fresh(name, rrtype="A", *args, **kwargs):
+    """Compatibility name; the 1.11 contract deliberately reuses the run cache."""
+    return dig(name, rrtype, *args, **kwargs)
+
+
+def dns_meta(name, rrtype="A"):
+    key = (name.rstrip(".").lower(), rrtype.upper())
+    with _trace_lock:
+        cached = _dns_cache.get(key)
+    return dict(cached[1]) if cached else dict(_resolver_meta(name, rrtype) or {})
+
+
+def dnssec_probe(name, rrtype="DNSKEY"):
+    global _probe_failure
+    if not callable(_resolver_dnssec_probe):
+        _probe_failure = f"DNSSEC probe {name}: unavailable"
+        return {}
+    evidence = _resolver_dnssec_probe(name, rrtype) or {}
+    complete = all(
+        evidence.get(provider, {}).get(mode, {}).get("status") is not None
+        for provider in ("cloudflare", "google")
+        for mode in ("checking_enabled", "checking_disabled")
+    )
+    if not complete:
+        _probe_failure = f"DNSSEC probe {name}: unavailable"
+    return evidence
+
+
+_DMARC_OWN_RULES = {
+    "dmarc.missing", "dmarc.multiple_records", "dmarc.invalid_policy",
+    "dmarc.monitor_only", "dmarc.enforced", "dmarc.subdomain_not_enforced",
+    "dmarc.partial_pct", "dmarc.removed_tags", "dmarc.no_rua",
+}
+
+
+def _rule_evaluation(domain):
+    """Return the closed per-rule evidence ledger for this completed run."""
+    with _trace_lock:
+        dns_failures = list(_dns_failures)
+        http_failures = list(_http_failures)
+        probe_failure = _probe_failure
+    out = {}
+    own_dmarc = f"_dmarc.{domain}"
+    for rule in RULE_EVALUATION_IDS:
+        groups = RULE_INPUTS[rule]
+        group = groups[0]
+        candidates = [row for row in dns_failures if row[0] in groups]
+        if group == "reputation":
+            # rdap.org is a fixed trusted bootstrap host. The rule inputs are the
+            # returned HTTP document, not the adapter's transport-level DNS read.
+            candidates = []
+        if rule == "spf.present":
+            candidates = [row for row in candidates if row[1:] and row[1] == domain and row[2] == "TXT"]
+        elif rule in _DMARC_OWN_RULES:
+            candidates = [row for row in candidates if row[1] == own_dmarc and row[2] == "TXT"]
+        elif rule in {
+            "dmarc.parent_observed", "dmarc.inherited_not_enforced",
+            "dmarc.inherited_enforced",
+        }:
+            candidates = [row for row in candidates if "._report._dmarc." not in row[1]]
+        elif rule == "tls_rpt.present":
+            candidates = [row for row in candidates if row[1] == f"_smtp._tls.{domain}" and row[2] == "TXT"]
+        elif rule == "mta_sts.not_applicable":
+            candidates = [row for row in candidates if row[1] == domain and row[2] == "MX"]
+        elif rule in {"mta_sts.missing", "mta_sts.unconfirmed"}:
+            candidates = [
+                row for row in candidates
+                if (row[1], row[2]) in {(domain, "MX"), (f"_mta-sts.{domain}", "TXT")}
+            ]
+        elif rule.startswith("transport.dane_"):
+            candidates = [row for row in candidates if row[2] in {"MX", "TLSA"}]
+        elif rule in {"transport.no_mx", "transport.null_mx"}:
+            candidates = [row for row in candidates if row[1] == domain and row[2] == "MX"]
+        if candidates:
+            out[rule] = candidates[0][3]
+            continue
+        uses_http = group in {"reputation", "aibots"} or (
+            group == "mta_sts" and rule in {
+                "mta_sts.policy_unreachable", "mta_sts.malformed",
+                "mta_sts.present", "mta_sts.mx_not_covered",
+            }
+        )
+        http = next((row[1] for row in http_failures if row[0] in groups), None) if uses_http else None
+        if http:
+            out[rule] = http
+        elif group == "dnssec" and (probe_failure or not callable(_resolver_dnssec_probe)):
+            out[rule] = probe_failure or f"DNSSEC probe {domain}: unavailable"
+        else:
+            out[rule] = "conclusive"
+    return out
 
 
 def finding(rule_id, *, discriminator="", **fields):
@@ -220,10 +433,11 @@ def dkim_candidates(domain):
 
 def _dkim_probe(domain, sel):
     """One selector's key record (or None)."""
-    rec = first_txt(f"{sel}._domainkey.{domain}", "v=dkim1")
-    if not rec:
-        rec = next((r for r in dig(f"{sel}._domainkey.{domain}", "TXT") if "p=" in r), None)
-    return rec
+    with _evaluation_scope("dkim"):
+        rec = first_txt(f"{sel}._domainkey.{domain}", "v=dkim1")
+        if not rec:
+            rec = next((r for r in dig(f"{sel}._domainkey.{domain}", "TXT") if "p=" in r), None)
+        return rec
 
 
 def dkim_lookup(domain):
@@ -1094,11 +1308,19 @@ def _fetch_mta_sts_policy(domain):
         # RFC 8461 §3.3: the policy MUST be HTTP 200 with Content-Type text/plain.
         status_match = re.match(r"HTTP/\d\.\d\s+(\d{3})\b", status_line)
         if status_match is None:
+            _record_http_failure(f"HTTP {mhost}/.well-known/mta-sts.txt: unavailable")
             return "unavailable", None
-        status_ok = int(status_match.group(1)) == 200
+        status = int(status_match.group(1))
+        if status == 429 or status >= 500:
+            _record_http_failure(f"HTTP {mhost}/.well-known/mta-sts.txt: {status}")
+        status_ok = status == 200
         ctype_ok = re.search(r"^content-type:\s*text/plain", head, re.I | re.M) is not None
         return "checked", body[:8192] if (status_ok and ctype_ok) else None
     except Exception:
+        # A DNS refusal/absence is already represented by its DNS evidence. Once
+        # the host was public, a socket/TLS failure is a failed HTTP input.
+        if 'ips' in locals() and ips:
+            _record_http_failure(f"HTTP {mhost}/.well-known/mta-sts.txt: unavailable")
         return "unavailable", None
 
 
@@ -1166,33 +1388,35 @@ def check_mta_sts(domain, F, observations=None):
 
 def check_simple(domain, F):
     # TLS-RPT
-    if not is_null_mx(dig(domain, "MX")):
-        tlsrpt = first_txt(f"_smtp._tls.{domain}", "v=tlsrptv1")
-        if tlsrpt:
-            if "rua=" not in tlsrpt.lower():
-                F.append(finding("tls_rpt.no_rua", area="TLS-RPT", severity="low", title="TLS-RPT present but has no rua endpoint",
-                              detail="A TLS-RPT record exists but defines no rua= destination, so no TLS failure reports are actually delivered anywhere.",
-                              fix='Add a destination: "v=TLSRPTv1; rua=mailto:tlsrpt@<domain>".'))
+    with _evaluation_scope("tls_rpt"):
+        if not is_null_mx(dig(domain, "MX")):
+            tlsrpt = first_txt(f"_smtp._tls.{domain}", "v=tlsrptv1")
+            if tlsrpt:
+                if "rua=" not in tlsrpt.lower():
+                    F.append(finding("tls_rpt.no_rua", area="TLS-RPT", severity="low", title="TLS-RPT present but has no rua endpoint",
+                                  detail="A TLS-RPT record exists but defines no rua= destination, so no TLS failure reports are actually delivered anywhere.",
+                                  fix='Add a destination: "v=TLSRPTv1; rua=mailto:tlsrpt@<domain>".'))
+                else:
+                    F.append(finding("tls_rpt.present", area="TLS-RPT", severity="pass", title="TLS-RPT present", detail="Receiving TLS failure reports.", fix=None))
             else:
-                F.append(finding("tls_rpt.present", area="TLS-RPT", severity="pass", title="TLS-RPT present", detail="Receiving TLS failure reports.", fix=None))
-        else:
-            F.append(finding("tls_rpt.missing", area="TLS-RPT", severity="low", title="No TLS-RPT",
-                          detail="No SMTP TLS reporting; you won't learn when senders fail to negotiate TLS to you.",
-                          fix='Add _smtp._tls TXT: "v=TLSRPTv1; rua=mailto:tlsrpt@<domain>".'))
+                F.append(finding("tls_rpt.missing", area="TLS-RPT", severity="low", title="No TLS-RPT",
+                              detail="No SMTP TLS reporting; you won't learn when senders fail to negotiate TLS to you.",
+                              fix='Add _smtp._tls TXT: "v=TLSRPTv1; rua=mailto:tlsrpt@<domain>".'))
     # BIMI
-    bimi = first_txt(f"default._bimi.{domain}", "v=bimi1")
-    if bimi:
-        has_vmc = re.search(r"(?:^|;)\s*a=\s*https?://", bimi.lower())
-        if not has_vmc:
-            F.append(finding("bimi.no_vmc", area="BIMI", severity="low", title="BIMI present without a VMC",
-                          detail="A BIMI record is published but has no a= (Verified Mark Certificate) URL. Gmail and Apple Mail require a VMC to actually display the logo, so without it most inboxes won't render your mark.",
-                          fix="Obtain a VMC (or a CMC) and add it as a=https://<domain>/path/vmc.pem to the BIMI record."))
+    with _evaluation_scope("bimi"):
+        bimi = first_txt(f"default._bimi.{domain}", "v=bimi1")
+        if bimi:
+            has_vmc = re.search(r"(?:^|;)\s*a=\s*https?://", bimi.lower())
+            if not has_vmc:
+                F.append(finding("bimi.no_vmc", area="BIMI", severity="low", title="BIMI present without a VMC",
+                              detail="A BIMI record is published but has no a= (Verified Mark Certificate) URL. Gmail and Apple Mail require a VMC to actually display the logo, so without it most inboxes won't render your mark.",
+                              fix="Obtain a VMC (or a CMC) and add it as a=https://<domain>/path/vmc.pem to the BIMI record."))
+            else:
+                F.append(finding("bimi.present", area="BIMI", severity="pass", title="BIMI present (with VMC)", detail="Brand indicator + VMC published.", fix=None))
         else:
-            F.append(finding("bimi.present", area="BIMI", severity="pass", title="BIMI present (with VMC)", detail="Brand indicator + VMC published.", fix=None))
-    else:
-        F.append(finding("bimi.missing", area="BIMI", severity="low", title="No BIMI",
-                      detail="BIMI (logo in inbox) requires p=quarantine/reject DMARC first; it's a trust/brand signal, not a blocker.",
-                      fix="Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."))
+            F.append(finding("bimi.missing", area="BIMI", severity="low", title="No BIMI",
+                          detail="BIMI (logo in inbox) requires p=quarantine/reject DMARC first; it's a trust/brand signal, not a blocker.",
+                          fix="Once DMARC is enforced, publish default._bimi with an SVG logo (+ VMC for Gmail/Apple)."))
 
 
 def check_transport(domain, F):
@@ -1324,6 +1548,12 @@ def check_mx_hygiene(domain, F):
 # attacker-controlled (e.g. robots.txt on a hostile domain); when followed (RDAP's
 # rdap.org bootstrap), each hop is re-validated through the same guard.
 
+def _record_http_failure(reason):
+    scope = getattr(_scope, "name", None)
+    if scope:
+        with _trace_lock:
+            _http_failures.append((scope, reason))
+
 def _http_get(host, path, follow=0, cap=65536):
     """Return (status:int|None, body:str). Read-only, body-capped, short timeout,
     fail-closed (returns (None, None)) on any error or a non-public host."""
@@ -1347,10 +1577,15 @@ def _http_get(host, path, follow=0, cap=65536):
                 raw += chunk
             s.close()
         except Exception:
+            _record_http_failure(f"HTTP {host}{path}: unavailable")
             return None, None
         head, _, body = raw.decode("utf-8", errors="ignore").partition("\r\n\r\n")
         m = re.match(r"HTTP/\d\.\d\s+(\d{3})", head)
         status = int(m.group(1)) if m else None
+        if status is None:
+            _record_http_failure(f"HTTP {host}{path}: unavailable")
+        elif status == 429 or status >= 500:
+            _record_http_failure(f"HTTP {host}{path}: {status}")
         if status in (301, 302, 303, 307, 308) and hops < follow:
             loc = re.search(r"\n[Ll]ocation:\s*(\S+)", head)
             mu = re.match(r"https://([^/:]+)(?::\d+)?(/\S*)?$", loc.group(1)) if loc else None
@@ -1550,7 +1785,9 @@ def check_reverse_dns(domain, F):
                       fix="Have your host set a PTR (reverse DNS) record for the mail server's IP that matches its hostname."))
         return
     ptr_name = ptr[0].rstrip(".")
-    if ip not in dig(ptr_name, "A"):
+    with _evaluation_scope("rdns_forward"):
+        forward_addresses = dig(ptr_name, "A")
+    if ip not in forward_addresses:
         F.append(finding("transport.ptr_not_fcrdns", area="Transport", severity="low", title="Mail server reverse DNS isn't forward-confirmed",
                       detail=f"The MX IP {ip} has a PTR ({ptr_name}) but that name doesn't resolve back to the same IP — no forward-confirmed reverse DNS (FCrDNS). Some receivers read this as a spam signal.",
                       fix="Align the PTR hostname and its A record so reverse and forward DNS agree."))
@@ -1694,6 +1931,8 @@ def action(f):
     if a == "CAA":
         return "Add a CAA record"
     if a == "DNSSEC":
+        if f.get("rule_id") == "dnssec.validation_failing":
+            return "Fix DNSSEC signing"
         return "Enable DNSSEC"
     if a == "Reputation":
         return "Renew the domain before it lapses" if "expires" in t else "Warm up the domain before scaling sends"
@@ -1710,6 +1949,7 @@ def main():
     if not domain:
         print(json.dumps({"error": "invalid domain — provide a hostname like example.com"}))
         sys.exit(1)
+    _reset_evaluation_trace()
     # Two phases. PHASE 1 = the pure-DNS checks (incl. the parallel DKIM selector sweep)
     # run concurrently and fully drain. PHASE 2 = the checks that open sockets (STARTTLS:25,
     # the MTA-STS/RDAP/robots HTTPS fetches). Why split: concurrent socket connects interfere
@@ -1736,10 +1976,11 @@ def main():
     ]
 
     def _run(item):
-        _key, fn = item
+        key, fn = item
         local = []
-        ret = fn(domain, local)
-        return _key, local, ret
+        with _evaluation_scope(key):
+            ret = fn(domain, local)
+        return key, local, ret
 
     buckets, mx_host = {}, None
     # Phase 1: pure-DNS checks in parallel (no sockets → digs don't corrupt each other).
@@ -1782,6 +2023,7 @@ def main():
         "summary": summary,
         "findings": F,
         "observations": observations,
+        "rule_evaluation": _rule_evaluation(domain),
         "inconclusive": inconclusive,
         "inconclusive_reason": inconclusive_reason,
         "notes": "Read-only scan. DKIM is best-effort (common selectors only). "
