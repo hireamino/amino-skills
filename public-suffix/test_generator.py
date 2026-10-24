@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 
 import generate
@@ -35,6 +37,47 @@ def expect_refused(name: str, source: bytes, needle: str) -> None:
         print(f"PASS generator refuses {name}: {exc}")
         return
     raise AssertionError(f"generator accepted {name}")
+
+
+def freshness_source(root: Path, section: str) -> bytes:
+    rules = {"ICANN": [], "PRIVATE": []}
+    for raw in (root / "public_suffix_rules.tsv").read_text(encoding="utf-8").splitlines():
+        if not raw or raw.startswith("//"):
+            continue
+        name, rule = raw.split("\t", 1)
+        rules[name].append(rule)
+    rules[section].append(f"whi-311-{section.lower()}.example")
+    lines = [
+        generate.MPL_NOTICE.rstrip("\n"),
+        "// VERSION: 2099-01-01_TEST",
+        "// COMMIT: " + "b" * 40,
+        "// " + "padding" * 35_000,
+    ]
+    for name in ("ICANN", "PRIVATE"):
+        lines.append(generate.BEGIN[name])
+        lines.extend(rules[name])
+        lines.append(generate.END[name])
+    return ("\n".join(lines) + "\n").encode("utf-8")
+
+
+def run_freshness(root: Path, source: Path, provenance: Path, now: str, *, alarm: bool) -> subprocess.CompletedProcess[str]:
+    command = [
+        sys.executable,
+        str(root / "freshness.py"),
+        "--source-file", str(source),
+        "--artifact", str(root / "public_suffix_rules.tsv"),
+        "--provenance", str(provenance),
+        "--now", now,
+    ]
+    if alarm:
+        command.append("--alarm-policy")
+    return subprocess.run(command, text=True, capture_output=True, check=False)
+
+
+def require_freshness(result: subprocess.CompletedProcess[str], code: int, needle: str, label: str) -> None:
+    output = result.stdout + result.stderr
+    assert result.returncode == code and needle in output, (label, result.returncode, output)
+    print(f"PASS {label}: exit {code}, {needle}")
 
 
 def main() -> int:
@@ -88,7 +131,51 @@ def main() -> int:
         assert any("invalid wildcard shape" in problem for problem in problems), problems
         print("PASS verifier refuses a synthetic invalid wildcard artifact row")
 
-    print("PSL GENERATOR CANARIES PASS: 9/9")
+    with tempfile.TemporaryDirectory(prefix="amino-psl-freshness-") as temporary:
+        temporary_root = Path(temporary)
+        icann = temporary_root / "icann.dat"
+        private = temporary_root / "private.dat"
+        provenance = temporary_root / "provenance.json"
+        icann.write_bytes(freshness_source(root, "ICANN"))
+        private.write_bytes(freshness_source(root, "PRIVATE"))
+        record = json.loads((root / "provenance.json").read_text(encoding="utf-8"))
+
+        record["fetched_at"] = "2026-10-14T00:00:00Z"
+        provenance.write_text(json.dumps(record), encoding="utf-8")
+        require_freshness(
+            run_freshness(root, private, provenance, "2026-10-24T00:00:00Z", alarm=False),
+            1,
+            "artifact is stale",
+            "K1 exact comparison rejects PRIVATE drift",
+        )
+        require_freshness(
+            run_freshness(root, icann, provenance, "2026-10-24T00:00:00Z", alarm=True),
+            1,
+            "ICANN drift (1 added, 0 removed)",
+            "K5 ICANN drift is red",
+        )
+        require_freshness(
+            run_freshness(root, private, provenance, "2026-10-24T00:00:00Z", alarm=True),
+            0,
+            "`PRIVATE` `whi-311-private.example`",
+            "K5 fresh PRIVATE drift is green with the full report",
+        )
+        record["fetched_at"] = "2026-09-08T00:00:00Z"
+        provenance.write_text(json.dumps(record), encoding="utf-8")
+        require_freshness(
+            run_freshness(root, private, provenance, "2026-10-24T00:00:00Z", alarm=True),
+            1,
+            "pin age 46.0 days exceeds 45 days",
+            "K5 stale PRIVATE drift is red",
+        )
+        require_freshness(
+            run_freshness(root, temporary_root / "missing.dat", provenance, "2026-10-24T00:00:00Z", alarm=True),
+            2,
+            "PUBLIC SUFFIX FRESHNESS ERROR",
+            "K5 network or source failure stays an error",
+        )
+
+    print("PSL GENERATOR AND FRESHNESS CANARIES PASS: 14/14")
     return 0
 
 

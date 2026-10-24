@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   freshness:
@@ -17,4 +18,58 @@ jobs:
         with:
           python-version: '3.12'
       - name: Compare pinned artifact with canonical Public Suffix List
-        run: python3 public-suffix/freshness.py --report "$RUNNER_TEMP/public-suffix-freshness.md"
+        id: compare
+        shell: bash
+        run: |
+          set +e
+          python3 public-suffix/freshness.py --alarm-policy --report "$RUNNER_TEMP/public-suffix-freshness.md" >"$RUNNER_TEMP/public-suffix-freshness.log" 2>&1
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/public-suffix-freshness.log"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          if [[ ! -f "$RUNNER_TEMP/public-suffix-freshness.md" ]]; then
+            {
+              echo '# Public Suffix List freshness'
+              echo
+              echo 'The comparison failed before it could produce a drift report.'
+              echo
+              echo '```text'
+              cat "$RUNNER_TEMP/public-suffix-freshness.log"
+              echo '```'
+            } > "$RUNNER_TEMP/public-suffix-freshness.md"
+            cat "$RUNNER_TEMP/public-suffix-freshness.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Open or update the freshness alarm issue
+        if: steps.compare.outputs.status != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REPORT: ${{ runner.temp }}/public-suffix-freshness.md
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          title='Public Suffix List freshness alarm'
+          body="$RUNNER_TEMP/public-suffix-issue.md"
+          {
+            echo "Automated weekly alarm from $RUN_URL"
+            echo
+            cat "$REPORT"
+          } > "$body"
+          number="$(gh issue list --state open --search 'Public Suffix List freshness alarm in:title' --limit 100 --json number,title --jq '[.[] | select(.title == "Public Suffix List freshness alarm")] | first | .number // empty')"
+          if [[ -n "$number" ]]; then
+            gh issue edit "$number" --body-file "$body"
+          else
+            gh issue create --title "$title" --body-file "$body"
+          fi
+      - name: Enforce the freshness decision
+        if: always()
+        env:
+          STATUS: ${{ steps.compare.outputs.status }}
+        run: |
+          case "$STATUS" in
+            0) exit 0 ;;
+            1) exit 1 ;;
+            2) exit 2 ;;
+            *) echo "::error::freshness comparison returned an invalid status: $STATUS"; exit 2 ;;
+          esac
