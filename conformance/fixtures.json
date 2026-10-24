@@ -1,6 +1,6 @@
 {
   "$schema": "amino-conformance/v4",
-  "notes": "Single shared reviewed-answer corpus consumed by conformance/run.mjs (web and Action) and conformance/run_py.py (published skill). For every dns-engine fixture, legacy present/absent assertions remain active and expect.findings is a closed list: area, title, severity, action, and fixIncludes are asserted; every non-pass finding must declare a non-null fixIncludes. Optional exact detail and optional effort+value pairs are asserted only where declared. expect.score is the exact bucket + DKIM-state + gap + note object; a true null MX uses explicit null for the inbound-only MTA_STS, TLS_RPT, and DANE buckets. expect.registrable_root, when present, asserts the exact full-PSL registrable-domain decision on an adopting surface. WHI-251 adds the parent-DMARC observation and the psd=y effective-policy contract; Python adopts it first and the JavaScript assertion activates with engine contract 1.7.0. Surface-specific findings require surfaces plus a documented notApplicable reason for every omitted shipping surface. No expectation-regeneration mode exists. Non-dns-engine modes remain explicitly skipped with a reason.",
+  "notes": "Single shared reviewed-answer corpus consumed by conformance/run.mjs (web and Action) and conformance/run_py.py (published skill). For every dns-engine fixture, legacy present/absent assertions remain active and expect.findings is a closed list: area, title, severity, action, and fixIncludes are asserted; every non-pass finding must declare a non-null fixIncludes. Optional exact detail and optional effort+value pairs are asserted only where declared. expect.score is the exact bucket + DKIM-state + gap + note object; a true null MX uses explicit null for the inbound-only MTA_STS, TLS_RPT, and DANE buckets. Every full audit result carries a closed 56-entry rule_evaluation ledger; expect.rule_evaluation declares only exceptions to conclusive, while compact rule-evaluation rows bind exact source-dependency boundaries. expect.registrable_root, when present, asserts the exact full-PSL registrable-domain decision on an adopting surface. WHI-251 adds the parent-DMARC observation and the psd=y effective-policy contract; Python adopts it first and the JavaScript assertion activates with engine contract 1.7.0. Surface-specific findings require surfaces plus a documented notApplicable reason for every omitted shipping surface. No expectation-regeneration mode exists. Non-dns-engine modes remain explicitly skipped with a reason.",
   "fixtures": [
     {
       "id": "dkim-revoked-empty-p",
@@ -3131,6 +3131,7 @@
         }
       },
       "expect": {
+        "rule_evaluation": {},
         "present": [
           {
             "area": "Transport",
@@ -3332,6 +3333,12 @@
         }
       },
       "expect": {
+        "rule_evaluation": {
+          "mta_sts.policy_unreachable": "HTTP mta-sts.mta-sts-policy-unavailable.invalid/.well-known/mta-sts.txt: unavailable",
+          "mta_sts.malformed": "HTTP mta-sts.mta-sts-policy-unavailable.invalid/.well-known/mta-sts.txt: unavailable",
+          "mta_sts.present": "HTTP mta-sts.mta-sts-policy-unavailable.invalid/.well-known/mta-sts.txt: unavailable",
+          "mta_sts.mx_not_covered": "HTTP mta-sts.mta-sts-policy-unavailable.invalid/.well-known/mta-sts.txt: unavailable"
+        },
         "present": [
           {
             "area": "Transport",
@@ -4530,6 +4537,7 @@
         }
       },
       "expect": {
+        "rule_evaluation": {},
         "present": [
           {
             "area": "Transport",
@@ -4930,6 +4938,7 @@
         }
       },
       "expect": {
+        "rule_evaluation": {},
         "present": [
           {
             "area": "Transport",
@@ -7107,6 +7116,7 @@
         }
       },
       "expect": {
+        "rule_evaluation": {},
         "present": [
           {
             "area": "Transport",
@@ -9323,6 +9333,11 @@
         }
       },
       "expect": {
+        "rule_evaluation": {
+          "ai_visibility.robots_blocks": "AAAA robots-address-lookup-failed.invalid: SERVFAIL",
+          "reputation.expiring": "HTTP rdap.org/domain/robots-address-lookup-failed.invalid: unavailable",
+          "reputation.new_domain": "HTTP rdap.org/domain/robots-address-lookup-failed.invalid: unavailable"
+        },
         "present": [
           {
             "area": "MTA-STS",
@@ -12827,6 +12842,13 @@
         }
       },
       "expect": {
+        "rule_evaluation": {
+          "tls_rpt.missing": "TXT _smtp._tls.ex.com: SERVFAIL",
+          "tls_rpt.no_rua": "TXT _smtp._tls.ex.com: SERVFAIL",
+          "tls_rpt.present": "TXT _smtp._tls.ex.com: SERVFAIL",
+          "reputation.expiring": "HTTP rdap.org/domain/ex.com: unavailable",
+          "reputation.new_domain": "HTTP rdap.org/domain/ex.com: unavailable"
+        },
         "findings": [
           {
             "rule_id": "dmarc.missing",
@@ -12970,6 +12992,13 @@
         }
       },
       "expect": {
+        "rule_evaluation": {
+          "bimi.missing": "TXT default._bimi.ex.com: SERVFAIL",
+          "bimi.no_vmc": "TXT default._bimi.ex.com: SERVFAIL",
+          "bimi.present": "TXT default._bimi.ex.com: SERVFAIL",
+          "reputation.expiring": "HTTP rdap.org/domain/ex.com: unavailable",
+          "reputation.new_domain": "HTTP rdap.org/domain/ex.com: unavailable"
+        },
         "findings": [
           {
             "rule_id": "dmarc.missing",
@@ -13141,6 +13170,13 @@
         }
       },
       "expect": {
+        "rule_evaluation": {
+          "dnssec.enabled": "DNSKEY ex.com: SERVFAIL",
+          "dnssec.missing": "DNSKEY ex.com: SERVFAIL",
+          "dnssec.validation_failing": "DNSKEY ex.com: SERVFAIL",
+          "reputation.expiring": "HTTP rdap.org/domain/ex.com: unavailable",
+          "reputation.new_domain": "HTTP rdap.org/domain/ex.com: unavailable"
+        },
         "findings": [
           {
             "rule_id": "dmarc.missing",
@@ -13284,6 +13320,11 @@
         }
       },
       "expect": {
+        "rule_evaluation": {
+          "caa.missing": "CAA ex.com: SERVFAIL",
+          "reputation.expiring": "HTTP rdap.org/domain/ex.com: unavailable",
+          "reputation.new_domain": "HTTP rdap.org/domain/ex.com: unavailable"
+        },
         "findings": [
           {
             "rule_id": "dmarc.missing",
@@ -13427,6 +13468,15 @@
         }
       },
       "expect": {
+        "rule_evaluation": {
+          "dkim.invalid_key": "TXT selector1._domainkey.ex.com: SERVFAIL",
+          "dkim.not_found": "TXT selector1._domainkey.ex.com: SERVFAIL",
+          "dkim.present": "TXT selector1._domainkey.ex.com: SERVFAIL",
+          "dkim.testing_mode": "TXT selector1._domainkey.ex.com: SERVFAIL",
+          "dkim.weak_rsa1024": "TXT selector1._domainkey.ex.com: SERVFAIL",
+          "reputation.expiring": "HTTP rdap.org/domain/ex.com: unavailable",
+          "reputation.new_domain": "HTTP rdap.org/domain/ex.com: unavailable"
+        },
         "findings": [
           {
             "rule_id": "dmarc.missing",
@@ -13643,7 +13693,7 @@
             "area": "DNSSEC",
             "title": "DNSSEC validation is failing",
             "severity": "critical",
-            "action": "Enable DNSSEC",
+            "action": "Fix DNSSEC signing",
             "fixIncludes": "Your DNSSEC signatures don't validate. Fix the DS record at your registrar or re-sign the zone at your DNS provider. If you can't fix it quickly, remove the DS record so the domain resolves unsigned.",
             "lane": "domain_posture",
             "detail": "This domain is DNSSEC-signed, but its signatures fail validation. Receivers that validate DNSSEC can't resolve this domain's MX or check its SPF, DKIM or DMARC records."
@@ -13987,7 +14037,7 @@
             "area": "DNSSEC",
             "title": "DNSSEC validation is failing",
             "severity": "critical",
-            "action": "Enable DNSSEC",
+            "action": "Fix DNSSEC signing",
             "fixIncludes": "Your DNSSEC signatures don't validate. Fix the DS record at your registrar or re-sign the zone at your DNS provider. If you can't fix it quickly, remove the DS record so the domain resolves unsigned.",
             "lane": "domain_posture",
             "detail": "This domain is DNSSEC-signed, but its signatures fail validation. Receivers that validate DNSSEC can't resolve this domain's MX or check its SPF, DKIM or DMARC records."
@@ -14953,7 +15003,7 @@
             "area": "DNSSEC",
             "title": "DNSSEC validation is failing",
             "severity": "critical",
-            "action": "Enable DNSSEC",
+            "action": "Fix DNSSEC signing",
             "fixIncludes": "Your DNSSEC signatures don't validate. Fix the DS record at your registrar or re-sign the zone at your DNS provider. If you can't fix it quickly, remove the DS record so the domain resolves unsigned.",
             "lane": "domain_posture",
             "detail": "This domain is DNSSEC-signed, but its signatures fail validation. Receivers that validate DNSSEC can't resolve this domain's MX or check its SPF, DKIM or DMARC records."
@@ -15590,6 +15640,273 @@
         "inconclusive": false,
         "inconclusive_reason": null,
         "registrable_root": "ex.com"
+      }
+    },
+    {
+      "id": "registrable-root-systems-refresh",
+      "invariant": "WHI-311",
+      "mode": "registrable-root",
+      "desc": "The refreshed pinned PSL treats knightpoint.systems as registrable.",
+      "input": {
+        "domain": "knightpoint.systems"
+      },
+      "expect": {
+        "registrable_root": "knightpoint.systems"
+      }
+    },
+    {
+      "id": "registrable-root-replit-private-refresh",
+      "invariant": "WHI-311",
+      "mode": "registrable-root",
+      "desc": "The refreshed pinned PSL applies the *.replit.dev private wildcard.",
+      "input": {
+        "domain": "a.b.replit.dev"
+      },
+      "expect": {
+        "registrable_root": "a.b.replit.dev"
+      }
+    },
+    {
+      "id": "rule-evaluation-no-dns-meta",
+      "invariant": "WHI-12",
+      "mode": "rule-evaluation",
+      "desc": "An adapter without DNS metadata cannot call any of the 54 DNS-input rules conclusive.",
+      "input": {
+        "domain": "no-meta.invalid",
+        "dnsMeta": "unavailable",
+        "dns": {
+          "no-meta.invalid": {
+            "A": ["93.184.216.34"]
+          }
+        },
+        "http": {
+          "robots": {"status": 404, "body": ""},
+          "rdap": {"status": 404, "body": "", "data": null}
+        }
+      },
+      "expect": {
+        "not_conclusive_count": 54,
+        "conclusive": ["reputation.expiring", "reputation.new_domain"],
+        "reasonIncludes": "metadata unavailable"
+      }
+    },
+    {
+      "id": "rule-evaluation-no-dnssec-probe",
+      "invariant": "WHI-12",
+      "mode": "rule-evaluation",
+      "desc": "A missing DNSSEC probe capability affects exactly the three DNSSEC rules.",
+      "input": {
+        "domain": "no-probe.invalid",
+        "dnssecProbeAvailable": false,
+        "dns": {
+          "no-probe.invalid": {
+            "A": ["93.184.216.34"],
+            "DNSKEY": []
+          }
+        },
+        "http": {
+          "robots": {"status": 404, "body": ""},
+          "rdap": {"status": 404, "body": "", "data": null}
+        }
+      },
+      "expect": {
+        "not_conclusive_count": 3,
+        "not_conclusive_rules": [
+          "dnssec.enabled",
+          "dnssec.missing",
+          "dnssec.validation_failing"
+        ],
+        "reasonIncludes": "DNSSEC probe"
+      }
+    },
+    {
+      "id": "rule-evaluation-tlsa-servfail",
+      "invariant": "WHI-12",
+      "mode": "rule-evaluation",
+      "desc": "A failed TLSA input affects every DANE verdict and no unrelated rule.",
+      "input": {
+        "domain": "dane-input.invalid",
+        "dns": {
+          "dane-input.invalid": {
+            "A": ["93.184.216.34"],
+            "MX": ["10 mx.dane-input.invalid."]
+          },
+          "mx.dane-input.invalid": {
+            "A": ["93.184.216.35"]
+          },
+          "_25._tcp.mx.dane-input.invalid": {
+            "status": {"TLSA": 2}
+          }
+        },
+        "http": {
+          "robots": {"status": 404, "body": ""},
+          "rdap": {"status": 404, "body": "", "data": null}
+        }
+      },
+      "expect": {
+        "not_conclusive_count": 4,
+        "not_conclusive_rules": [
+          "transport.dane_missing",
+          "transport.dane_misconfigured",
+          "transport.dane_unvalidated",
+          "transport.dane_present"
+        ],
+        "reasonIncludes": "TLSA _25._tcp.mx.dane-input.invalid: SERVFAIL"
+      }
+    },
+    {
+      "id": "rule-evaluation-spf-target-servfail",
+      "invariant": "WHI-12",
+      "mode": "rule-evaluation",
+      "desc": "A recursive SPF-target failure leaves spf.present source-exact to the apex.",
+      "input": {
+        "domain": "spf-input.invalid",
+        "dns": {
+          "spf-input.invalid": {
+            "A": ["93.184.216.34"],
+            "TXT": ["v=spf1 include:target.invalid -all"]
+          },
+          "target.invalid": {
+            "status": {"TXT": 2, "A": 2}
+          }
+        },
+        "http": {
+          "robots": {"status": 404, "body": ""},
+          "rdap": {"status": 404, "body": "", "data": null}
+        }
+      },
+      "expect": {
+        "not_conclusive_count": 8,
+        "conclusive": [
+          "ai_visibility.robots_blocks", "bimi.missing", "bimi.no_vmc", "bimi.present",
+          "caa.missing", "dkim.invalid_key", "dkim.not_found", "dkim.present",
+          "dkim.testing_mode", "dkim.weak_rsa1024", "dmarc.enforced",
+          "dmarc.inherited_enforced", "dmarc.inherited_not_enforced",
+          "dmarc.invalid_policy", "dmarc.missing", "dmarc.monitor_only",
+          "dmarc.multiple_records", "dmarc.no_rua", "dmarc.parent_observed",
+          "dmarc.partial_pct", "dmarc.removed_tags", "dmarc.subdomain_not_enforced",
+          "dmarc.unauthorized_report_destination", "dnssec.enabled", "dnssec.missing",
+          "dnssec.validation_failing", "mta_sts.malformed", "mta_sts.missing",
+          "mta_sts.mx_not_covered", "mta_sts.not_applicable", "mta_sts.policy_unreachable",
+          "mta_sts.present", "mta_sts.unconfirmed", "mx.mixed_providers",
+          "reputation.expiring", "reputation.new_domain", "spf.present",
+          "tls_rpt.missing", "tls_rpt.no_rua", "tls_rpt.present",
+          "transport.dane_misconfigured", "transport.dane_missing",
+          "transport.dane_present", "transport.dane_unvalidated", "transport.no_mx",
+          "transport.null_mx", "transport.ptr_missing", "transport.ptr_not_fcrdns"
+        ],
+        "reasonIncludes": "target.invalid"
+      }
+    },
+    {
+      "id": "rule-evaluation-dmarc-parent-servfail",
+      "invariant": "WHI-12",
+      "mode": "rule-evaluation",
+      "desc": "A failed DMARC ancestor does not contaminate the nine own-record-only rules.",
+      "input": {
+        "domain": "mail.example.com",
+        "dns": {
+          "mail.example.com": {"A": ["93.184.216.34"]},
+          "_dmarc.example.com": {"status": {"TXT": 2}}
+        },
+        "http": {
+          "robots": {"status": 404, "body": ""},
+          "rdap": {"status": 404, "body": "", "data": null}
+        }
+      },
+      "expect": {
+        "not_conclusive_count": 4,
+        "not_conclusive_rules": [
+          "dmarc.parent_observed",
+          "dmarc.inherited_not_enforced",
+          "dmarc.inherited_enforced",
+          "dmarc.unauthorized_report_destination"
+        ],
+        "reasonIncludes": "TXT _dmarc.example.com: SERVFAIL"
+      }
+    },
+    {
+      "id": "rule-evaluation-mta-sts-http-503",
+      "invariant": "WHI-12",
+      "mode": "rule-evaluation",
+      "desc": "An MTA-STS HTTP 503 is a failed input for exactly the policy-dependent rules.",
+      "input": {
+        "domain": "mta-http.invalid",
+        "dns": {
+          "mta-http.invalid": {"A": ["93.184.216.34"]},
+          "_mta-sts.mta-http.invalid": {"TXT": ["v=STSv1; id=one"]},
+          "mta-sts.mta-http.invalid": {"A": ["93.184.216.35"]}
+        },
+        "http": {
+          "mta_sts_policy": {"status": 503, "contentType": "text/plain", "body": "unavailable"},
+          "robots": {"status": 404, "body": ""},
+          "rdap": {"status": 404, "body": "", "data": null}
+        }
+      },
+      "expect": {
+        "not_conclusive_count": 4,
+        "not_conclusive_rules": [
+          "mta_sts.policy_unreachable",
+          "mta_sts.malformed",
+          "mta_sts.present",
+          "mta_sts.mx_not_covered"
+        ],
+        "reasonIncludes": "HTTP mta-sts.mta-http.invalid/.well-known/mta-sts.txt: 503"
+      }
+    },
+    {
+      "id": "rule-evaluation-dmarc-report-auth-servfail",
+      "invariant": "WHI-12",
+      "mode": "rule-evaluation",
+      "desc": "A failed external report-authorization lookup affects only that DMARC rule.",
+      "input": {
+        "domain": "report-auth.invalid",
+        "dns": {
+          "report-auth.invalid": {"A": ["93.184.216.34"]},
+          "_dmarc.report-auth.invalid": {
+            "TXT": ["v=DMARC1; p=reject; rua=mailto:reports@external.test"]
+          },
+          "report-auth.invalid._report._dmarc.external.test": {
+            "status": {"TXT": 2}
+          }
+        },
+        "http": {
+          "robots": {"status": 404, "body": ""},
+          "rdap": {"status": 404, "body": "", "data": null}
+        }
+      },
+      "expect": {
+        "not_conclusive_count": 1,
+        "not_conclusive_rules": ["dmarc.unauthorized_report_destination"],
+        "reasonIncludes": "TXT report-auth.invalid._report._dmarc.external.test: SERVFAIL"
+      }
+    },
+    {
+      "id": "rule-evaluation-ptr-forward-servfail",
+      "invariant": "WHI-12",
+      "mode": "rule-evaluation",
+      "desc": "A failed forward-confirmation input affects only the FCrDNS rule.",
+      "input": {
+        "domain": "ptr-input.invalid",
+        "dns": {
+          "ptr-input.invalid": {
+            "A": ["93.184.216.34"],
+            "MX": ["10 mx.ptr-input.invalid."]
+          },
+          "mx.ptr-input.invalid": {"A": ["93.184.216.35"]},
+          "35.216.184.93.in-addr.arpa": {"PTR": ["mail.ptr-input.invalid."]},
+          "mail.ptr-input.invalid": {"status": {"A": 2}},
+          "_25._tcp.mx.ptr-input.invalid": {"TLSA": []}
+        },
+        "http": {
+          "robots": {"status": 404, "body": ""},
+          "rdap": {"status": 404, "body": "", "data": null}
+        }
+      },
+      "expect": {
+        "not_conclusive_count": 1,
+        "not_conclusive_rules": ["transport.ptr_not_fcrdns"],
+        "reasonIncludes": "A mail.ptr-input.invalid: SERVFAIL"
       }
     }
   ]

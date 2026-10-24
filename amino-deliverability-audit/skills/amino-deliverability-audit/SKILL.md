@@ -34,9 +34,12 @@ trusted"), framed in business terms, not a pile of green/red dots.
    ```
    python3 scripts/audit.py <domain>
    ```
-   It returns JSON: `summary` (counts by severity) and `findings` (each with `area`,
-   `severity`, `title`, `detail`, drafted `fix`). Covers SPF (incl. multiple-record,
-   lookup/void limits, ptr), DKIM (three-state), DMARC (incl. multiple-record, sp/np, pct,
+   It returns JSON: `summary` (counts by severity), `findings` (each with `area`,
+   `severity`, `title`, `detail`, drafted `fix`), and a closed `rule_evaluation`
+   ledger for the 56 shared engine rules. Each ledger value is `conclusive` or a
+   short reason naming the failed DNS/HTTP input that prevented evaluation; do not
+   interpret a non-conclusive rule as a confirmed pass or absence. Covers SPF (incl.
+   multiple-record, lookup/void limits, ptr), DKIM (three-state), DMARC (incl. multiple-record, sp/np, pct,
    RFC 9989 tags, external-report authorization), MTA-STS, TLS-RPT, DANE, BIMI, transport,
    **MX hygiene** (mixed/duplicate MX), **DNSSEC**, **CAA**, **reverse DNS / FCrDNS** on the
    primary MX, **domain age / expiry** (RDAP), and **AI-bot readiness** (robots.txt). The
