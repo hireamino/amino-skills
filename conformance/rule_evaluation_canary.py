@@ -46,11 +46,22 @@ CASES = (
     (
         "external DMARC authorization stays source-exact",
         AUDIT,
-        'candidates = [row for row in candidates if "._report._dmarc." not in row[1]]',
-        "candidates = list(candidates)",
+        'candidates = [row for row in candidates if "._report._dmarc." not in row[1]]\n'
+        '        elif rule == "tls_rpt.present":',
+        'candidates = list(candidates)\n'
+        '        elif rule == "tls_rpt.present":',
         [sys.executable, "conformance/run_py.py"],
         {"CONFORMANCE_FIXTURE": "rule-evaluation-dmarc-report-auth-servfail"},
         "rule-evaluation-dmarc-report-auth-servfail",
+    ),
+    (
+        "DMARC missing keeps the ancestor walk",
+        AUDIT,
+        '"dmarc.unauthorized_report_destination",\n}',
+        '"dmarc.unauthorized_report_destination", "dmarc.missing",\n}',
+        [sys.executable, "conformance/run_py.py"],
+        {"CONFORMANCE_FIXTURE": "rule-evaluation-dmarc-parent-servfail"},
+        "rule-evaluation-dmarc-parent-servfail",
     ),
     (
         "forward DNS does not contaminate PTR existence",

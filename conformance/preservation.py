@@ -78,7 +78,7 @@ WHI12_1_11_NEW_DIGESTS = {
     "rule-evaluation-no-dnssec-probe": "f723a1ca81c1737e669a257f905072d0b07c2b1416c449b4f2e1917c1baaa419",
     "rule-evaluation-tlsa-servfail": "4d5d6e03ea2dcf2e55f8a9e81bc9dcdf003a21a502965f4e159492b56fee55cb",
     "rule-evaluation-spf-target-servfail": "d5b2dd97edf6e5fc36ab7c762f5e12c571cdc2a4540359acdea73105f180c073",
-    "rule-evaluation-dmarc-parent-servfail": "d4ade29a8ec2c1115bc4343a7076d02d1185c0c8f4d41c86a50760359e06cdd6",
+    "rule-evaluation-dmarc-parent-servfail": "08893fe263b55a0d3cdf055d03dd38b70023329176e52864f391dbe398a35f9a",
     "rule-evaluation-mta-sts-http-503": "474a4afb55ed27078cdb4d5962ad8a0d6a7a9e66b54ab3fd03007370d5c0ece2",
     "rule-evaluation-dmarc-report-auth-servfail": "ce370b376f7c0efd1bf4e1f647aec3ec60e91143fe9c4ce04590692a683dd72b",  # gitleaks:allow — fixture SHA-256
     "rule-evaluation-ptr-forward-servfail": "7af75943499003bf8f2fba08ec6f32ea7d284c4885cdb0f913e589e0aca9e5df",

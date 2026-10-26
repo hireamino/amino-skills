@@ -208,9 +208,10 @@ def dnssec_probe(name, rrtype="DNSKEY"):
 
 
 _DMARC_OWN_RULES = {
-    "dmarc.missing", "dmarc.multiple_records", "dmarc.invalid_policy",
-    "dmarc.monitor_only", "dmarc.enforced", "dmarc.subdomain_not_enforced",
-    "dmarc.partial_pct", "dmarc.removed_tags", "dmarc.no_rua",
+    "dmarc.enforced", "dmarc.invalid_policy", "dmarc.monitor_only",
+    "dmarc.multiple_records", "dmarc.no_rua", "dmarc.partial_pct",
+    "dmarc.removed_tags", "dmarc.subdomain_not_enforced",
+    "dmarc.unauthorized_report_destination",
 }
 
 
@@ -232,8 +233,17 @@ def _rule_evaluation(domain):
             candidates = []
         if rule == "spf.present":
             candidates = [row for row in candidates if row[1:] and row[1] == domain and row[2] == "TXT"]
+        elif rule == "dmarc.unauthorized_report_destination":
+            candidates = [
+                row for row in candidates
+                if row[2] == "TXT" and (
+                    row[1] == own_dmarc or "._report._dmarc." in row[1]
+                )
+            ]
         elif rule in _DMARC_OWN_RULES:
             candidates = [row for row in candidates if row[1] == own_dmarc and row[2] == "TXT"]
+        elif rule == "dmarc.missing":
+            candidates = [row for row in candidates if "._report._dmarc." not in row[1]]
         elif rule in {
             "dmarc.parent_observed", "dmarc.inherited_not_enforced",
             "dmarc.inherited_enforced",

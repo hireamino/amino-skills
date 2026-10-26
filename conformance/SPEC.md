@@ -73,18 +73,23 @@ metadata are authoritative; missing metadata is a failed input. Missing DNSSEC-p
 capability makes all three DNSSEC rules non-conclusive. HTTP absence, exceptions,
 429 and 5xx are failures; 404, 3xx, non-text policy responses and public-address-guard
 refusals are usable evidence and remain conclusive. Dependency precision is per
-rule: `spf.present` reads apex TXT only; the nine own-record DMARC rules read only
-`_dmarc.<audited-name>`; `tls_rpt.present` reads only `_smtp._tls`; report-
+rule: `spf.present` reads apex TXT only. The nine own-record DMARC rules—
+`dmarc.enforced`, `dmarc.invalid_policy`, `dmarc.monitor_only`,
+`dmarc.multiple_records`, `dmarc.no_rua`, `dmarc.partial_pct`,
+`dmarc.removed_tags`, `dmarc.subdomain_not_enforced`, and
+`dmarc.unauthorized_report_destination`—read only `_dmarc.<audited-name>` (plus
+the report-authorization names for the last rule). `dmarc.missing` includes the
+RFC 9989 ancestor walk. `tls_rpt.present` reads only `_smtp._tls`; report-
 authorization, RFC 9989 ancestors, TLSA, PTR/forward-A, recursive SPF, A+AAAA,
 policy/RDAP/robots HTTP and DNSSEC probes remain attached to their source-exact rules.
 
 The corpus adds two WHI-311 refreshed-PSL rows (`knightpoint.systems` and the private
 `*.replit.dev` wildcard), two missing-capability rows, and six source-precision rows.
 It also changes only the action label for `dnssec.validation_failing` to
-`Fix DNSSEC signing`; every other DNSSEC action stays `Enable DNSSEC`. Six independent
+`Fix DNSSEC signing`; every other DNSSEC action stays `Enable DNSSEC`. Seven independent
 mutation canaries prove TLSA dependency, closed declarations, missing-metadata
-fail-closed behavior, one-read DNS, DMARC report authorization, and PTR-forward
-precision.
+fail-closed behavior, one-read DNS, DMARC report authorization, DMARC ancestor
+dependency for `dmarc.missing`, and PTR-forward precision.
 
 **v1.21 / WHI-12 Part A — stable finding lifecycle identity:** every finding
 emit site now declares a namespaced `rule_id` that is independent of mutable

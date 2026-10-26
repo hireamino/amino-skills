@@ -15802,7 +15802,7 @@
       "id": "rule-evaluation-dmarc-parent-servfail",
       "invariant": "WHI-12",
       "mode": "rule-evaluation",
-      "desc": "A failed DMARC ancestor does not contaminate the nine own-record-only rules.",
+      "desc": "A failed DMARC ancestor makes the missing and inherited-policy rules non-conclusive, but not the nine own-record-only rules.",
       "input": {
         "domain": "mail.example.com",
         "dns": {
@@ -15817,10 +15817,10 @@
       "expect": {
         "not_conclusive_count": 4,
         "not_conclusive_rules": [
+          "dmarc.missing",
           "dmarc.parent_observed",
           "dmarc.inherited_not_enforced",
-          "dmarc.inherited_enforced",
-          "dmarc.unauthorized_report_destination"
+          "dmarc.inherited_enforced"
         ],
         "reasonIncludes": "TXT _dmarc.example.com: SERVFAIL"
       }
