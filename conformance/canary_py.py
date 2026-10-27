@@ -775,11 +775,15 @@ try:
         source = replace_exactly_once(
             source,
             '    def dns_meta(name, rtype):\n'
+            '        if not metadata_available:\n'
+            '            return {}\n'
             '        entry = records.get(_norm(name), {})\n'
             '        status = entry.get("status", 0)\n'
             '        if isinstance(status, dict):\n'
             '            status = status.get(rtype.upper(), 0)\n',
             '    def dns_meta(name, rtype):\n'
+            '        if not metadata_available:\n'
+            '            return {}\n'
             '        entry = records.get(_norm(name), {})\n'
             '        status = entry.get("status", 0)\n'
             '        if isinstance(status, dict):\n'
@@ -836,6 +840,15 @@ try:
             "mta-sts-policy-unavailable",
             "mta-sts.mta-sts-policy-unavailable.invalid",
         )
+        # The synthetic no-address control is a public-address refusal. Under the
+        # 1.11 evidence contract that refusal is conclusive, unlike the original
+        # fixture's failing HTTP read; retain only the observation expectation this
+        # legacy canary is designed to exercise.
+        [no_address_fixture] = [
+            fixture for fixture in corpus["fixtures"]
+            if fixture["id"] == "mta-sts-policy-unavailable"
+        ]
+        no_address_fixture["expect"].pop("rule_evaluation", None)
         (conformance / "fixtures.json").write_text(
             json.dumps(corpus, indent=2) + "\n", encoding="utf-8"
         )
@@ -1438,7 +1451,7 @@ try:
         source = audit_path.read_text(encoding="utf-8")
         source = replace_exactly_once(
             source,
-            '        status_ok = int(status_match.group(1)) == 200\n',
+            '        status_ok = status == 200\n',
             '        status_ok = True  # WHI-175 removed HTTP-status requirement canary\n',
             "MTA-STS HTTP status requirement",
         )

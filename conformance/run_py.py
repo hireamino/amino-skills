@@ -27,7 +27,9 @@ from socket_fixture import SocketTlsFixture, http_response  # noqa: E402
 NETWORK_ATTEMPTS = []
 HTTP_CALLS = {}
 HTTP_REJECTS = []
-CONTRACT_MODES = {"dns-engine", "http-observation"}
+CONTRACT_MODES = {
+    "dns-engine", "http-observation", "registrable-root", "rule-evaluation",
+}
 LANES = {
     "outbound_auth", "inbound_transport", "domain_posture",
     "brand_optional", "outside_sending_posture",
@@ -66,7 +68,8 @@ def _norm(name):
     return name.rstrip(".").lower()
 
 
-def install_resolver(dns, dnssec_probe=None):
+def install_resolver(dns, dnssec_probe=None, metadata_available=True,
+                     dnssec_probe_available=True):
     """Install one fixture's DNS in audit and every batch_score import binding."""
     records = {_norm(name): value for name, value in (dns or {}).items()}
 
@@ -91,6 +94,8 @@ def install_resolver(dns, dnssec_probe=None):
         return None
 
     def dns_meta(name, rtype):
+        if not metadata_available:
+            return {}
         entry = records.get(_norm(name), {})
         status = entry.get("status", 0)
         if isinstance(status, dict):
@@ -106,12 +111,11 @@ def install_resolver(dns, dnssec_probe=None):
         entry = dnssec_probe_records.get(_norm(name), {})
         return entry
 
-    audit.dig = recs
-    audit.query_fresh = recs
-    audit.first_txt = first_txt
-    audit.confirm_txt = lambda name, prefix: first_txt(name, prefix)
-    audit.dns_meta = dns_meta
-    audit.dnssec_probe = probe
+    # Bind below the shipping wrappers: the 1.11 contract's cache and provenance
+    # must be exercised, not replaced by the fixture harness.
+    audit._resolver_query = recs
+    audit._resolver_meta = dns_meta
+    audit._resolver_dnssec_probe = probe if dnssec_probe_available else None
 
     # batch_score imports these names from audit at module load. Rebind every one
     # so the scorer cannot silently escape the fixture resolver.
@@ -455,6 +459,30 @@ def compare_contract(fx, result, score, ledger):
                 "registrable_root: expected " + json.dumps(wanted, ensure_ascii=False)
                 + ", got " + json.dumps(actual, ensure_ascii=False)
             )
+    actual_evaluation = result.get("rule_evaluation")
+    ledger["ruleEvaluationShape"] += 1
+    if not isinstance(actual_evaluation, dict):
+        problems.append("rule_evaluation: expected an object")
+    elif set(actual_evaluation) != set(audit.RULE_EVALUATION_IDS):
+        missing = sorted(set(audit.RULE_EVALUATION_IDS) - set(actual_evaluation))
+        extra = sorted(set(actual_evaluation) - set(audit.RULE_EVALUATION_IDS))
+        problems.append(f"rule_evaluation.keys: missing {missing!r}, extra {extra!r}")
+    elif any(not isinstance(value, str) or not value for value in actual_evaluation.values()):
+        problems.append("rule_evaluation: every value must be a non-empty string")
+    if "rule_evaluation" in fx["expect"] and isinstance(actual_evaluation, dict):
+        ledger["ruleEvaluation"] += 1
+        exceptions = fx["expect"]["rule_evaluation"]
+        wanted_evaluation = {
+            rule: exceptions.get(rule, "conclusive")
+            for rule in audit.RULE_EVALUATION_IDS
+        }
+        if actual_evaluation != wanted_evaluation:
+            for rule in audit.RULE_EVALUATION_IDS:
+                if actual_evaluation.get(rule) != wanted_evaluation[rule]:
+                    problems.append(
+                        f"rule_evaluation.{rule}: expected {wanted_evaluation[rule]!r}, "
+                        f"got {actual_evaluation.get(rule)!r}"
+                    )
     return problems
 
 
@@ -466,9 +494,16 @@ def assertion_plan(fixtures):
         "detail": 0, "effort": 0, "value": 0,
         "scoreFields": 0, "closedWorld": 0, "observations": 0,
         "inconclusive": 0, "inconclusiveReason": 0, "registrableRoot": 0,
+        "ruleEvaluationShape": 0, "ruleEvaluation": 0, "ruleEvaluationCases": 0,
     }
     for fx in fixtures:
         if fx.get("mode") not in CONTRACT_MODES:
+            continue
+        if fx.get("mode") == "registrable-root":
+            plan["registrableRoot"] += 1
+            continue
+        if fx.get("mode") == "rule-evaluation":
+            plan["ruleEvaluationCases"] += 1
             continue
         expected, _ = expected_findings(fx)
         for field in (
@@ -487,6 +522,9 @@ def assertion_plan(fixtures):
             plan["inconclusiveReason"] += 1
         if "registrable_root" in fx["expect"]:
             plan["registrableRoot"] += 1
+        plan["ruleEvaluationShape"] += 1
+        if "rule_evaluation" in fx["expect"]:
+            plan["ruleEvaluation"] += 1
     return plan
 
 
@@ -514,6 +552,7 @@ def run():
         "detail": 0, "effort": 0, "value": 0,
         "scoreFields": 0, "closedWorld": 0, "observations": 0,
         "inconclusive": 0, "inconclusiveReason": 0, "registrableRoot": 0,
+        "ruleEvaluationShape": 0, "ruleEvaluation": 0, "ruleEvaluationCases": 0,
     }
 
     for fx in fixtures:
@@ -525,11 +564,74 @@ def run():
             )
             continue
 
+        if fx.get("mode") == "registrable-root":
+            wanted = fx["expect"]["registrable_root"]
+            actual = audit.org_base(fx["input"]["domain"])
+            ledger["registrableRoot"] += 1
+            if actual == wanted:
+                passed += 1
+                print(f"  PASS  {fx['id']} ({fx['invariant']})")
+            else:
+                failed += 1
+                message = f"{fx['id']}.registrable_root: expected {wanted!r}, got {actual!r}"
+                failures.append(message)
+                print(f"  FAIL  {fx['id']} ({fx['invariant']}) — {message}")
+            continue
+
+        if fx.get("mode") == "rule-evaluation":
+            install_resolver(
+                fx["input"].get("dns", {}),
+                fx["input"].get("dnssecProbe", {}),
+                fx["input"].get("dnsMeta", "available") != "unavailable",
+                fx["input"].get("dnssecProbeAvailable", True),
+            )
+            install_http(fx["input"]["domain"], fx["input"].get("http", {}))
+            result = run_shipping_audit(fx["input"]["domain"])
+            actual = result.get("rule_evaluation", {})
+            nonconclusive = {rule: reason for rule, reason in actual.items()
+                             if reason != "conclusive"}
+            expected = fx["expect"]
+            problems = []
+            if set(actual) != set(audit.RULE_EVALUATION_IDS):
+                problems.append("rule_evaluation key set is not the closed 56-rule inventory")
+            if len(nonconclusive) != expected["not_conclusive_count"]:
+                problems.append(
+                    f"not_conclusive_count: expected {expected['not_conclusive_count']}, "
+                    f"got {len(nonconclusive)}"
+                )
+            conclusive = sorted(rule for rule, reason in actual.items()
+                                if reason == "conclusive")
+            if "conclusive" in expected and conclusive != sorted(expected["conclusive"]):
+                problems.append(
+                    f"conclusive: expected {sorted(expected['conclusive'])!r}, got {conclusive!r}"
+                )
+            if "not_conclusive_rules" in expected:
+                got_rules = sorted(nonconclusive)
+                wanted_rules = sorted(expected["not_conclusive_rules"])
+                if got_rules != wanted_rules:
+                    problems.append(
+                        f"not_conclusive_rules: expected {wanted_rules!r}, got {got_rules!r}"
+                    )
+            includes = expected.get("reasonIncludes")
+            if includes and any(includes not in reason for reason in nonconclusive.values()):
+                problems.append(f"every non-conclusive reason must include {includes!r}")
+            ledger["ruleEvaluationCases"] += 1
+            if problems:
+                failed += 1
+                failures.extend(f"{fx['id']}.{problem}" for problem in problems)
+                print(f"  FAIL  {fx['id']} ({fx['invariant']}) — {'; '.join(problems)}")
+            else:
+                passed += 1
+                print(f"  PASS  {fx['id']} ({fx['invariant']})")
+            continue
+
         NETWORK_ATTEMPTS.clear()
         HTTP_CALLS.clear()
         install_resolver(
             fx["input"].get("dns", {}),
             fx["input"].get("dnssecProbe", {}),
+            fx["input"].get("dnsMeta", "available") != "unavailable",
+            fx["input"].get("dnssecProbeAvailable", True),
         )
         install_http(fx["input"]["domain"], fx["input"].get("http", {}))
         now_ms = fx["input"].get("nowMs")
